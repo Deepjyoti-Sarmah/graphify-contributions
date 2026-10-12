@@ -41,9 +41,9 @@ const RISK_TONE = {
   high: 'bg-red-50 text-red-800 ring-red-600/30 dark:bg-red-950/60 dark:text-red-300',
 };
 
-const BUTTON = 'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800';
-const INPUT = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
-const LABEL_HEAD = 'text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400';
+const BUTTON = 'pressable inline-flex items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800';
+const INPUT = 'w-full rounded-[10px] border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 transition-colors duration-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
+const LABEL_HEAD = 'text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400';
 
 // Every localStorage call goes through here, so blocked or full storage never breaks the page.
 const storage = {
@@ -459,19 +459,19 @@ function LandedNote({ landed }) {
     </div>`;
 }
 
-function PRCard({ row }) {
+function PRCard({ row, index = 0 }) {
   const { pr, status, entry } = row;
   const [expanded, setExpanded] = useState(false);
   const panelId = `pr-${pr.number}-details`;
   const hasWriteUp = Boolean(entry && entry.why);
   return html`
-    <article class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+    <article style=${{ '--index': index % 8 }} class="reveal card-lift rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
       <div class="flex flex-wrap items-center gap-2">
         <${StatusBadge} status=${status} />
-        <span class="font-mono text-sm text-slate-500 dark:text-slate-400">#${pr.number}</span>
+        <span class="font-mono text-sm tabular-nums text-slate-500 dark:text-slate-400">#${pr.number}</span>
         ${!hasWriteUp && html`<span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">No write-up yet</span>`}
       </div>
-      <h4 class="mt-2 break-words text-base font-semibold leading-snug">
+      <h4 class="mt-2 break-words text-[17px] font-semibold leading-snug tracking-tight">
         <a href=${pr.url} target="_blank" rel="noopener noreferrer" class="hover:underline">${pr.title}</a>
       </h4>
       <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -500,7 +500,7 @@ function PRCard({ row }) {
 
 function Proposal({ proposal: p }) {
   return html`
-    <article class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+    <article class="card-lift rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <span class="font-mono text-slate-500 dark:text-slate-400">${p.id}</span>
         <span class=${`rounded-full px-2.5 py-0.5 font-semibold ring-1 ring-inset ${RISK_TONE[p.risk] || RISK_TONE.medium}`}>Risk: ${p.risk}</span>
@@ -541,12 +541,12 @@ function Header({ theme, pulls, refreshing, onRefresh }) {
   if (pulls.failed) updated = 'Not loaded';
   else if (pulls.at) updated = `Last updated ${relativeTime(pulls.at)}`;
   return html`
-    <header class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6">
+    <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85">
+      <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <div class="flex min-w-0 items-center gap-3">
-          <img src=${`https://github.com/${AUTHOR}.png?size=96`} alt=${`${AUTHOR} avatar`} width="44" height="44" class="h-11 w-11 shrink-0 rounded-full" />
+          <img src=${`https://github.com/${AUTHOR}.png?size=96`} alt=${`${AUTHOR} avatar`} width="40" height="40" class="h-10 w-10 shrink-0 rounded-full ring-1 ring-slate-900/10 dark:ring-white/15" />
           <div class="min-w-0">
-            <h1 class="text-lg font-semibold">Graphify contributions</h1>
+            <h1 class="text-xl font-semibold tracking-tight">Graphify contributions</h1>
             <p class="text-sm text-slate-600 dark:text-slate-400">
               by ${AUTHOR} · <a href=${`https://github.com/${REPO}`} target="_blank" rel="noopener noreferrer" class="font-medium text-indigo-700 hover:underline dark:text-indigo-300">${REPO}</a>
             </p>
@@ -567,18 +567,18 @@ function Header({ theme, pulls, refreshing, onRefresh }) {
 function SummaryStrip({ counts, active, onPick }) {
   return html`
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      ${STATUSES.map((s) => html`
+      ${STATUSES.map((s, i) => html`
         <button
           key=${s}
           type="button"
           aria-pressed=${active === s}
           onClick=${() => onPick(s)}
-          class=${`rounded-xl border bg-white p-4 text-left dark:bg-slate-900 ${active === s ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 dark:border-slate-800'}`}
+          class=${`pressable rounded-2xl border bg-white p-4 text-left dark:bg-slate-900 ${active === s ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700'}`}
         >
           <span class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
             <span aria-hidden="true">${STATUS_META[s].icon}</span>${STATUS_META[s].filterLabel || STATUS_META[s].label}
           </span>
-          <span class="mt-1 block text-2xl font-semibold tabular-nums">${counts[s]}</span>
+          <span class="mt-1 block text-2xl font-semibold tabular-nums tracking-tight">${counts[s]}</span>
         </button>`)}
     </div>`;
 }
@@ -613,7 +613,7 @@ function Toolbar({ filters, update, groups }) {
           <span class="mb-1 block">View</span>
           <div class="flex gap-2">
             ${[['list', 'List'], ['grouped', 'Grouped']].map(([value, label]) => html`
-              <button key=${value} type="button" class=${BUTTON} aria-pressed=${filters.view === value}
+              <button key=${value} type="button" class=${`${BUTTON} ${filters.view === value ? 'ring-1 ring-indigo-500' : ''}`} aria-pressed=${filters.view === value}
                 onClick=${() => update({ view: value })}>${label}</button>`)}
           </div>
         </div>
@@ -622,7 +622,7 @@ function Toolbar({ filters, update, groups }) {
         ${tabs.map((t) => html`
           <button key=${t} role="tab" type="button" aria-selected=${filters.status === t}
             onClick=${() => update({ status: t })}
-            class=${`rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${filters.status === t
+            class=${`pressable whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${filters.status === t
               ? 'bg-indigo-600 text-white ring-indigo-600 dark:bg-indigo-500 dark:ring-indigo-500'
               : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800'}`}>
             ${t === 'all' ? 'All' : STATUS_META[t].filterLabel || STATUS_META[t].label}
@@ -643,8 +643,8 @@ function GroupSection({ section }) {
             <a href=${`https://github.com/${REPO}/issues/${group.issue}`} target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-indigo-700 hover:underline dark:text-indigo-300">Issue #${group.issue}</a>`
           : html`<span>Not in a group</span>`}
       </h3>
-      <ul class="space-y-3">
-        ${rows.map((r) => html`<li key=${r.pr.number}><${PRCard} row=${r} /></li>`)}
+      <ul class="space-y-4">
+        ${rows.map((r, i) => html`<li key=${r.pr.number}><${PRCard} row=${r} index=${i} /></li>`)}
       </ul>
     </section>`;
 }
@@ -658,6 +658,20 @@ function Proposals({ items }) {
 }
 
 /* ---------- app ---------- */
+
+function Footer() {
+  const toTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  return html`
+    <footer class="border-t border-slate-200 dark:border-slate-800">
+      <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-6 sm:px-6">
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          <a href=${`https://github.com/${REPO}`} target="_blank" rel="noopener noreferrer" class="font-medium text-indigo-700 hover:underline dark:text-indigo-300">${REPO}</a>
+          <span class="mx-2" aria-hidden="true">·</span>by ${AUTHOR}
+        </p>
+        <button type="button" class=${BUTTON} onClick=${toTop}>Back to top</button>
+      </div>
+    </footer>`;
+}
 
 function App() {
   const theme = useTheme();
@@ -746,37 +760,66 @@ function App() {
     return out;
   }, [content, visible]);
 
+  // Scroll entry reveals: IntersectionObserver only, transform and opacity only.
+  // Placed after visible/sections so the dep array never hits a TDZ error.
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll('.reveal:not(.in)'));
+    if (!els.length) return undefined;
+    if (!('IntersectionObserver' in window)) {
+      els.forEach((el) => el.classList.add('in'));
+      return undefined;
+    }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.08 });
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  });  // every render: a filter or view switch can mount new cards with the same count
+
   let body;
   if (contentFailed || pulls.failed) {
-    body = html`<p role="alert" class="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
+    body = html`<p role="alert" class="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
       Could not load the pull requests from GitHub, and the local copy is unavailable.</p>`;
   } else if (pulls.loading || !content) {
-    body = html`<p role="status" class="text-sm text-slate-500 dark:text-slate-400">Loading pull requests…</p>`;
+    body = html`<div role="status" aria-label="Loading pull requests" class="space-y-4">
+      ${[0, 1, 2].map((i) => html`
+        <div key=${i} class="skeleton rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <div class="h-5 w-2/3 rounded bg-slate-200 dark:bg-slate-800"></div>
+          <div class="mt-3 h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-800"></div>
+          <div class="mt-3 h-4 w-full rounded bg-slate-200 dark:bg-slate-800"></div>
+        </div>`)}
+    </div>`;
   } else if (!visible.length) {
     body = html`
-      <div class="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
+      <div class="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
         <p>No pull requests match these filters.</p>
         <button type="button" class="mt-3 ${BUTTON}" onClick=${() => setFilters({ ...DEFAULT_FILTERS })}>Clear filters</button>
       </div>`;
   } else if (filters.view === 'grouped') {
     body = html`<div class="space-y-8">${sections.map((s) => html`<${GroupSection} key=${s.key} section=${s} />`)}</div>`;
   } else {
-    body = html`<ul class="space-y-3">${visible.map((r) => html`<li key=${r.pr.number}><${PRCard} row=${r} /></li>`)}</ul>`;
+    body = html`<ul class="space-y-4">${visible.map((r, i) => html`<li key=${r.pr.number}><${PRCard} row=${r} index=${i} /></li>`)}</ul>`;
   }
 
   const snapshotDate = pulls.source === 'snapshot' ? dateOnly(new Date(pulls.at).toISOString()) : null;
 
   return html`
     <div class="min-h-screen">
+      <a href="#prs-heading" class="skip-link">Skip to content</a>
       <${Header} theme=${theme} pulls=${pulls} refreshing=${refreshing} onRefresh=${() => load(true)} />
-      <main class="mx-auto max-w-5xl space-y-10 px-4 py-8 sm:px-6">
+      <main id="main" class="mx-auto max-w-5xl space-y-12 px-4 py-12 sm:px-6">
         ${snapshotDate && html`
-          <div role="status" class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
+          <div role="status" class="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
             Showing snapshot from ${snapshotDate} (${pulls.reason})
           </div>`}
 
         <section aria-labelledby="prs-heading">
-          <h2 id="prs-heading" class="text-lg font-semibold">Pull requests</h2>
+          <h2 id="prs-heading" class="text-xl font-semibold tracking-tight">Pull requests</h2>
           <div class="mt-4">
             <${SummaryStrip} counts=${counts} active=${filters.status} onPick=${toggleStatus} />
           </div>
@@ -787,13 +830,14 @@ function App() {
         </section>
 
         <section aria-labelledby="proposals-heading">
-          <h2 id="proposals-heading" class="text-lg font-semibold">Proposals</h2>
-          <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Ideas for the maintainer to approve before any code is written.</p>
+          <h2 id="proposals-heading" class="text-xl font-semibold tracking-tight">Proposals</h2>
+          <p class="mt-1 max-w-[65ch] text-sm leading-relaxed text-slate-600 dark:text-slate-400">Ideas for the maintainer to approve before any code is written.</p>
           <div class="mt-4">
             ${content ? html`<${Proposals} items=${content.proposals || []} />` : null}
           </div>
         </section>
       </main>
+      <${Footer} />
     </div>`;
 }
 
