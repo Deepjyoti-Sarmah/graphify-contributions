@@ -35,7 +35,7 @@ const CI_META = {
 
 const RISK_TAG = { low: 'tag-green', medium: 'tag-yellow', high: 'tag-red' };
 
-const LABEL = 'text-[11px] font-medium uppercase tracking-[0.08em] text-muted';
+const LABEL = 'text-[12px] font-medium uppercase tracking-[0.08em] text-muted';
 const ICON_BUTTON = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-subtle hover:text-ink disabled:opacity-50';
 const CONTROL = 'h-9 rounded-md border border-line bg-surface px-3 text-sm text-ink transition-colors hover:border-muted/40';
 
@@ -344,14 +344,14 @@ function Wide({ label, children }) {
 }
 
 function Paragraph({ text }) {
-  return html`<p class="max-w-[68ch] text-[15px] leading-[1.75] text-ink"><${Rich} text=${text} /></p>`;
+  return html`<p class="max-w-[68ch] text-[16.5px] leading-[1.75] text-ink"><${Rich} text=${text} /></p>`;
 }
 
 /* ---------- diagrams ---------- */
 
 const MERMAID_VARS = {
   light: {
-    fontFamily: 'Geist, ui-sans-serif, system-ui, sans-serif', fontSize: '14px',
+    fontFamily: 'Geist, ui-sans-serif, system-ui, sans-serif', fontSize: '16px',
     background: '#FFFFFF', primaryColor: '#F4F3F0', primaryBorderColor: '#D6D5D1', primaryTextColor: '#2F3437',
     secondaryColor: '#F4F3F0', tertiaryColor: '#FFFFFF', lineColor: '#A3A29E', textColor: '#2F3437',
     clusterBkg: '#FBFBFA', clusterBorder: '#E3E2DE', edgeLabelBackground: '#FFFFFF',
@@ -360,7 +360,7 @@ const MERMAID_VARS = {
     noteBkgColor: '#FBF3DB', noteBorderColor: '#EAD9A6', noteTextColor: '#5C4300',
   },
   dark: {
-    fontFamily: 'Geist, ui-sans-serif, system-ui, sans-serif', fontSize: '14px',
+    fontFamily: 'Geist, ui-sans-serif, system-ui, sans-serif', fontSize: '16px',
     background: '#202020', primaryColor: '#2A2A2A', primaryBorderColor: '#454545', primaryTextColor: '#E6E6E4',
     secondaryColor: '#2A2A2A', tertiaryColor: '#202020', lineColor: '#7D7C78', textColor: '#E6E6E4',
     clusterBkg: '#1C1C1C', clusterBorder: '#3A3A3A', edgeLabelBackground: '#202020',
@@ -449,7 +449,7 @@ function BeforeAfter({ before, after }) {
       <figcaption class=${`flex items-center gap-2 border-b border-line px-4 py-2 ${LABEL}`}>
         <span class=${`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden="true"></span>${label}
       </figcaption>
-      <pre class="whitespace-pre-wrap break-words px-4 py-3 font-mono text-[12.5px] leading-[1.7] text-ink">${text}</pre>
+      <pre class="whitespace-pre-wrap break-words px-4 py-3 font-mono text-[13.5px] leading-[1.7] text-ink">${text}</pre>
     </figure>`;
   return html`<div class="grid gap-3 md:grid-cols-2">${box('Before', before, 'bad-dot')}${box('After', after, 'good-dot')}</div>`;
 }
@@ -482,7 +482,7 @@ function CasesTable({ cases }) {
           </article>`)}
       </div>
       <div class="hidden overflow-x-auto sm:block">
-        <table class="w-full min-w-[44rem] text-left text-[13px]">
+        <table class="w-full min-w-[44rem] text-left text-[14px]">
           <thead>
             <tr class="border-b border-line">
               <th scope="col" class=${`py-2 pr-4 ${LABEL}`}>Case</th>
@@ -497,7 +497,7 @@ function CasesTable({ cases }) {
                 <th scope="row" class="py-3 pr-4 font-mono font-medium">${c.case}</th>
                 <td class="py-3 pr-4 text-muted">${c.correct}</td>
                 ${cols.map(([key]) => html`<td key=${key} class="py-3 pr-4"><${Verdict} value=${c[key]} /></td>`)}
-                <td class="py-3 font-mono text-[11.5px] text-muted"><${Name} text=${c.covered_by} /></td>
+                <td class="py-3 font-mono text-[12.5px] text-muted"><${Name} text=${c.covered_by} /></td>
               </tr>`)}
           </tbody>
         </table>
@@ -531,7 +531,7 @@ function MetaBar({ pr, title, details, group, onOpenPr }) {
   items.push(html`<span>Opened ${dateOnly(pr.created_at)}</span>`);
   items.push(html`<span>${pr.comments} ${pr.comments === 1 ? 'comment' : 'comments'}</span>`);
   if (details.additions != null) {
-    items.push(html`<span class="font-mono text-[12.5px]"><span class="good-text">+${details.additions}</span> <span class="bad-text">-${details.deletions}</span> <span class="text-muted">in ${details.files} ${details.files === 1 ? 'file' : 'files'}</span></span>`);
+    items.push(html`<span class="font-mono text-[13.5px]"><span class="good-text">+${details.additions}</span> <span class="bad-text">-${details.deletions}</span> <span class="text-muted">in ${details.files} ${details.files === 1 ? 'file' : 'files'}</span></span>`);
   }
   const ci = details.loading ? 'loading' : (details.ci || 'unknown');
   return html`
@@ -551,7 +551,7 @@ function LandedNote({ landed }) {
   return html`
     <div class="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
       <p><span class="font-medium">Landed by the maintainer.</span> <span class="text-muted">${landed.note}</span></p>
-      <p class="flex flex-wrap gap-3 font-mono text-[12.5px]">
+      <p class="flex flex-wrap gap-3 font-mono text-[13.5px]">
         ${landed.commits.map((sha) => html`<${ExternalLink} key=${sha} href=${COMMIT_URL(sha)}>${sha}</${ExternalLink}>`)}
       </p>
     </div>`;
@@ -577,7 +577,7 @@ function Detail({ row, title, group, onOpenPr }) {
             <${Section} label="Limits">
               <ul class="max-w-[68ch] space-y-2.5">
                 ${entry.limits.map((l, i) => html`
-                  <li key=${i} class="relative pl-5 text-[15px] leading-[1.7]">
+                  <li key=${i} class="relative pl-5 text-[16.5px] leading-[1.7]">
                     <span class="absolute left-0 top-[0.7em] h-px w-2.5 bg-muted" aria-hidden="true"></span><${Rich} text=${l} />
                   </li>`)}
               </ul>
@@ -586,7 +586,7 @@ function Detail({ row, title, group, onOpenPr }) {
         <div class="space-y-4">
           ${entry.tests && entry.tests.length ? html`
             <${Disclosure} title=${`Tests (${entry.tests.length})`}>
-              <ul class="space-y-1.5 text-[12.5px] text-muted">
+              <ul class="space-y-1.5 text-[13.5px] text-muted">
                 ${entry.tests.map((t, i) => html`<li key=${i} class="break-words"><${Name} text=${t} /></li>`)}
               </ul>
             </${Disclosure}>` : null}
@@ -617,15 +617,15 @@ function PRItem({ row, open, onToggle, group, onOpenPr }) {
       <div class="flex items-start gap-3 sm:gap-5">
         <button type="button" class="group flex min-w-0 flex-1 items-start gap-3 py-6 text-left sm:gap-5"
           aria-expanded=${open} aria-controls=${panelId} onClick=${onToggle}>
-          <span class="mt-[3px] hidden w-12 shrink-0 font-mono text-[12.5px] tabular-nums text-muted sm:block">#${pr.number}</span>
+          <span class="mt-[3px] hidden w-12 shrink-0 font-mono text-[13.5px] tabular-nums text-muted sm:block">#${pr.number}</span>
           <span class="min-w-0 flex-1">
             <span class="flex flex-wrap items-center gap-2">
               <${Tag} tag=${STATUS_META[status].tag} label=${STATUS_META[status].label} />
-              <span class="font-mono text-[12px] text-muted sm:hidden">#${pr.number}</span>
-              ${title.type && html`<span class="font-mono text-[12px] text-muted">${title.type}${title.scope ? `(${title.scope})` : ''}</span>`}
+              <span class="font-mono text-[13px] text-muted sm:hidden">#${pr.number}</span>
+              ${title.type && html`<span class="font-mono text-[13px] text-muted">${title.type}${title.scope ? `(${title.scope})` : ''}</span>`}
             </span>
-            <span class="mt-2 block text-[17px] font-medium leading-snug tracking-[-0.01em] text-ink group-hover:text-accent">${title.text}</span>
-            <span class="mt-1.5 block max-w-[68ch] text-[14.5px] leading-relaxed text-muted">
+            <span class="mt-2 block text-[18.5px] font-medium leading-snug tracking-[-0.01em] text-ink group-hover:text-accent">${title.text}</span>
+            <span class="mt-1.5 block max-w-[68ch] text-[16px] leading-relaxed text-muted">
               ${hasWriteUp ? entry.summary : 'No write-up yet.'}
             </span>
           </span>
@@ -729,8 +729,8 @@ function ProposalItem({ p }) {
             <${Tag} tag=${RISK_TAG[p.risk] || 'tag-yellow'} label=${`Risk ${p.risk}`} />
             <${Tag} tag="tag-gray" label=${`Size ${p.size}`} />
           </span>
-          <span class="mt-2 block text-[17px] font-medium leading-snug text-ink group-hover:text-accent">${p.title}</span>
-          <span class="mt-1.5 block max-w-[68ch] text-[14.5px] leading-relaxed text-muted">${p.problem}</span>
+          <span class="mt-2 block text-[18.5px] font-medium leading-snug text-ink group-hover:text-accent">${p.title}</span>
+          <span class="mt-1.5 block max-w-[68ch] text-[16px] leading-relaxed text-muted">${p.problem}</span>
         </span>
         <${PlusMinus} open=${open} />
       </button>
@@ -741,8 +741,8 @@ function ProposalItem({ p }) {
           <${Section} label="Plan">
             <ol class="max-w-[68ch] space-y-2.5">
               ${p.plan.map((step, i) => html`
-                <li key=${i} class="flex gap-3 text-[15px] leading-[1.7]">
-                  <span class="mt-[3px] font-mono text-[12px] tabular-nums text-muted">${String(i + 1).padStart(2, '0')}</span><span><${Rich} text=${step} /></span>
+                <li key=${i} class="flex gap-3 text-[16.5px] leading-[1.7]">
+                  <span class="mt-[3px] font-mono text-[13px] tabular-nums text-muted">${String(i + 1).padStart(2, '0')}</span><span><${Rich} text=${step} /></span>
                 </li>`)}
             </ol>
           </${Section}>
@@ -785,7 +785,7 @@ function TopBar({ theme, refreshing, onRefresh }) {
   return html`
     <header class="border-b border-line">
       <div class="mx-auto flex h-14 max-w-4xl items-center justify-between px-4 sm:px-6">
-        <a href=${`https://github.com/${REPO}`} target="_blank" rel="noopener noreferrer" class="font-mono text-[12.5px] text-muted hover:text-ink">${REPO}</a>
+        <a href=${`https://github.com/${REPO}`} target="_blank" rel="noopener noreferrer" class="font-mono text-[13.5px] text-muted hover:text-ink">${REPO}</a>
         <div class="flex items-center gap-1">
           <button type="button" class=${ICON_BUTTON} onClick=${onRefresh} disabled=${refreshing}
             aria-label="Reload from GitHub" title="Reload from GitHub">
@@ -812,7 +812,7 @@ function Intro({ counts, total, pulls, active, onPick }) {
         <a href=${`https://github.com/${AUTHOR}`} target="_blank" rel="noopener noreferrer" class="text-sm text-muted hover:text-ink">${AUTHOR}</a>
       </div>
       <h1 class="mt-6 font-serif text-[2.5rem] font-medium leading-[1.08] tracking-[-0.025em] sm:text-[3.25rem]">Pull requests to Graphify</h1>
-      <p class="mt-5 max-w-[60ch] text-[17px] leading-[1.65] text-muted">
+      <p class="mt-5 max-w-[60ch] text-[18.5px] leading-[1.65] text-muted">
         Each one says what was broken, what the change does, and how it was tested. Status, CI and diff size come live from GitHub. Open any row to read it.
       </p>
       <div class="mt-8 flex flex-wrap items-center gap-x-1 gap-y-2 text-sm">
@@ -840,7 +840,7 @@ function Toolbar({ filters, update, groups }) {
         <div role="tablist" aria-label="Filter by status" class="inline-flex h-9 items-center rounded-md border border-line bg-surface p-0.5">
           ${tabs.map((t) => html`
             <button key=${t} role="tab" type="button" aria-selected=${filters.status === t} onClick=${() => update({ status: t })}
-              class=${`h-full whitespace-nowrap rounded px-2.5 text-[13px] transition-colors ${filters.status === t ? 'bg-subtle font-medium text-ink' : 'text-muted hover:text-ink'}`}>
+              class=${`h-full whitespace-nowrap rounded px-2.5 text-[14px] transition-colors ${filters.status === t ? 'bg-subtle font-medium text-ink' : 'text-muted hover:text-ink'}`}>
               ${t === 'all' ? 'All' : (t === 'merged' ? 'Merged' : STATUS_META[t].label)}
             </button>`)}
         </div>
@@ -863,7 +863,7 @@ function Toolbar({ filters, update, groups }) {
         <div class="inline-flex h-9 items-center rounded-md border border-line bg-surface p-0.5" role="group" aria-label="Layout">
           ${[['list', 'List'], ['grouped', 'By issue']].map(([value, label]) => html`
             <button key=${value} type="button" aria-pressed=${filters.view === value} onClick=${() => update({ view: value })}
-              class=${`h-full whitespace-nowrap rounded px-2.5 text-[13px] transition-colors ${filters.view === value ? 'bg-subtle font-medium text-ink' : 'text-muted hover:text-ink'}`}>${label}</button>`)}
+              class=${`h-full whitespace-nowrap rounded px-2.5 text-[14px] transition-colors ${filters.view === value ? 'bg-subtle font-medium text-ink' : 'text-muted hover:text-ink'}`}>${label}</button>`)}
         </div>
       </div>
     </div>`;
@@ -877,7 +877,7 @@ function GroupSection({ section, children }) {
       <div class="mb-4 max-w-[68ch]">
         ${group
           ? html`
-            <a href=${ISSUE_URL(group.issue)} target="_blank" rel="noopener noreferrer" class="font-mono text-[12.5px] text-muted hover:text-ink">Issue #${group.issue}</a>
+            <a href=${ISSUE_URL(group.issue)} target="_blank" rel="noopener noreferrer" class="font-mono text-[13.5px] text-muted hover:text-ink">Issue #${group.issue}</a>
             <h3 id=${headingId} class="mt-1 font-serif text-xl font-medium leading-snug tracking-[-0.01em]">${group.title}</h3>`
           : html`<h3 id=${headingId} class="font-serif text-xl font-medium">Other pull requests</h3>`}
       </div>
@@ -1032,7 +1032,7 @@ function App() {
 
         <section aria-labelledby="proposals-heading" class="pt-24">
           <h2 id="proposals-heading" class="font-serif text-[2rem] font-medium leading-tight tracking-[-0.02em]">Proposals</h2>
-          <p class="mb-8 mt-3 max-w-[60ch] text-[15px] leading-[1.7] text-muted">
+          <p class="mb-8 mt-3 max-w-[60ch] text-[16.5px] leading-[1.7] text-muted">
             Work I would like to do next. Each one names the problem, the evidence and a plan, so you can say yes or no before any code is written.
           </p>
           ${content ? html`<${Proposals} items=${content.proposals || []} />` : null}
