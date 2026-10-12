@@ -647,6 +647,55 @@ function PRList({ rows, openPr, toggle, groupOf, onOpenPr }) {
 
 /* ---------- proposals ---------- */
 
+// Comments are GitHub Discussions in this page's own repo (category "Proposals"), one thread per
+// proposal, matched by the term "proposal-<id>". Nothing is posted to the Graphify repo.
+const GISCUS = {
+  repo: 'Deepjyoti-Sarmah/graphify-contributions',
+  repoId: 'R_kgDOVGf2CQ',
+  category: 'Proposals',
+  categoryId: 'DIC_kwDOVGf2Cc4DIHr0',
+};
+
+function Comments({ term }) {
+  const ref = useRef(null);
+  const dark = useIsDark();
+  const theme = dark ? 'dark_dimmed' : 'light';
+  useEffect(() => {
+    const host = ref.current;
+    if (!host) return undefined;
+    const s = document.createElement('script');
+    const attrs = {
+      src: 'https://giscus.app/client.js',
+      'data-repo': GISCUS.repo,
+      'data-repo-id': GISCUS.repoId,
+      'data-category': GISCUS.category,
+      'data-category-id': GISCUS.categoryId,
+      'data-mapping': 'specific',
+      'data-term': term,
+      'data-strict': '1',
+      'data-reactions-enabled': '1',
+      'data-emit-metadata': '0',
+      'data-input-position': 'top',
+      'data-theme': theme,
+      'data-lang': 'en',
+      'data-loading': 'lazy',
+      crossorigin: 'anonymous',
+    };
+    Object.entries(attrs).forEach(([k, v]) => s.setAttribute(k, v));
+    s.async = true;
+    host.appendChild(s);
+    return () => { host.innerHTML = ''; };
+  }, [term]);
+  // Follow the page theme without reloading the thread.
+  useEffect(() => {
+    const frame = ref.current && ref.current.querySelector('iframe.giscus-frame');
+    if (frame && frame.contentWindow) {
+      frame.contentWindow.postMessage({ giscus: { setConfig: { theme } } }, 'https://giscus.app');
+    }
+  }, [theme]);
+  return html`<div ref=${ref} class="giscus min-h-[4rem]"></div>`;
+}
+
 function proposalIssueUrl(p, answer) {
   const title = `Proposal ${p.id}: ${answer}, ${p.title}`;
   const body = [
@@ -710,6 +759,10 @@ function ProposalItem({ p }) {
                     : 'inline-flex h-9 items-center rounded-md border border-line bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-subtle'}>${a}</a>`)}
             </div>
             <p class="mt-2 text-xs text-muted">Each button opens a GitHub issue draft with the proposal and your answer filled in. Nothing is saved on this page.</p>
+          </${Section}>
+          <${Section} label="Comments">
+            <p class="mb-4 text-xs text-muted">Sign in with GitHub to comment. Comments are stored as a discussion in this page's repository, not in Graphify's.</p>
+            <${Comments} term=${`proposal-${p.id}`} />
           </${Section}>
         </div>`}
     </li>`;
