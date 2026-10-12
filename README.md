@@ -27,10 +27,39 @@ There is no build step and no npm. The files are served as they are.
   - `before`, `after`: short text or code showing the old and new behaviour.
   - `limits`, `tests`: lists. Tests are names only.
   - `cases` (optional): rows with `case`, `correct`, `before`, `after` and `covered_by`.
+- `prs[n].landed` (optional): see "Landed PRs" below.
 - `proposals`: an array (empty for now; the page shows "No proposals yet").
   - `id`, `title`, `problem`, `evidence` (text), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers).
 
 Write only facts you can point to. The page shows the text as given.
+
+## Landed PRs
+
+Use `landed` when the maintainer applied a PR's commits by hand and closed the PR without merging it.
+GitHub then shows the PR as closed, which would wrongly suggest it was rejected.
+
+```json
+"4326": {
+  "landed": {
+    "commits": ["f905db7", "f5300d5"],
+    "note": "Applied to v8 by the maintainer, authorship kept."
+  }
+}
+```
+
+- `commits`: short or full SHAs from the repository. Each one links to `https://github.com/Graphify-Labs/graphify/commit/<sha>`.
+- `note`: one sentence on what the maintainer did.
+- The entry may hold only `landed`. The PR then keeps its GitHub description and shows the "No write-up yet" badge.
+
+Status is decided in this order:
+
+1. Open, or draft: as GitHub reports it.
+2. `merged_at` is set: **Merged**.
+3. Closed, and the entry has `landed`: **Landed**.
+4. Otherwise: **Closed**.
+
+Landed counts as a success. It shares the violet colour and the "Merged / landed" count and filter with merged PRs, and it has its own icon (◆) and label.
+Do not add `landed` to a PR that GitHub shows as merged; the merge takes precedence.
 
 ## Refreshing the snapshot
 

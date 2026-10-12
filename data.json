@@ -6,10 +6,16 @@
       "id": "4281",
       "title": "Node IDs drop the file extension (and doc IDs the path), so distinct entities in x.py/x.html or a/x.md/b/x.md collide and one is lost",
       "issue": 4281,
-      "prs": [4371, 4362]
+      "prs": [4326, 4371, 4362]
     }
   ],
   "prs": {
+    "4326": {
+      "landed": {
+        "commits": ["f905db7", "f5300d5"],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      }
+    },
     "4371": {
       "summary": "Reword the id-collision warning so it says what the merge did, instead of claiming a document was lost.",
       "why": "The warning claimed that \"the dropped node is lost\" and that the id \"does not identify a single entity\", for every such collision. On the reporter's corpus that was wrong: none of their 16 remaining warnings was a lost document. They were one entity described in two documents, or a reference to another file, and merging them was correct.",

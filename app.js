@@ -11,7 +11,8 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const SEARCH_CACHE_KEY = 'contrib:search:v1';
 const THEME_KEY = 'contrib:theme';
 const STATUSES = ['open', 'draft', 'merged', 'closed'];
-const STATUS_ORDER = { open: 0, draft: 1, merged: 2, closed: 3 };
+const STATUS_ORDER = { open: 0, draft: 1, merged: 2, landed: 2, closed: 3 };
+const COMMIT_URL = (sha) => `https://github.com/${REPO}/commit/${sha}`;
 const ANSWERS = [
   { label: 'Go ahead', emoji: '👍' },
   { label: 'Discuss', emoji: '💬' },
@@ -20,7 +21,8 @@ const ANSWERS = [
 
 const STATUS_META = {
   open: { label: 'Open', icon: '○', tone: 'bg-emerald-50 text-emerald-800 ring-emerald-600/30 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-500/40' },
-  merged: { label: 'Merged', icon: '✓', tone: 'bg-violet-50 text-violet-800 ring-violet-600/30 dark:bg-violet-950/60 dark:text-violet-300 dark:ring-violet-500/40' },
+  merged: { label: 'Merged', filterLabel: 'Merged / landed', icon: '✓', tone: 'bg-violet-50 text-violet-800 ring-violet-600/30 dark:bg-violet-950/60 dark:text-violet-300 dark:ring-violet-500/40' },
+  landed: { label: 'Landed', icon: '◆', tone: 'bg-violet-50 text-violet-800 ring-violet-600/30 dark:bg-violet-950/60 dark:text-violet-300 dark:ring-violet-500/40' },
   draft: { label: 'Draft', icon: '✎', tone: 'bg-slate-100 text-slate-700 ring-slate-500/30 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-500/40' },
   closed: { label: 'Closed', icon: '✕', tone: 'bg-red-50 text-red-800 ring-red-600/30 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-500/40' },
 };
@@ -155,10 +157,15 @@ function normalize(item) {
   };
 }
 
-function statusOf(pr) {
+// A PR closed without a merge is "landed" when the maintainer applied its commits by hand (data.json "landed").
+function statusOf(pr, entry) {
   if (pr.state === 'open') return pr.draft ? 'draft' : 'open';
-  return pr.merged ? 'merged' : 'closed';
+  if (pr.merged) return 'merged';
+  return entry && entry.landed ? 'landed' : 'closed';
 }
+
+// The "Merged / landed" filter and count cover both statuses.
+const matchesFilter = (status, filter) => filter === 'all' || status === filter || (filter === 'merged' && status === 'landed');
 
 const dateOnly = (iso) => new Date(iso).toISOString().slice(0, 10);
 const relTimeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
@@ -286,25 +293,25 @@ function CasesTable({ cases }) {
   return html`
     <div>
       <h5 class=${LABEL_HEAD}>Cases</h5>
-      <div class="mt-2 overflow-x-auto">
-        <table class="min-w-full text-left text-xs text-slate-800 dark:text-slate-200">
-          <thead class="text-slate-500 dark:text-slate-400">
+      <div class="mt-2 max-h-80 overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
+        <table class="min-w-[40rem] text-left text-xs text-slate-800 dark:text-slate-200">
+          <thead class="sticky top-0 z-10 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <tr>
-              <th scope="col" class="py-2 pr-3 font-semibold">Case</th>
-              <th scope="col" class="py-2 pr-3 font-semibold">Correct</th>
-              <th scope="col" class="py-2 pr-3 font-semibold">Before (v8)</th>
-              <th scope="col" class="py-2 pr-3 font-semibold">After (this PR)</th>
-              <th scope="col" class="py-2 font-semibold">Covered by</th>
+              <th scope="col" class="px-3 py-2 font-semibold">Case</th>
+              <th scope="col" class="px-3 py-2 font-semibold">Correct</th>
+              <th scope="col" class="px-3 py-2 font-semibold">Before (v8)</th>
+              <th scope="col" class="px-3 py-2 font-semibold">After (this PR)</th>
+              <th scope="col" class="px-3 py-2 font-semibold">Covered by</th>
             </tr>
           </thead>
           <tbody>
             ${cases.map((c) => html`
               <tr key=${c.case} class="border-t border-slate-200 align-top dark:border-slate-800">
-                <th scope="row" class="py-2 pr-3 font-mono font-semibold">${c.case}</th>
-                <td class="py-2 pr-3">${c.correct}</td>
-                <td class="py-2 pr-3">${c.before}</td>
-                <td class="py-2 pr-3">${c.after}</td>
-                <td class="py-2 font-mono break-all">${c.covered_by}</td>
+                <th scope="row" class="px-3 py-2 font-mono font-semibold">${c.case}</th>
+                <td class="px-3 py-2">${c.correct}</td>
+                <td class="px-3 py-2">${c.before}</td>
+                <td class="px-3 py-2">${c.after}</td>
+                <td class="px-3 py-2 font-mono break-all">${c.covered_by}</td>
               </tr>`)}
           </tbody>
         </table>
@@ -356,16 +363,30 @@ function WriteUp({ entry, body }) {
     </div>`;
 }
 
+function LandedNote({ landed }) {
+  return html`
+    <div class="rounded-lg border border-violet-300 bg-violet-50 p-3 text-sm dark:border-violet-700 dark:bg-violet-950/40">
+      <p class="font-semibold text-violet-900 dark:text-violet-200"><span aria-hidden="true">◆</span> Landed by the maintainer</p>
+      <p class="mt-1 text-slate-800 dark:text-slate-200">${landed.note}</p>
+      <div class="mt-2 flex flex-wrap items-baseline gap-2">
+        <span class=${LABEL_HEAD}>Commits</span>
+        ${landed.commits.map((sha) => html`
+          <a key=${sha} href=${COMMIT_URL(sha)} target="_blank" rel="noopener noreferrer" class="font-mono text-indigo-700 hover:underline dark:text-indigo-300">${sha}</a>`)}
+      </div>
+    </div>`;
+}
+
 function PRCard({ row }) {
   const { pr, status, entry } = row;
   const [expanded, setExpanded] = useState(false);
   const panelId = `pr-${pr.number}-details`;
+  const hasWriteUp = Boolean(entry && entry.why);
   return html`
     <article class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
       <div class="flex flex-wrap items-center gap-2">
         <${StatusBadge} status=${status} />
         <span class="font-mono text-sm text-slate-500 dark:text-slate-400">#${pr.number}</span>
-        ${!entry && html`<span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">No write-up yet</span>`}
+        ${!hasWriteUp && html`<span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">No write-up yet</span>`}
       </div>
       <h4 class="mt-2 break-words text-base font-semibold leading-snug">
         <a href=${pr.url} target="_blank" rel="noopener noreferrer" class="hover:underline">${pr.title}</a>
@@ -374,7 +395,7 @@ function PRCard({ row }) {
         Opened ${dateOnly(pr.created_at)} · ${pr.comments} ${pr.comments === 1 ? 'comment' : 'comments'}
         ${pr.labels.map((l) => html`<span key=${l} class="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">${l}</span>`)}
       </p>
-      ${entry && html`<p class="mt-3 text-slate-700 dark:text-slate-300">${entry.summary}</p>`}
+      ${hasWriteUp && html`<p class="mt-3 text-slate-700 dark:text-slate-300">${entry.summary}</p>`}
       <button
         type="button"
         class="mt-4 text-sm font-medium text-indigo-700 hover:underline dark:text-indigo-300"
@@ -384,7 +405,8 @@ function PRCard({ row }) {
       >${expanded ? 'Hide details' : 'Show details'}</button>
       ${expanded && html`
         <div id=${panelId} class="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
-          ${entry
+          ${entry && entry.landed ? html`<div class="mb-5"><${LandedNote} landed=${entry.landed} /></div>` : null}
+          ${hasWriteUp
             ? html`<${WriteUp} entry=${entry} body=${pr.body} />`
             : html`<${GitHubDescription} body=${pr.body} />`}
           <${CIStatus} number=${pr.number} />
@@ -468,7 +490,7 @@ function SummaryStrip({ counts, active, onPick }) {
           class=${`rounded-xl border bg-white p-4 text-left dark:bg-slate-900 ${active === s ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200 dark:border-slate-800'}`}
         >
           <span class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <span aria-hidden="true">${STATUS_META[s].icon}</span>${STATUS_META[s].label}
+            <span aria-hidden="true">${STATUS_META[s].icon}</span>${STATUS_META[s].filterLabel || STATUS_META[s].label}
           </span>
           <span class="mt-1 block text-2xl font-semibold tabular-nums">${counts[s]}</span>
         </button>`)}
@@ -517,7 +539,7 @@ function Toolbar({ filters, update, groups }) {
             class=${`rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${filters.status === t
               ? 'bg-indigo-600 text-white ring-indigo-600 dark:bg-indigo-500 dark:ring-indigo-500'
               : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800'}`}>
-            ${t === 'all' ? 'All' : STATUS_META[t].label}
+            ${t === 'all' ? 'All' : STATUS_META[t].filterLabel || STATUS_META[t].label}
           </button>`)}
       </div>
     </div>`;
@@ -592,28 +614,27 @@ function App() {
   const rows = useMemo(() => {
     if (!content || !pulls.items) return [];
     const groupOf = (n) => content.groups.find((g) => g.prs.includes(n)) || null;
-    return pulls.items.map(normalize).map((pr) => ({
-      pr,
-      status: statusOf(pr),
-      entry: content.prs[String(pr.number)] || null,
-      group: groupOf(pr.number),
-    }));
+    return pulls.items.map(normalize).map((pr) => {
+      const entry = content.prs[String(pr.number)] || null;
+      return { pr, entry, status: statusOf(pr, entry), group: groupOf(pr.number) };
+    });
   }, [content, pulls.items]);
 
+  // Landed PRs are counted under "Merged / landed".
   const counts = useMemo(() => {
     const c = { open: 0, draft: 0, merged: 0, closed: 0 };
-    rows.forEach((r) => { c[r.status] += 1; });
+    rows.forEach((r) => { c[r.status === 'landed' ? 'merged' : r.status] += 1; });
     return c;
   }, [rows]);
 
   const visible = useMemo(() => {
     const q = filters.q.trim().toLowerCase();
     const list = rows.filter((r) => {
-      if (filters.status !== 'all' && r.status !== filters.status) return false;
+      if (!matchesFilter(r.status, filters.status)) return false;
       if (filters.g === 'none' && r.group) return false;
       if (filters.g !== 'all' && filters.g !== 'none' && (!r.group || r.group.id !== filters.g)) return false;
       if (!q) return true;
-      const haystack = `#${r.pr.number} ${r.pr.title} ${r.entry ? r.entry.summary : ''}`.toLowerCase();
+      const haystack = `#${r.pr.number} ${r.pr.title} ${(r.entry && r.entry.summary) || ''}`.toLowerCase();
       return haystack.includes(q);
     });
     const newest = (a, b) => b.pr.created_at.localeCompare(a.pr.created_at);
