@@ -21,7 +21,22 @@
           "f5300d5"
         ],
         "note": "Applied to v8 by the maintainer, authorship kept."
-      }
+      },
+      "summary": "A node and its edges now get the same key when graphify runs from a subfolder, so edges stop landing on the wrong node.",
+      "why": "When graphify starts from a subdirectory of the root, the renamed x.html node got its own id but none of its edges. The cause: by dedup time source_file is already root-relative, but _rank_path still called .resolve(), which prepends the current folder.",
+      "what": "_rank_path now resolves only absolute paths. Run from root/firmware, the node key is firmware/lib/portal.html, the same as the edge key. The edge lands on firmware_lib_portal_html instead of firmware_lib_portal.",
+      "helps": "Anyone who runs graphify from a subfolder of the project. Their edges stay on the renamed node. The winner of a collision between relative paths no longer depends on the folder graphify starts from.",
+      "diagram": "flowchart LR\n  subgraph before\n    b1[run from root/firmware] --> b2[_rank_path calls resolve, prepends CWD]\n    b2 --> b3[node key firmware/firmware/lib/portal.html]\n    b3 --> b4[edge lands on firmware_lib_portal]\n  end\n  subgraph after\n    a1[run from root/firmware] --> a2[relative path kept as is]\n    a2 --> a3[node and edge keys match]\n    a3 --> a4[edge lands on firmware_lib_portal_html]\n  end",
+      "before": "Run from root/firmware: node key firmware/firmware/lib/portal.html, edge key firmware/lib/portal.html, edge lands on firmware_lib_portal.",
+      "after": "Run from root/firmware: node key firmware/lib/portal.html, edge key firmware/lib/portal.html, edge lands on firmware_lib_portal_html.",
+      "limits": [
+        "Does not touch the remaining a/x.md vs b/x.md collision (#4281).",
+        "_source_key in extractors/resolution.py is left alone. At extraction time a relative path is still CWD-relative, so resolving it there is right.",
+        "A relative path containing .. is no longer normalized in _rank_path. Nodes are relativized before dedup, so stored paths should not contain one."
+      ],
+      "tests": [
+        "test_build_from_subdirectory_moves_edges_to_renamed_node"
+      ]
     },
     "4371": {
       "summary": "Reword the id-collision warning so it says what the merge did, instead of claiming a document was lost.",
@@ -128,6 +143,53 @@
           "covered_by": "test_entity_described_in_two_documents_collapses_to_one_node",
           "pr_first_version": "ok"
         }
+      ]
+    },
+    "4353": {
+      "summary": "Step 1 of /graphify now fails loudly when it cannot save its files, and every reader keeps the saved folder name exactly.",
+      "why": "On a full disk, Step 1 left .graphify_python and .graphify_root empty and still exited 0. The next step then failed with \"bash: : command not found\", and graphify update rebuilt the current folder instead of the project. Six readers also trimmed spaces from the saved folder, so \"proj \" came back as \"proj\".",
+      "what": "Step 1 writes each file to a temp file and renames it into place. On any error it cleans up, names the file and exits 1. A new read_root_marker() removes only a byte-order mark and a final newline, and graphify update, build.py, watch.py, reflect.py and the git hooks all use it.",
+      "helps": "Anyone whose disk fills up during Step 1 gets a clear error at that step, not a confusing failure one step later. Anyone with a trailing space in a folder name gets that folder from graphify update.",
+      "diagram": "flowchart LR\n  subgraph before\n    b1[Step 1 writes files] --> b2{disk full}\n    b2 -->|yes| b3[files left empty, exit 0]\n    b3 --> b4[next step fails]\n  end\n  subgraph after\n    a1[Step 1 writes temp files] --> a2{write fails}\n    a2 -->|yes| a3[clean up, name the file, exit 1]\n    a2 -->|no| a4[rename into place]\n  end",
+      "before": "Step 1 with a full disk (ulimit -f 0): exit code 0, .graphify_python and .graphify_root left empty. The next step fails with \"bash: : command not found\".",
+      "after": "Step 1 with a full disk: \"could not write graphify-out/.graphify_python (File too large; is the disk full?)\", exit code 1, no files left behind.",
+      "limits": [
+        "Not tested on Windows PowerShell 5.1. The Windows Step 1 ran under PowerShell 7.4.6 on Linux.",
+        "Installed git hooks keep the old code until graphify hook install is run again.",
+        "graphify update with an empty .graphify_root now exits 1. A missing .graphify_root still falls back to the current folder."
+      ],
+      "tests": [
+        "test_step1_fails_loudly_when_it_cannot_write",
+        "test_windows_step1_fails_loudly_when_it_cannot_write",
+        "test_read_root_marker_keeps_a_trailing_space",
+        "test_read_root_marker_keeps_a_leading_space",
+        "test_read_root_marker_drops_the_bom_and_one_trailing_newline",
+        "test_update_without_a_path_stops_on_an_empty_marker",
+        "test_no_module_strips_the_marker_after_decoding_it"
+      ]
+    },
+    "4344": {
+      "summary": "Skill scripts read the scan folder, community names and spec path from files the agent writes, instead of pasting them into code.",
+      "why": "The skill told the agent to paste the scan folder, the community names and the spec path into python -c scripts. A value becomes code: a folder named proj$(touch PWNED) ran touch PWNED before Python started, and a label containing a quote could end the Python string early.",
+      "what": "The agent writes each value to a file in graphify-out/ through a quoted heredoc, and the script reads the file. A new read_scan_root() reads the saved folder. The interpreter path is quoted in every skill script.",
+      "helps": "Anyone who runs /graphify on a folder whose name contains shell syntax, or on a path with spaces, no longer runs that name as a command. The scan also stops picking the wrong folder.",
+      "diagram": "flowchart LR\n  subgraph before\n    b1[agent pastes folder into python -c] --> b2[shell expands the name]\n    b2 --> b3[name runs as a command]\n  end\n  subgraph after\n    a1[agent writes folder to graphify-out file] --> a2[script reads the file]\n    a2 --> a3[no shell expansion]\n  end",
+      "before": "v8, folder proj$(touch PWNED): the PWNED file is created, then \"could not scan .../proj\", Detected 0 files.",
+      "after": "This branch, same folder: nothing is created, Detected 1 files.",
+      "limits": [
+        "Not tested on Windows PowerShell 5.1. The Windows blocks ran under PowerShell 7.4.6 on Linux.",
+        "Step 1 leaving empty files on a full disk is a separate bug (#4346), fixed in #4353.",
+        "A step run by hand without Step 1 now stops with \"graphify-out/.graphify_root not found; run Step 1 first\"."
+      ],
+      "tests": [
+        "test_no_pasted_placeholder_inside_a_script_body",
+        "test_interpreter_path_is_quoted",
+        "test_step5_loads_labels_as_json_data",
+        "test_read_scan_root_returns_the_recorded_root",
+        "test_read_scan_root_keeps_a_trailing_space",
+        "test_read_scan_root_treats_shell_syntax_as_a_plain_name",
+        "test_labels_heredoc_keeps_hostile_text_as_data",
+        "test_spec_heredoc_keeps_hostile_text_as_data"
       ]
     }
   },
