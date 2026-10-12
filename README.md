@@ -26,7 +26,7 @@ There is no build step and no npm. The files are served as they are.
   - `why`, `what`, `helps`: short paragraphs.
   - `before`, `after`: short text or code showing the old and new behaviour.
   - `limits`, `tests`: lists. Tests are names only.
-  - `cases` (optional): rows with `case`, `correct`, `before`, `after` and `covered_by`.
+  - `cases` (optional): rows with `case`, `correct`, `before` (v8), `pr_first_version` (the first version of the PR, shown as "PR before"), `after` (this PR, shown as "PR now") and `covered_by`. Below `sm` (640px) each case is a stacked card; at `sm` and wider it is a table.
 - `prs[n].landed` (optional): see "Landed PRs" below.
 - `proposals`: an array (empty for now; the page shows "No proposals yet").
   - `id`, `title`, `problem`, `evidence` (text), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers).

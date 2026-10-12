@@ -6,13 +6,20 @@
       "id": "4281",
       "title": "Node IDs drop the file extension (and doc IDs the path), so distinct entities in x.py/x.html or a/x.md/b/x.md collide and one is lost",
       "issue": 4281,
-      "prs": [4326, 4371, 4362]
+      "prs": [
+        4326,
+        4371,
+        4362
+      ]
     }
   ],
   "prs": {
     "4326": {
       "landed": {
-        "commits": ["f905db7", "f5300d5"],
+        "commits": [
+          "f905db7",
+          "f5300d5"
+        ],
         "note": "Applied to v8 by the maintainer, authorship kept."
       }
     },
@@ -70,49 +77,56 @@
           "correct": "4 nodes, edges within each file",
           "before": "b/x.md dropped",
           "after": "ok",
-          "covered_by": "test_path_dropped_through_build"
+          "covered_by": "test_path_dropped_through_build",
+          "pr_first_version": "ok"
         },
         {
           "case": "R",
           "correct": "2 nodes; the firmware doc references docs/protocol.md",
           "before": "ok, because the mention's label is shorter",
           "after": "ok",
-          "covered_by": "test_reference_to_another_file_does_not_become_a_second_document"
+          "covered_by": "test_reference_to_another_file_does_not_become_a_second_document",
+          "pr_first_version": "self-link: docs_firmware_protocol references itself"
         },
         {
           "case": "R_noedge",
           "correct": "same 2 nodes, no edge",
           "before": "ok",
           "after": "ok",
-          "covered_by": "test_mention_without_an_edge_gives_the_same_two_documents"
+          "covered_by": "test_mention_without_an_edge_gives_the_same_two_documents",
+          "pr_first_version": "ok"
         },
         {
           "case": "R_toplevel",
           "correct": "3 nodes, one per file",
           "before": "top-level document dropped",
           "after": "same (known)",
-          "covered_by": "test_top_level_collision_keeps_todays_result"
+          "covered_by": "test_top_level_collision_keeps_todays_result",
+          "pr_first_version": "same"
         },
         {
           "case": "F",
           "correct": "no x; c.md's edge not pinned on one file",
           "before": "c_note pinned on a_x as EXTRACTED, b/x.md dropped",
           "after": "ok",
-          "covered_by": "test_path_dropped_foreign_reference_edge_is_dropped_by_build"
+          "covered_by": "test_path_dropped_foreign_reference_edge_is_dropped_by_build",
+          "pr_first_version": "ok"
         },
         {
           "case": "R_labelswap",
           "correct": "same as R",
           "before": "docs/protocol.md dropped, self-link",
           "after": "ok",
-          "covered_by": "test_reference_outcome_does_not_depend_on_label_length"
+          "covered_by": "test_reference_outcome_does_not_depend_on_label_length",
+          "pr_first_version": "self-link"
         },
         {
           "case": "G",
           "correct": "3 nodes, sender once",
           "before": "ok",
           "after": "ok",
-          "covered_by": "test_entity_described_in_two_documents_collapses_to_one_node"
+          "covered_by": "test_entity_described_in_two_documents_collapses_to_one_node",
+          "pr_first_version": "ok"
         }
       ]
     }

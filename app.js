@@ -276,7 +276,7 @@ function ListField({ title, items, mono }) {
     <div>
       <h5 class=${LABEL_HEAD}>${title}</h5>
       <ul class=${`mt-1 list-disc space-y-1 pl-5 text-sm text-slate-800 dark:text-slate-200 ${mono ? 'font-mono text-xs' : ''}`}>
-        ${items.map((item, i) => html`<li key=${i} class="break-words">${item}</li>`)}
+        ${items.map((item, i) => html`<li key=${i} class="break-words">${mono ? html`<${Name} text=${item} />` : item}</li>`)}
       </ul>
     </div>`;
 }
@@ -289,29 +289,53 @@ function CodeBlock({ label, text }) {
     </div>`;
 }
 
+// Breaks a name after each underscore, using <wbr>, so long test names wrap at underscores rather than mid-word.
+function Name({ text }) {
+  return html`<code class="break-normal">${text.split('_').map((part, i) => html`<${React.Fragment} key=${i}>${i > 0 ? html`_<wbr />` : null}${part}</${React.Fragment}>`)}</code>`;
+}
+
+function CaseCard({ c }) {
+  return html`
+    <article class="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+      <h6 class="font-mono text-sm font-semibold"><${Name} text=${c.case} /></h6>
+      <dl class="mt-2 grid gap-2 text-sm">
+        <div><dt class=${LABEL_HEAD}>Correct</dt><dd class="break-words">${c.correct}</dd></div>
+        <div><dt class=${LABEL_HEAD}>v8</dt><dd class="break-words">${c.before}</dd></div>
+        <div><dt class=${LABEL_HEAD}>PR before</dt><dd class="break-words">${c.pr_first_version}</dd></div>
+        <div><dt class=${LABEL_HEAD}>PR now</dt><dd class="break-words">${c.after}</dd></div>
+        <div><dt class=${LABEL_HEAD}>Covered by</dt><dd class="text-xs"><${Name} text=${c.covered_by} /></dd></div>
+      </dl>
+    </article>`;
+}
+
 function CasesTable({ cases }) {
   return html`
     <div>
       <h5 class=${LABEL_HEAD}>Cases</h5>
-      <div class="mt-2 max-h-80 overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
+      <div class="mt-2 grid gap-3 sm:hidden">
+        ${cases.map((c) => html`<${CaseCard} key=${c.case} c=${c} />`)}
+      </div>
+      <div class="mt-2 hidden overflow-x-auto rounded-lg border border-slate-200 sm:block dark:border-slate-800">
         <table class="min-w-[40rem] text-left text-xs text-slate-800 dark:text-slate-200">
           <thead class="sticky top-0 z-10 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <tr>
               <th scope="col" class="px-3 py-2 font-semibold">Case</th>
               <th scope="col" class="px-3 py-2 font-semibold">Correct</th>
-              <th scope="col" class="px-3 py-2 font-semibold">Before (v8)</th>
-              <th scope="col" class="px-3 py-2 font-semibold">After (this PR)</th>
+              <th scope="col" class="px-3 py-2 font-semibold">v8</th>
+              <th scope="col" class="px-3 py-2 font-semibold">PR before</th>
+              <th scope="col" class="px-3 py-2 font-semibold">PR now</th>
               <th scope="col" class="px-3 py-2 font-semibold">Covered by</th>
             </tr>
           </thead>
           <tbody>
             ${cases.map((c) => html`
               <tr key=${c.case} class="border-t border-slate-200 align-top dark:border-slate-800">
-                <th scope="row" class="px-3 py-2 font-mono font-semibold">${c.case}</th>
+                <th scope="row" class="px-3 py-2 font-mono font-semibold"><${Name} text=${c.case} /></th>
                 <td class="px-3 py-2">${c.correct}</td>
                 <td class="px-3 py-2">${c.before}</td>
+                <td class="px-3 py-2">${c.pr_first_version}</td>
                 <td class="px-3 py-2">${c.after}</td>
-                <td class="px-3 py-2 font-mono break-all">${c.covered_by}</td>
+                <td class="px-3 py-2 text-xs"><${Name} text=${c.covered_by} /></td>
               </tr>`)}
           </tbody>
         </table>
@@ -470,8 +494,9 @@ function Header({ theme, pulls, refreshing, onRefresh }) {
         </div>
         <div class="flex items-center gap-2">
           <button type="button" class=${BUTTON} onClick=${onRefresh} disabled=${refreshing}>${refreshing ? 'Refreshing…' : 'Refresh'}</button>
-          <button type="button" class=${BUTTON} aria-pressed=${theme.dark} onClick=${theme.toggle}>
-            <span aria-hidden="true">${theme.dark ? '☀' : '☾'}</span> Dark mode
+          <button type="button" class=${BUTTON} aria-pressed=${theme.dark}
+            aria-label=${theme.dark ? '☀ Light mode' : '☾ Dark mode'} onClick=${theme.toggle}>
+            ${theme.dark ? '☀ Light mode' : '☾ Dark mode'}
           </button>
         </div>
       </div>
