@@ -46,7 +46,7 @@
       "before": "[graphify] WARNING: node 'sender' is minted by two different files — keeping 'Sender' from 'docs/a.md', dropping 'sender service' from 'docs/b.md'. An ID is derived from the source path plus the entity name, so this one does not identify a single entity and the dropped node is lost.",
       "after": "[graphify] WARNING: node 'sender' is minted by two different files: kept 'Sender' from 'docs/a.md', merged 'sender service' from 'docs/b.md' into it. The id comes from neither path, so this is probably one entity described in both files. The merged node's own label and attributes are not kept; its edges stay on the kept node.",
       "limits": [
-        "The text cannot tell a reference from a second document when the id comes from a path. It says both are possible. Telling them apart needs edge evidence and is out of scope here (it is the separate fix for the path-qualified id case in #4281).",
+        "The text cannot tell a reference from a second document when the id comes from a path. It says both are possible. Telling them apart needs edge evidence and is out of scope here (#4362, now in v0.9.88, resolves the cases it can; this warning covers the collisions it leaves, such as docs/protocol.md next to a top-level protocol.md).",
         "\"Probably one entity\" for an id that comes from neither path is an inference, not a fact. Two real documents can also share such an id; the merged node's label and attributes are then lost.",
         "Severity stays WARNING. The reporter asked for something milder, but test_issue_3472 asserts WARNING for a non-path id, so lowering it would change an existing test."
       ],
@@ -59,6 +59,13 @@
       "diagram": "flowchart LR\n  C[\"two files mint the same id\"] --> Q(\"where does the id come from?\")\n  Q -- \"a file path\" --> Y[\"warning: a reference to the kept file, or a separate document\"]\n  Q -- \"neither path\" --> N[\"warning: probably one entity described in both files\"]\n  Y --> S[\"same node survives as before\"]:::same\n  N --> S"
     },
     "4362": {
+      "landed": {
+        "commits": [
+          "27c57c7",
+          "b3f9af4"
+        ],
+        "note": "Shipped in v0.9.88. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      },
       "summary": "Give each file its own path-qualified id when a dropped folder makes two real documents share a bare id, but keep a reference to another document as one node.",
       "why": "Semantic extraction sometimes drops the folder from an id, so a/x.md and b/x.md both emit x. Dedup then merged them and one real document was lost.",
       "what": "When files with different paths share a bare id, each file's node is renamed to its path-qualified id (a_x, b_x), unless the bare id is only a mention of another document. A mention is a node that another node of its own file points at with a references edge, and whose id is a shorter path slice of its file. Mentions also lose survivor ties in the collision ranking, so a real document outranks them.",

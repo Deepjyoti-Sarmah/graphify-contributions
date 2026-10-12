@@ -1,4 +1,4 @@
-{"fetched_at":"2026-10-12T17:49:36Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+{"fetched_at":"2026-10-12T22:40:03Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
   "total_count": 5,
   "incomplete_results": false,
   "items": [
@@ -53,9 +53,9 @@
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-12T15:43:29Z",
-      "updated_at": "2026-10-12T15:48:00Z",
+      "updated_at": "2026-10-12T22:39:20Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -146,16 +146,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 2,
+      "comments": 3,
       "created_at": "2026-10-12T10:20:56Z",
-      "updated_at": "2026-10-12T17:27:00Z",
-      "closed_at": null,
+      "updated_at": "2026-10-12T22:21:48Z",
+      "closed_at": "2026-10-12T22:21:48Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
