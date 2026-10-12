@@ -262,6 +262,65 @@ function StatusBadge({ status }) {
     </span>`;
 }
 
+// Mermaid diagrams. The CDN script is optional: if it is missing, the source is shown instead.
+let mermaidTheme = null;
+let diagramCount = 0;
+
+function initMermaid(dark) {
+  const theme = dark ? 'dark' : 'default';
+  if (mermaidTheme === theme) return;
+  window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme });
+  mermaidTheme = theme;
+}
+
+function useIsDark() {
+  const root = document.documentElement;
+  const [dark, setDark] = useState(() => root.classList.contains('dark'));
+  useEffect(() => {
+    const sync = () => setDark(root.classList.contains('dark'));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return dark;
+}
+
+function Diagram({ source }) {
+  const dark = useIsDark();
+  const [result, setResult] = useState(null);
+  useEffect(() => {
+    let live = true;
+    const id = `mermaid-diagram-${++diagramCount}`;
+    setResult(null);
+    (async () => {
+      try {
+        if (!window.mermaid) throw new Error('mermaid did not load');
+        initMermaid(dark);
+        const { svg } = await window.mermaid.render(id, source);
+        if (live) setResult({ svg });
+      } catch (err) {
+        if (live) setResult({ error: true });
+      } finally {
+        // A failed render can leave its temporary element in <body>.
+        [id, `d${id}`].forEach((n) => { const el = document.getElementById(n); if (el) el.remove(); });
+      }
+    })();
+    return () => { live = false; };
+  }, [source, dark]);
+  return html`
+    <div class="min-w-0">
+      <h5 class=${LABEL_HEAD}>Diagram</h5>
+      ${result && result.error
+        ? html`
+            <p class="mt-1 text-sm font-medium text-amber-800 dark:text-amber-300">Diagram could not be rendered</p>
+            <pre class="mt-1 overflow-x-auto whitespace-pre rounded-lg bg-slate-100 p-3 font-mono text-xs leading-relaxed text-slate-800 dark:bg-slate-950 dark:text-slate-200">${source}</pre>`
+        : html`
+            <div role="img" aria-label="Diagram" class="mt-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950"
+              dangerouslySetInnerHTML=${{ __html: result && result.svg ? result.svg : '' }}></div>`}
+    </div>`;
+}
+
 function Field({ title, children }) {
   return html`
     <div>
@@ -429,6 +488,7 @@ function PRCard({ row }) {
       >${expanded ? 'Hide details' : 'Show details'}</button>
       ${expanded && html`
         <div id=${panelId} class="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+          ${entry && entry.diagram ? html`<div class="mb-5"><${Diagram} source=${entry.diagram} /></div>` : null}
           ${entry && entry.landed ? html`<div class="mb-5"><${LandedNote} landed=${entry.landed} /></div>` : null}
           ${hasWriteUp
             ? html`<${WriteUp} entry=${entry} body=${pr.body} />`
@@ -448,6 +508,7 @@ function Proposal({ proposal: p }) {
       </div>
       <h4 class="mt-2 text-base font-semibold leading-snug">${p.title}</h4>
       <div class="mt-4 space-y-4">
+        ${p.diagram ? html`<${Diagram} source=${p.diagram} />` : null}
         <${Field} title="Problem">${p.problem}</${Field}>
         <${Field} title="Evidence">${p.evidence}</${Field}>
         <div>

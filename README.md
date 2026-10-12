@@ -26,10 +26,11 @@ There is no build step and no npm. The files are served as they are.
   - `why`, `what`, `helps`: short paragraphs.
   - `before`, `after`: short text or code showing the old and new behaviour.
   - `limits`, `tests`: lists. Tests are names only.
+  - `diagram` (optional): a Mermaid source string (for example `flowchart TD\n  A --> B`). Shown first in the expanded card, in a box that scrolls sideways. It is rendered in the browser by Mermaid 10.9.1 with `securityLevel: 'strict'`, in the page theme. If the source does not parse, the page shows "Diagram could not be rendered" above the raw source, so fix the syntax (try it at https://mermaid.live) and reload.
   - `cases` (optional): rows with `case`, `correct`, `before` (v8), `pr_first_version` (the first version of the PR, shown as "PR before"), `after` (this PR, shown as "PR now") and `covered_by`. Below `sm` (640px) each case is a stacked card; at `sm` and wider it is a table.
 - `prs[n].landed` (optional): see "Landed PRs" below.
 - `proposals`: an array (empty for now; the page shows "No proposals yet").
-  - `id`, `title`, `problem`, `evidence` (text), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers).
+  - `id`, `title`, `problem`, `evidence` (text), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers), `diagram` (optional, same Mermaid source string as for PRs; shown first in the card, same failure behaviour).
 
 Write only facts you can point to. The page shows the text as given.
 
