@@ -494,8 +494,8 @@ function Header({ theme, pulls, refreshing, onRefresh }) {
         </div>
         <div class="flex items-center gap-2">
           <button type="button" class=${BUTTON} onClick=${onRefresh} disabled=${refreshing}>${refreshing ? 'Refreshing…' : 'Refresh'}</button>
-          <button type="button" class=${BUTTON} aria-pressed=${theme.dark}
-            aria-label=${theme.dark ? '☀ Light mode' : '☾ Dark mode'} onClick=${theme.toggle}>
+          <button type="button" class=${BUTTON}
+            aria-label=${theme.dark ? 'Switch to light mode' : 'Switch to dark mode'} onClick=${theme.toggle}>
             ${theme.dark ? '☀ Light mode' : '☾ Dark mode'}
           </button>
         </div>
