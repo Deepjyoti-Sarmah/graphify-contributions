@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Graphify contributions</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f46e5'/%3E%3Ctext x='32' y='43' font-family='sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
-  <meta name="description" content="Pull requests by Deepjyoti-Sarmah on Graphify-Labs/graphify, with write-ups, live GitHub status and open proposals.">
-  <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232F3437'/%3E%3Ccircle cx='22' cy='22' r='6' fill='%23FBFBFA'/%3E%3Ccircle cx='42' cy='32' r='6' fill='%23FBFBFA'/%3E%3Ccircle cx='24' cy='44' r='6' fill='%23FBFBFA'/%3E%3Cpath d='M22 22L42 32L24 44' stroke='%23FBFBFA' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+  <meta name="description" content="Pull requests by Deepjyoti-Sarmah to Graphify-Labs/graphify: what was broken, what each change does, how it was tested, and ideas proposed for next.">
+  <meta name="theme-color" content="#FBFBFA" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#191919" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Graphify contributions">
-  <meta property="og:description" content="Pull requests by Deepjyoti-Sarmah on Graphify-Labs/graphify, with write-ups, live GitHub status and open proposals.">
+  <meta property="og:description" content="What was broken, what each change does, and how it was tested.">
   <meta property="og:type" content="website">
 
   <script>
@@ -26,17 +26,23 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
 
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
   <script>
+    const token = (name) => `rgb(var(--${name}) / <alpha-value>)`;
     tailwind.config = {
       darkMode: 'class',
       theme: {
         extend: {
+          colors: {
+            canvas: token('canvas'), surface: token('surface'), subtle: token('subtle'),
+            ink: token('ink'), muted: token('muted'), line: token('line'), accent: token('accent'),
+          },
           fontFamily: {
-            sans: ['Outfit', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+            sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            serif: ['Newsreader', 'ui-serif', 'Georgia', 'serif'],
+            mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
           },
         },
       },
@@ -44,58 +50,89 @@
   </script>
 
   <style>
-    /* Shape lock for this page: cards 16px (rounded-2xl), inputs and buttons 10px, badges and pills full. */
-    html { scroll-behavior: smooth; }
-    body { font-family: Outfit, Inter, ui-sans-serif, system-ui, sans-serif; }
-    h1, h2, h4 { text-wrap: balance; }
-    p { text-wrap: pretty; }
-    :focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 4px; }
-    .skip-link { position: absolute; left: 1rem; top: -3rem; z-index: 60; background: #4f46e5; color: #fff; padding: 0.5rem 1rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600; transition: top 200ms cubic-bezier(0.16, 1, 0.3, 1); }
-    .skip-link:focus { top: 1rem; }
-    /* Ambient depth: fixed, pointer-events-none, transform and opacity only. */
-    body::before {
-      content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      background: radial-gradient(42rem 22rem at 12% -4%, rgb(99 102 241 / 0.08), transparent 60%),
-                  radial-gradient(36rem 20rem at 88% 0%, rgb(16 185 129 / 0.06), transparent 60%);
+    /* Warm monochrome. Color only carries meaning: status, before/after, risk. */
+    :root {
+      --canvas: 251 251 250; --surface: 255 255 255; --subtle: 244 243 240;
+      --ink: 47 52 55; --muted: 105 104 99; --line: 232 231 228; --accent: 31 108 159;
+      color-scheme: light;
     }
-    .dark body::before, body.dark::before { display: none; }
-    #root { position: relative; z-index: 1; }
-    /* Tactile cards: tinted shadow, GPU-safe transform and opacity only. */
-    .card-lift { transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 250ms cubic-bezier(0.16, 1, 0.3, 1), border-color 250ms cubic-bezier(0.16, 1, 0.3, 1); }
-    .card-lift:hover { transform: translateY(-1px); box-shadow: 0 12px 32px -16px rgb(79 70 229 / 0.28); border-color: rgb(165 180 252 / 0.7); }
-    .card-lift:active { transform: translateY(0) scale(0.99); }
-    .pressable { transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), background-color 200ms cubic-bezier(0.16, 1, 0.3, 1); }
-    .pressable:active { transform: scale(0.98); }
-    /* Skeleton loaders match the final card shape. */
-    @keyframes shimmer { from { opacity: 0.45; } to { opacity: 1; } }
-    .skeleton { animation: shimmer 1.1s cubic-bezier(0.16, 1, 0.3, 1) infinite alternate; }
-    /* Scroll entry: IntersectionObserver adds .in; transform and opacity only. */
-    .reveal { opacity: 0; transform: translateY(12px); }
-    .reveal.in { opacity: 1; transform: none; transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1), opacity 600ms cubic-bezier(0.16, 1, 0.3, 1); transition-delay: calc(var(--index, 0) * 60ms); }
-    /* Markdown from GitHub PR descriptions (marked output). */
+    .dark {
+      --canvas: 25 25 25; --surface: 32 32 32; --subtle: 40 40 40;
+      --ink: 230 230 228; --muted: 158 157 153; --line: 52 52 52; --accent: 140 200 242;
+      color-scheme: dark;
+    }
+    body { font-family: Geist, ui-sans-serif, system-ui, sans-serif; font-feature-settings: "ss01"; }
+    h1, h2, h3 { text-wrap: balance; }
+    p, dd, li { text-wrap: pretty; }
+    :focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; border-radius: 4px; }
+    ::selection { background: rgb(var(--accent) / 0.18); }
+
+    .skip-link { position: absolute; left: 1rem; top: -3rem; z-index: 60; background: rgb(var(--ink)); color: rgb(var(--canvas)); padding: 0.5rem 0.875rem; border-radius: 6px; font-size: 0.875rem; }
+    .skip-link:focus { top: 1rem; }
+
+    /* Tags: small, uppercase, pastel. */
+    .tag { display: inline-flex; align-items: center; gap: 0.375rem; border-radius: 9999px; padding: 0.125rem 0.5rem; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.5; white-space: nowrap; }
+    .tag .dot { width: 6px; height: 6px; border-radius: 9999px; background: currentColor; opacity: 0.8; }
+    .tag-green  { background: #EDF3EC; color: #346538; }
+    .tag-red    { background: #FDEBEC; color: #9F2F2D; }
+    .tag-purple { background: #F1EAFB; color: #6940A5; }
+    .tag-yellow { background: #FBF3DB; color: #855A00; }
+    .tag-blue   { background: #E1F3FE; color: #1F6C9F; }
+    .tag-gray   { background: #EFEEEB; color: #5F5E5B; }
+    .dark .tag-green  { background: rgb(52 101 56 / 0.3);  color: #A9D3AC; }
+    .dark .tag-red    { background: rgb(159 47 45 / 0.32); color: #F2B5B3; }
+    .dark .tag-purple { background: rgb(105 64 165 / 0.34); color: #CDB6F0; }
+    .dark .tag-yellow { background: rgb(149 100 0 / 0.32); color: #EBCB85; }
+    .dark .tag-blue   { background: rgb(31 108 159 / 0.32); color: #9CCEF0; }
+    .dark .tag-gray   { background: rgb(255 255 255 / 0.08); color: #BEBDB9; }
+
+    /* Before / after accents. */
+    .bad-text  { color: #9F2F2D; } .dark .bad-text  { color: #F2B5B3; }
+    .good-text { color: #346538; } .dark .good-text { color: #A9D3AC; }
+    .bad-dot  { background: #D44C47; } .good-dot { background: #448361; }
+
+    /* Inline code and links inside prose. */
+    .ic { font-family: "Geist Mono", ui-monospace, monospace; font-size: 0.84em; background: rgb(var(--subtle)); border: 1px solid rgb(var(--line)); border-radius: 4px; padding: 0.05em 0.3em; overflow-wrap: anywhere; }
+    .link { color: rgb(var(--accent)); text-decoration: underline; text-decoration-color: rgb(var(--accent) / 0.35); text-underline-offset: 3px; }
+    .link:hover { text-decoration-color: rgb(var(--accent)); }
+
+    /* Mermaid output fits its box; wide diagrams scroll inside it. */
+    .diagram svg { max-width: 100%; height: auto; margin: 0 auto; display: block; }
+    @media (max-width: 639px) { .diagram svg { max-width: none; min-width: 560px; } }
+
+    /* Markdown from GitHub PR descriptions (marked output, sanitized). */
+    .md { font-size: 0.9375rem; line-height: 1.7; }
     .md > :first-child { margin-top: 0; }
-    .md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0.6em 0; }
+    .md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0.75em 0; }
     .md ul { list-style: disc; padding-left: 1.25em; }
     .md ol { list-style: decimal; padding-left: 1.25em; }
-    .md h1, .md h2, .md h3, .md h4 { font-weight: 600; margin: 1em 0 0.4em; }
-    .md h1 { font-size: 1.1rem; } .md h2 { font-size: 1.05rem; } .md h3, .md h4 { font-size: 0.95rem; }
-    .md code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.85em; background: rgb(148 163 184 / 0.18); padding: 0 0.25em; border-radius: 4px; overflow-wrap: anywhere; }
-    .md pre { background: rgb(148 163 184 / 0.14); padding: 0.75rem; border-radius: 8px; overflow-x: auto; white-space: pre; }
+    .md h1, .md h2, .md h3, .md h4 { font-weight: 600; margin: 1.4em 0 0.4em; }
+    .md h1, .md h2 { font-size: 1.05rem; } .md h3, .md h4 { font-size: 0.95rem; }
+    .md code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 0.84em; background: rgb(var(--subtle)); padding: 0.05em 0.3em; border-radius: 4px; overflow-wrap: anywhere; }
+    .md pre { background: rgb(var(--subtle)); border: 1px solid rgb(var(--line)); padding: 0.875rem 1rem; border-radius: 8px; overflow-x: auto; white-space: pre; font-size: 0.8125rem; }
     .md pre code { background: none; padding: 0; overflow-wrap: normal; }
-    .md table { display: block; overflow-x: auto; border-collapse: collapse; }
-    .md th, .md td { border: 1px solid rgb(148 163 184 / 0.35); padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
-    .md a { color: #4f46e5; text-decoration: underline; overflow-wrap: anywhere; }
-    .dark .md a { color: #a5b4fc; }
+    .md table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 0.8125rem; }
+    .md th, .md td { border-bottom: 1px solid rgb(var(--line)); padding: 0.4rem 0.75rem 0.4rem 0; text-align: left; vertical-align: top; }
+    .md a { color: rgb(var(--accent)); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
     .md img { max-width: 100%; height: auto; }
+
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] > summary .chev { transform: rotate(90deg); }
+    .chev { transition: transform 150ms ease; }
+
+    @keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
+    .skeleton { animation: pulse 1s ease-in-out infinite alternate; }
+    @media (prefers-reduced-motion: no-preference) {
+      .panel { animation: open 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+      @keyframes open { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    }
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; scroll-behavior: auto !important; }
-      body::before { display: none; }
-      .reveal { opacity: 1; transform: none; }
-      .skeleton { animation: none; opacity: 0.7; }
+      *, *::before, *::after { transition-duration: 0ms !important; animation: none !important; }
     }
   </style>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+<body class="min-h-screen bg-canvas text-ink antialiased">
   <div id="root"></div>
 
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
