@@ -1,7 +1,95 @@
-{"fetched_at":"2026-10-13T14:20:33Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 6,
+{"fetched_at":"2026-10-13T19:56:26Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 7,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4434",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4434/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4434/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4434/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4434",
+      "id": 5836762818,
+      "node_id": "PR_kwDOR4-pD88AAAABIQC_Eg",
+      "number": 4434,
+      "title": "fix(extract): give the model each file's real id stem (#4432)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-13T19:53:34Z",
+      "updated_at": "2026-10-13T19:53:45Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4434",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4434",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4434.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4434.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4432. #3103 reported the same thing and was closed without a fix.\n\nThe extraction prompts say node ids use \"only `[a-z0-9_]`\". `graphify/ids.py` keeps Unicode letters. For a path like `docs/tz/ЛЗ4.md` the model cannot follow both, so it invents a stem, and the stem differs between chunks and between runs. `_semantic_id_remap` only strips stems it already knows, so none of them get fixed.\n\nThis PR states the real rule and gives the model each file's stem, computed in code.\n\n```diff\n graphify extract (llm.py)\n-  <untrusted_source path=\"docs/tz/ЛЗ4.md\" sha256=\"...\">\n+  <untrusted_source path=\"docs/tz/ЛЗ4.md\" sha256=\"...\" stem=\"docs_tz_лз4\">\n\n skill, Part B\n   check_semantic_cache(...)\n     writes .graphify_uncached.txt              # unchanged\n+    writes .graphify_uncached_stems.txt        # path<TAB>stem, same order\n   Step B1: FILE_LIST lines\n-    /abs/docs/tz/ЛЗ4.md\n+    /abs/docs/tz/ЛЗ4.md<TAB>docs_tz_лз4       # falls back to the old file if missing\n\n rule text (llm.py + both extraction-spec fragments)\n-  Node ID format: lowercase, only [a-z0-9_], no dots or slashes.\n+  Node ID format: lowercase. Letters and digits of any script are kept as written\n+  (never transliterated to ASCII); every run of any other character becomes one _.\n+  ...use the given stem character for character as the id prefix.\n```\n\nBoth paths use one new helper, `file_id_stem(path, root)` in `graphify/extractors/base.py`. It returns `make_id(_file_stem(...))` of the root-relative path. The skill computes the stems in the same Python step that already runs the cache check. No path is pasted into code, and no agent types a stem.\n\nI left `_semantic_id_remap` alone. A made-up stem has no known length, so a repair can't tell where the stem ends and the entity begins. The #4281 prototype also showed that re-keying a node from its `source_file` moves a node that mentions another file under the wrong file.\n\n### Before / after\n\nSame id, two different stems:\n\n```text\nbefore:  ids.py stem      docs_tz_лз4_обоснование_с_листом_расчет_кдог\n         model's stem     docs_tz_lz4_obosnovanie_kdog            (from the issue; changes per run)\n         remap            {}                                      (nothing reconciled)\n\nafter:   prompt carries   stem=\"docs_tz_лз4_обоснование_с_листом_расчет_кдог\"\n         page node id     docs_tz_лз4_обоснование_с_листом_расчет_кдог   (same string, tested)\n```\n\nRead literally, the old rule turns that path into `docs_tz_4_`. That result comes from running the rule as code, not from a model run.\n\nTests, `tests/test_unicode_id_rule.py`:\n\n```text\nbefore fix:  43 failed, 2 passed   (the 2 are the host-count guards)\nafter fix:   45 passed\n```\n\n### Merge danger\n\n**Door:** two-way. No stored format changes. The only new file is a temp file that Part B cleans up, and reverting means one commit.\n\n**Blast radius:** medium. Every semantic extraction prompt changes:\n\n- **Cache:** the semantic cache is keyed on the prompt text, so every existing entry misses once. This hits `graphify extract` users and all 14 skill hosts, including ASCII-only repos. Reverting causes one more miss.\n- **ASCII paths:** the chunk prompt is byte-identical apart from the added `stem=\"...\"` (tested). File-node ids do not change for any path.\n- **Skill hosts:** 14 hosts get the regenerated skill and spec. Aider and devin are not touched. They never stated the `[a-z0-9_]` rule.\n- **#4344:** one-line conflict. Both PRs touch the same `check_semantic_cache` line in `core.md`. Whichever merges second changes `root = 'INPUT_PATH'` to `root = read_scan_root()`.\n\n### Not covered\n\n- Nothing enforces the id. The model can still ignore the stem it is given, and then ids drift as before. Enforcing it means having code mint the ids, which is a larger change.\n- Nodes with no file stem at all (`concept_*`, `s301_totals` in the issue).\n- On the skill path, a symlinked doc whose target is outside the scan root gets no stem and falls back to the rule text.\n- The aider and devin monolith skills.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nInvariant: the stem the model is told to use is the same string the document pass mints for that file's node, whatever script the path is in.\n\n- `test_file_id_stem_is_the_prefix_the_pipeline_mints` runs a Cyrillic and an ASCII document through the real `extract()`. The page-node id equals `file_id_stem`, the chunk prompt carries that stem, and `_semantic_id_remap` leaves a node under it alone.\n- `file_id_stem` is tested with an absolute path and root `\".\"`, with a path outside the root (returns `\"\"`), and with `\"`, `<` and `>` in the name. The stem holds only letters, digits and `_`, so it cannot break out of the attribute.\n- The Part B step is extracted from the generated `graphify/skill.md` and run. It writes the expected `path<TAB>stem` lines, with `INPUT_PATH` substituted once.\n- The rule wording is checked in `llm.py` and in all 14 generated specs, with exact host counts so a dropped host fails the test.\n- Generated state this invalidates: the semantic cache (once), plus 14 skill files and 14 specs, which are regenerated with `--bless`.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n## How was this tested?\n\nRun from `/var/tmp` with `PYTHONPATH` set to the worktree, so the code under test is this branch and not an editable install of another checkout.\n\n```text\n# repro, no LLM\npython repro.py\n  docs_tz_лз4_обоснование_с_листом_расчет_кдог\n  docs_tz_срз_кп18_с301_лз2_105_12_10_2026\n  _semantic_id_remap -> {}\n\npython -m pytest tests/test_unicode_id_rule.py -q --basetemp=/var/tmp/pt-4432 -p no:cacheprovider\n  before: 43 failed, 2 passed\n  after:  45 passed, 1 warning in 1.51s\n\npython -m tools.skillgen --bless              -> blessed 134 artifact(s) into expected/.\npython -m tools.skillgen --check              -> check OK: 134 artifact(s) match committed output and expected/.\npython -m tools.skillgen --monolith-roundtrip -> monolith-roundtrip OK\n\npython -m pytest -q --basetemp=/var/tmp/pt-4432-full\n  7970 passed, 14 skipped, 1994 warnings in 390.54s\n\nruff check graphify/extractors/base.py graphify/llm.py tests/test_unicode_id_rule.py\n  All checks passed!\npyright graphify/extractors/base.py graphify/llm.py\n  19 errors, same as upstream/v8 (new test file: 0)\n```\n\n## Graphify-specific checklist\n\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments.\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4434/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4434/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4410",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -141,9 +229,9 @@
 
       ],
       "milestone": null,
-      "comments": 3,
+      "comments": 4,
       "created_at": "2026-10-12T15:43:29Z",
-      "updated_at": "2026-10-13T10:25:02Z",
+      "updated_at": "2026-10-13T17:11:50Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
