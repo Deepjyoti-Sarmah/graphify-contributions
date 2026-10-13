@@ -21,6 +21,14 @@
         4344,
         4353
       ]
+    },
+    {
+      "id": "4432",
+      "title": "node-ID rule 'only [a-z0-9_]' still contradicts ids.py for non-ASCII paths in 0.9.89, in both llm.py and extraction-spec.md (#3103 closed without a fix)",
+      "issue": 4432,
+      "prs": [
+        4434
+      ]
     }
   ],
   "prs": {
@@ -291,6 +299,34 @@
         "test_lone_bare_id_without_a_top_level_file_is_left_to_build",
         "test_top_level_file_survives_whatever_the_labels_are",
         "test_top_level_file_survives_without_a_references_edge"
+      ]
+    },
+    "4434": {
+      "summary": "Tell the model the real node-id rule and hand it each file's stem, so a non-ASCII path gets one stable id prefix.",
+      "why": "The extraction prompts said ids use only [a-z0-9_], but ids.py keeps Unicode letters (docs/tz/ЛЗ4.md becomes docs_tz_лз4). The model could not follow both, so it invented a different stem per chunk and per run, and _semantic_id_remap reconciled none of them.",
+      "what": "The rule in llm.py and both extraction-spec fragments now says what ids.py does: letters and digits of any script are kept, every other run of characters becomes one _. A new helper, file_id_stem, computes each file's stem in code. graphify extract adds it to the prompt as stem=\"...\", and the skill writes a path<TAB>stem file that the agent copies into each subagent's file list.",
+      "helps": "Anyone whose docs have Cyrillic, CJK or accented file names. Every node from such a file is told the same prefix that the document pass already uses for the file's own node.",
+      "diagram": "flowchart LR\n  P[\"docs/tz/ЛЗ4.md\"] --> C[\"file_id_stem in code\"]\n  C --> S[\"stem = docs_tz_лз4\"]\n  S --> A[\"llm.py prompt: stem attribute\"]:::good\n  S --> B[\"skill: path TAB stem file list\"]:::good\n  A --> N[\"model copies the stem as id prefix\"]\n  B --> N",
+      "before": "canonical stem: docs_tz_лз4_обоснование_с_листом_расчет_кдог\nmodel's stem:   docs_tz_lz4_obosnovanie_kdog (from the issue; changes per run)\n_semantic_id_remap -> {}",
+      "after": "<untrusted_source path=\"docs/tz/ЛЗ4_обоснование_с_листом_Расчет_Кдог.md\" sha256=\"...\" stem=\"docs_tz_лз4_обоснование_с_листом_расчет_кдог\">\npage node id: docs_tz_лз4_обоснование_с_листом_расчет_кдог (same string, tested)",
+      "limits": [
+        "Nothing enforces the id. The model can still ignore the stem it is given.",
+        "Nodes with no file stem at all (concept_*, s301_totals in the issue) are not fixed.",
+        "On the skill path, a symlinked doc whose target is outside the scan root gets no stem and falls back to the rule text.",
+        "The aider and devin monolith skills are not changed.",
+        "The prompt text changed, so every existing semantic cache entry misses once, for all users.",
+        "One-line conflict with #4344: whichever merges second changes root = 'INPUT_PATH' to read_scan_root()."
+      ],
+      "tests": [
+        "test_file_id_stem_is_the_prefix_the_pipeline_mints",
+        "test_file_id_stem_resolves_an_absolute_path_against_root_dot",
+        "test_file_id_stem_is_empty_outside_the_root",
+        "test_file_id_stem_of_quotes_and_angle_brackets_is_word_characters_only",
+        "test_chunk_prompt_carries_each_files_stem",
+        "test_chunk_prompt_for_an_ascii_path_differs_only_by_the_stem",
+        "test_skill_cache_step_writes_a_stem_for_every_uncached_file",
+        "test_spec_states_the_unicode_rule",
+        "test_llm_prompt_states_the_unicode_rule"
       ]
     }
   },
