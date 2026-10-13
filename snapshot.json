@@ -1,7 +1,95 @@
-{"fetched_at":"2026-10-12T22:40:03Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 5,
+{"fetched_at":"2026-10-13T10:49:02Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 6,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4410",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4410/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4410/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4410/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4410",
+      "id": 5828888654,
+      "node_id": "PR_kwDOR4-pD88AAAABIJtVeA",
+      "number": 4410,
+      "title": "fix(dedup): keep a dropped-folder doc next to a top-level same-id file (#4281)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-13T10:43:11Z",
+      "updated_at": "2026-10-13T10:43:21Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4410",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4410",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4410.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4410.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nPart of #4281. Closes the gap named in the review of #4371: \"a bare id that names an actual input file, e.g. a top-level protocol.md next to docs/protocol.md\". Stacks cleanly with #4371 in either order.\n\nWhen the LLM drops the folder, `protocol.md`, `docs/protocol.md` and `docs/firmware/protocol.md` all mint `protocol`. #4362 skips any group whose bare id names an input file, because the id may be a reference to that file. So the collapse ran and one real document was dropped:\n\n```diff\n nodes after build\n   docs_protocol            docs/protocol.md\n   docs_firmware_protocol   docs/firmware/protocol.md\n+  protocol                 protocol.md        (v8: dropped)\n\n edges\n-  docs_firmware_protocol -> docs_protocol\n+  docs_firmware_protocol -> protocol\n```\n\nThe id alone can't tell \"my own page with the folder dropped\" from \"a reference to protocol.md\". The rest of the file can: a file that only refers to protocol.md still has its own page node.\n\n```text\nfor each id shared across files:\n  the file whose full stem IS the id (protocol.md) keeps it and counts toward the group\n  for each other file with that bare id:\n    if the file has no other node spelled with its own full stem:\n      the bare id is its page: rename to <full stem> + rest of id\n    else:\n      it may be a reference: leave it to the collapse, as before\n\nsurvivor ranking:\n  a bare path slice from a file that has its own page ranks as a reference,\n  so protocol.md's node survives whatever the labels are\n```\n\n```diff\n deduplicate_entities\n   _path_qualify_dropped_collisions\n+    _own_page_files                         # file has a node spelled with its own full stem\n-    skip the group if the bare id names an input file\n+    decide per file: no own page -> rename, own page -> collapse\n   exact-id collapse\n-    mentions = _mentions(...)\n+    mentions = _mentions(...) | _slice_references(...)\n     _collision_rank(node, root, mentions)\n```\n\n### Existing tests this PR changes\n\n| Test | Before | Now | Why |\n|---|---|---|---|\n| `test_top_level_collision_keeps_todays_result` | 2 nodes; its docstring says \"KNOWN LIMITATION, pinned so a change is noticed\" | renamed `test_top_level_file_keeps_its_own_node_next_to_dropped_folder_docs`; 3 nodes, the firmware reference ends on `protocol` | this is the fixed case |\n| `test_bare_id_naming_an_existing_file_is_not_renamed` | three files, each with a single `protocol`, collapse to 1 node | renamed `test_bare_ids_in_three_files_keep_one_node_per_file`; 3 nodes, no collision warning | none of the three files has another page, so each bare id is that file's page. The collapse was the data loss |\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nOne node per real document. A reference must not become a new document, and a real document must not be dropped. The result does not depend on input order or label length.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. Code only: no schema, cache or file-format change.\n\n**Blast Radius:** narrow. It changes only groups where an input file is named by the bare id, and survivor choice only for a bare path slice from a file that has its own page. On a rebuild, such a corpus gets one more document node, and a saved query for `protocol` finds the top-level file.\n\n**Limitations**\n\n- If the LLM drops the folder AND emits another node spelled with the file's full stem (`docs_protocol_header`), the file counts as having its own page and gets the collapse it got before. `test_dropped_folder_doc_with_own_stem_entity_falls_back_to_collapse` pins this.\n- In R_toplevel one warning still prints: the firmware file's mention of `protocol` collapses into the top-level node. That merge is right, the warning is noise.\n- The own-page check reads the nodes the LLM emitted, not the source file.\n\n## How was this tested?\n\nSeven hand-built semantic fragments run through `graphify.build.build()`: v8 gets 6 of 7 right (R_toplevel drops a document), this branch 7 of 7. New tests cover a genuine reference with and without an edge (still collapses onto protocol.md), the label swap, the boundary above, and a lone bare id with no top-level file (untouched). `test_top_level_file_survives_without_a_references_edge` fails without the ranking change and passes with it.\n\n```text\n.venv/bin/python -m pytest tests/test_dedup.py -q --basetemp=/var/tmp/pt   -> 137 passed\n.venv/bin/python -m pytest -q --basetemp=/var/tmp/pt                      -> 7758 passed, 14 skipped\nwith #4371 applied on top: tests/test_dedup.py                            -> 141 passed\n.venv/bin/ruff check .                                                    -> All checks passed\n.venv/bin/pyright                                                         -> 683 errors repo-wide, 684 on upstream/v8\n                                                                 dedup.py + test_dedup.py: 5 before, 5 after\n```\n\npyright is not clean on this repo; neither count rises.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4410/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4410/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4371",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -53,9 +141,9 @@
 
       ],
       "milestone": null,
-      "comments": 2,
+      "comments": 3,
       "created_at": "2026-10-12T15:43:29Z",
-      "updated_at": "2026-10-12T22:39:20Z",
+      "updated_at": "2026-10-13T10:25:02Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",

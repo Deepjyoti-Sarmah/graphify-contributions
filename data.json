@@ -8,8 +8,9 @@
       "issue": 4281,
       "prs": [
         4326,
+        4362,
         4371,
-        4362
+        4410
       ]
     }
   ],
@@ -46,7 +47,7 @@
       "before": "[graphify] WARNING: node 'sender' is minted by two different files — keeping 'Sender' from 'docs/a.md', dropping 'sender service' from 'docs/b.md'. An ID is derived from the source path plus the entity name, so this one does not identify a single entity and the dropped node is lost.",
       "after": "[graphify] WARNING: node 'sender' is minted by two different files: kept 'Sender' from 'docs/a.md', merged 'sender service' from 'docs/b.md' into it. The id comes from neither path, so this is probably one entity described in both files. The merged node's own label and attributes are not kept; its edges stay on the kept node.",
       "limits": [
-        "The text cannot tell a reference from a second document when the id comes from a path. It says both are possible. Telling them apart needs edge evidence and is out of scope here (#4362, now in v0.9.88, resolves the cases it can; this warning covers the collisions it leaves, such as docs/protocol.md next to a top-level protocol.md).",
+        "The text cannot tell a reference from a second document when the id comes from a path. It says both are possible. Telling them apart needs edge evidence and is out of scope here: #4362 (v0.9.88) and #4410 resolve the cases they can, and this warning covers the collisions they leave, such as docs/protocol.md with its own page that also mints the bare id of a top-level protocol.md.",
         "\"Probably one entity\" for an id that comes from neither path is an inference, not a fact. Two real documents can also share such an id; the merged node's label and attributes are then lost.",
         "Severity stays WARNING. The reporter asked for something milder, but test_issue_3472 asserts WARNING for a non-path id, so lowering it would change an existing test."
       ],
@@ -199,6 +200,82 @@
         "test_read_scan_root_treats_shell_syntax_as_a_plain_name",
         "test_labels_heredoc_keeps_hostile_text_as_data",
         "test_spec_heredoc_keeps_hostile_text_as_data"
+      ]
+    },
+    "4410": {
+      "summary": "Keep docs/protocol.md as its own node when a top-level protocol.md mints the same bare id, and make the real top-level file win the collapse whatever the labels are.",
+      "why": "When the LLM drops the folder, protocol.md, docs/protocol.md and docs/firmware/protocol.md all mint protocol. #4362 skips any group whose bare id names an input file, because the id may be a reference to that file. The collapse then ran and one real document was dropped. The maintainer named this gap in the review of #4371.",
+      "what": "The file whose full stem is the id (protocol.md) keeps it and counts toward the collision. Every other file with that bare id is decided on its own: if it has no other node spelled with its own full stem, the bare id is its page and is renamed (docs_protocol); if it has one, the bare id may be a reference and collapses as before. A bare path slice from a file that has its own page now also ranks as a reference, so protocol.md's node survives the collapse whatever the label lengths are.",
+      "helps": "Anyone with a top-level README or protocol.md next to a docs/ copy of the same name. No document is silently dropped, and a reference to the top-level file lands on it.",
+      "before": "protocol.md + docs/protocol.md + docs/firmware/protocol.md: nodes docs_protocol, docs_firmware_protocol. protocol.md has no node; the firmware reference ends on docs_protocol.",
+      "after": "Same input: nodes protocol (protocol.md), docs_protocol, docs_firmware_protocol. The firmware reference ends on protocol.",
+      "diagram": "flowchart LR\n  B[\"docs/protocol.md mints protocol\"] --> Q(\"does the file have another node spelled docs_protocol...?\")\n  Q -- \"no: it is the page\" --> R[\"renamed to docs_protocol\"]:::good\n  Q -- \"yes: may be a reference\" --> C[\"collapses onto protocol.md\"]:::same\n  T[\"protocol.md mints protocol\"] --> K[\"keeps protocol\"]:::good\n  C --> K",
+      "cases": [
+        {
+          "case": "D",
+          "correct": "4 nodes, edges within each file",
+          "before": "ok",
+          "after": "ok",
+          "covered_by": "test_path_dropped_through_build"
+        },
+        {
+          "case": "R",
+          "correct": "2 nodes; the firmware doc references docs/protocol.md",
+          "before": "ok",
+          "after": "ok",
+          "covered_by": "test_reference_to_another_file_does_not_become_a_second_document"
+        },
+        {
+          "case": "R_noedge",
+          "correct": "same 2 nodes, no edge",
+          "before": "ok",
+          "after": "ok",
+          "covered_by": "test_mention_without_an_edge_gives_the_same_two_documents"
+        },
+        {
+          "case": "R_toplevel",
+          "correct": "3 nodes, one per file",
+          "before": "top-level document dropped",
+          "after": "ok, the reference lands on protocol.md",
+          "covered_by": "test_top_level_file_keeps_its_own_node_next_to_dropped_folder_docs"
+        },
+        {
+          "case": "F",
+          "correct": "no x; c.md's edge not pinned on one file",
+          "before": "ok",
+          "after": "ok",
+          "covered_by": "test_path_dropped_foreign_reference_edge_is_dropped_by_build"
+        },
+        {
+          "case": "R_labelswap",
+          "correct": "same as R",
+          "before": "ok",
+          "after": "ok",
+          "covered_by": "test_reference_outcome_does_not_depend_on_label_length"
+        },
+        {
+          "case": "G",
+          "correct": "3 nodes, sender once",
+          "before": "ok",
+          "after": "ok",
+          "covered_by": "test_entity_described_in_two_documents_collapses_to_one_node"
+        }
+      ],
+      "limits": [
+        "If the LLM drops the folder AND emits another node spelled with the file's full stem (docs_protocol_header), the file counts as having its own page and gets the collapse it got before. A test pins this.",
+        "In R_toplevel one warning still prints: the firmware file's mention of protocol collapses into the top-level node. The merge is right; the warning is noise.",
+        "The own-page check reads the nodes the LLM emitted, not the source file."
+      ],
+      "tests": [
+        "test_top_level_file_keeps_its_own_node_next_to_dropped_folder_docs",
+        "test_bare_ids_in_three_files_keep_one_node_per_file",
+        "test_genuine_reference_to_top_level_file_still_collapses",
+        "test_reference_to_top_level_file_without_an_edge_still_collapses",
+        "test_top_level_collision_result_does_not_depend_on_input_order",
+        "test_dropped_folder_doc_with_own_stem_entity_falls_back_to_collapse",
+        "test_lone_bare_id_without_a_top_level_file_is_left_to_build",
+        "test_top_level_file_survives_whatever_the_labels_are",
+        "test_top_level_file_survives_without_a_references_edge"
       ]
     }
   },

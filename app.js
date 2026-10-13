@@ -463,7 +463,8 @@ function Verdict({ value }) {
 
 function CasesTable({ cases }) {
   const score = (key) => cases.filter((c) => isOk(c[key])).length;
-  const cols = [['before', 'v8'], ['pr_first_version', 'First version'], ['after', 'This PR']];
+  const cols = [['before', 'v8'], ['pr_first_version', 'First version'], ['after', 'This PR']]
+    .filter(([key]) => cases.some((c) => c[key]));
   return html`
     <div class="space-y-4">
       <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
