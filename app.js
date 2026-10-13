@@ -729,6 +729,7 @@ function ProposalItem({ p }) {
           <span class="flex flex-wrap items-center gap-2">
             <${Tag} tag=${RISK_TAG[p.risk] || 'tag-yellow'} label=${`Risk ${p.risk}`} />
             <${Tag} tag="tag-gray" label=${`Size ${p.size}`} />
+            ${p.status ? html`<${Tag} tag="tag-blue" label=${p.status} />` : null}
           </span>
           <span class="mt-2 block text-[18.5px] font-medium leading-snug text-ink group-hover:text-accent">${p.title}</span>
           <span class="mt-1.5 block max-w-[68ch] text-[16px] leading-relaxed text-muted">${p.problem}</span>
@@ -738,6 +739,11 @@ function ProposalItem({ p }) {
       ${open && html`
         <div id=${panelId} class="panel space-y-8 pb-12">
           <${Section} label="Evidence"><${Paragraph} text=${p.evidence} /></${Section}>
+          ${(p.parts || []).map((part, i) => html`
+            <${Wide} key=${i} label=${part.label}>
+              ${part.md ? html`<${GitHubDescription} body=${part.md} />` : null}
+              ${part.diagram ? html`<${Diagram} source=${part.diagram} caption=${part.caption || part.label} />` : null}
+            </${Wide}>`)}
           ${p.diagram ? html`<${Section} label="Today vs proposed"><${Diagram} source=${p.diagram} caption=${p.title} /></${Section}>` : null}
           <${Section} label="Plan">
             <ol class="max-w-[68ch] space-y-2.5">

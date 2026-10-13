@@ -294,5 +294,71 @@
       ]
     }
   },
-  "proposals": []
+  "proposals": [
+    {
+      "id": "node-identity",
+      "title": "Let code make node ids, not the LLM",
+      "status": "Found, working on it",
+      "problem": "graphify can drop a real file from the graph without an error. When two nodes get the same id, dedup keeps one. For docs the LLM types the id, gets it wrong in repeatable ways, and nothing checks it.",
+      "evidence": "On 0.9.89, a/x.md and a/x.html with the same id x lose a/x.html. In #4432 the model invents a different stem in each chunk for Cyrillic paths. The same cause is behind #4281, #3947, #3407 and #1829. Numbers from a real repo are coming in stage 0.",
+      "parts": [
+        {
+          "label": "1. A file disappears",
+          "md": "Put two files in one folder, `a/x.md` and `a/x.html`. The LLM gives a node from each the id `x`. On 0.9.89 the graph keeps `a/x.md` and drops `a/x.html`:\n\n```text\ninput:   a/x.md   -> id x\n         a/x.html -> id x\noutput:  a_x  (a/x.md)\n         a/x.html is gone, one warning on stderr\n```\n\nAn agent reading the graph has no way to know `a/x.html` existed. It answers without it."
+        },
+        {
+          "label": "2. Why: dedup trusts the id",
+          "md": "Dedup (`deduplicate_entities`, `dedup.py:885`) has one rule: two nodes with the same id are the same thing, so it keeps one and drops the other.\n\nThat rule is only safe if the id is right every time. Two different things must never get the same id, and the same thing must get the same id on every run. When an id is wrong, dedup can't tell, and a real node is dropped."
+        },
+        {
+          "label": "3. Where the id comes from",
+          "md": "For code, `make_id()` in `ids.py` builds the id from the file path and the symbol name. It is deterministic, but it throws away the file extension and the difference between `/` and `_`, so `x.py` and `x.html` both start from `x`.\n\nFor docs and concepts, the LLM types the id. The prompt (`llm.py:520`) tells it to write `{path}_{name}` using only `[a-z0-9_]`. So the model has to slug a path exactly like `ids.py` does, repeat it the same way in every chunk and every run, and invent ids for nodes in files it can't see. It gets this wrong in a few repeatable ways:",
+          "diagram": "flowchart TD\n  P[\"prompt: write the id as path_name\"] --> L{\"LLM\"}\n  L -->|right| OK[\"docs_firmware_protocol\"]:::good\n  L -->|drops the folder| A[\"protocol<br/>#4281\"]:::bad\n  L -->|path is Cyrillic, rule says a-z| B[\"invents a stem per chunk<br/>#4432\"]:::bad\n  L -->|points at another file| C[\"guesses that file's id<br/>#3947\"]:::bad\n  OK --> D[\"dedup trusts every one of these\"]\n  A --> D\n  B --> D\n  C --> D",
+          "caption": "The same prompt rule produces right and wrong ids, and dedup can't tell them apart"
+        },
+        {
+          "label": "4. Why fixing each case doesn't end it",
+          "md": "So far each fix has repaired one shape after the fact, inside dedup: one pass for an extension clash, one for a dropped folder (#4362), one for a top-level file (#4410). Each pass assumes the other problem isn't there, so a file with both problems falls through both. That is the `a/x.md` + `a/x.html` case above. A test that generates random file trees found it on its first run.\n\nRepairing ids before dedup doesn't work either. I tried rebuilding every id from its `source_file`. It passed 3 of 7 cases, because the model sometimes puts the wrong `source_file` on a node that only mentions another file.\n\nThe same cause shows up in many open issues: #4281, #4432, #3947, #3407, #1829, #3726, #3568, #3257 and more. Roughly 30 issues and PRs come back to it.",
+          "diagram": "flowchart LR\n  IN[\"ids, some wrong\"]:::bad --> P1[\"fix extension clash\"]\n  P1 --> P2[\"fix dropped folder\"]\n  P2 --> P3[\"fix top-level file\"]\n  P3 --> P4[\"next shape\"]:::bad\n  P4 --> DROP[\"drop on same id\"]",
+          "caption": "Each repair handles one shape. New shapes keep getting through"
+        },
+        {
+          "label": "5. The fix: code makes the id, the model only names",
+          "md": "Three rules, each borrowed from a system that already solved this:\n\n1. **Code makes every id.** The model returns a short name and picks its file from a list (`f1`, `f2`). Code builds the id from the file and the name. My code index, symbolgraph, works this way: the id is made in code, and identity is a key of full path, kind and name that keeps the extension.\n2. **A mention of another file is a reference, not a node.** The model writes the name it is pointing at. A resolver links it once all files are extracted. Compilers and code indexers (LSP, SCIP) work this way: using a name never creates a symbol.\n3. **Dedup merges on that full key and reports conflicts.** Databases do this: a unique key that clashes is an error, not a silent overwrite.\n\nWhat the model would return:\n\n```json\n// today: the model types global ids\n{\"nodes\":[{\"id\":\"docs_firmware_protocol_handshake\",\"source_file\":\"docs/firmware/protocol.md\"}],\n \"edges\":[{\"source\":\"docs_firmware_protocol_handshake\",\"target\":\"protocol\"}]}\n\n// proposed: names, a file picked from a list, and an explicit reference\n{\"nodes\":[{\"name\":\"handshake\",\"file\":\"f1\",\"kind\":\"concept\"}],\n \"edges\":[{\"source\":\"handshake\",\"target_ref\":{\"name\":\"protocol\",\"file_hint\":\"docs/protocol.md\"}}]}\n```\n\nThe model can still pick the wrong file or name. The difference is that the mistake shows up as an unresolved or ambiguous reference instead of a node that quietly disappears.",
+          "diagram": "flowchart TD\n  LLM[\"LLM returns names,<br/>a file from the list,<br/>and references\"] --> MINT[\"code builds id and key\"]:::good\n  AST[\"AST extractors\"] --> TABLE[\"table of every node, by key\"]\n  MINT --> TABLE\n  LLM --> REFS[\"references\"]\n  TABLE --> RES[\"resolver\"]:::good\n  REFS --> RES\n  RES -->|one match| E[\"edge\"]\n  RES -->|several| AMB[\"AMBIGUOUS edge\"]\n  RES -->|none| UN[\"unresolved, reported\"]\n  TABLE --> DD[\"dedup on key,<br/>conflict reported\"]:::good",
+          "caption": "Proposed: the model names things, code builds ids, references are resolved at the end"
+        },
+        {
+          "label": "6. What it costs",
+          "md": "- Any prompt change re-runs semantic extraction once for every user, because the cache key includes a prompt fingerprint (`cache.py:162`). Grouping the prompt changes pays this once.\n- The id rule is written in `llm.py` and in the skillgen fragments, so each step touches both.\n- Stage 4 changes ids in saved graphs. It needs a graph format version and a remap, like `_semantic_id_remap` already does for old ids."
+        },
+        {
+          "label": "7. Questions for you",
+          "md": "1. Do you agree with the direction: code makes ids, the model names and picks, mentions are references?\n2. Would you review stages 0 to 3 as separate small PRs?\n3. For stage 4, is a graph format version fine, or do old ids have to keep working?\n4. Is a property test of about 4 seconds fine in CI, or should it run nightly?"
+        }
+      ],
+      "plan": [
+        "Stage 0: a test that generates random file trees and checks that every file keeps a node, plus a count of how many LLM ids miss their file's path on a real repo. Easy to undo.",
+        "Stage 1: code computes each file's path stem and puts it in the prompt, and the prompt rule matches ids.py (my #4432 PR). Easy to undo.",
+        "Stage 2: the model picks its file from a list and returns a short name. Code builds the id. The old output format is still accepted. Easy to undo.",
+        "Stage 3: a mention of another file becomes a reference, linked after extraction, behind a flag. Easy to undo.",
+        "Stage 4: dedup merges on a full key (path with extension, kind, name) and reports conflicts. Changes saved ids, so I'd only start after you agree.",
+        "Stage 5: keep ids the same across --update by matching old and new keys."
+      ],
+      "size": "large",
+      "risk": "medium",
+      "related": [
+        4281,
+        4432,
+        3947,
+        3103,
+        3407,
+        1829,
+        3726,
+        3568,
+        3257,
+        3328
+      ]
+    }
+  ]
 }
