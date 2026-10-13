@@ -12,6 +12,15 @@
         4371,
         4410
       ]
+    },
+    {
+      "id": "4309",
+      "title": "skill.md: shell injection through `LABELS_DICT` and `INPUT_PATH` in `python -c \"...\"` blocks, plus three smaller robustness gaps (v0.9.84)",
+      "issue": 4309,
+      "prs": [
+        4344,
+        4353
+      ]
     }
   ],
   "prs": {
@@ -42,7 +51,7 @@
     "4371": {
       "summary": "Reword the id-collision warning so it says what the merge did, instead of claiming a document was lost.",
       "why": "The warning claimed that \"the dropped node is lost\" and that the id \"does not identify a single entity\", for every such collision. On the reporter's corpus that was wrong: none of their 16 remaining warnings was a lost document. They were one entity described in two documents, or a reference to another file, and merging them was correct.",
-      "what": "The cross-file branch of the warning now says which node was kept and which was merged into it. The wording then depends on where the id came from: a file path (a reference to the kept file, or a separate document), or neither (probably one entity described in both files). It does not change which node survives.",
+      "what": "The cross-file branch of the warning now says which node was kept and which was merged into it. The wording then depends on where the id came from: a file path (a reference to the kept file, or a separate document), or neither (probably one entity described in both files). It does not change which node survives. The tests use docs/protocol.md with its own docs_protocol page plus a bare protocol, next to a top-level protocol.md, so this PR and #4410 pass in either merge order (tests/test_dedup.py: 141 passed with both applied).",
       "helps": "Whoever reads the collision warning gets text that matches what the merge actually did. The severity stays WARNING.",
       "before": "[graphify] WARNING: node 'sender' is minted by two different files — keeping 'Sender' from 'docs/a.md', dropping 'sender service' from 'docs/b.md'. An ID is derived from the source path plus the entity name, so this one does not identify a single entity and the dropped node is lost.",
       "after": "[graphify] WARNING: node 'sender' is minted by two different files: kept 'Sender' from 'docs/a.md', merged 'sender service' from 'docs/b.md' into it. The id comes from neither path, so this is probably one entity described in both files. The merged node's own label and attributes are not kept; its edges stay on the kept node.",
@@ -156,9 +165,9 @@
       "diagram": "flowchart LR\n  A[\"a/x.md emits id x\"] --> Q(\"both use the bare id x\")\n  B[\"b/x.md emits id x\"] --> Q\n  Q -- \"v8\" --> V[\"one node x, b/x.md is lost\"]:::bad\n  Q -- \"this PR\" --> P[\"a_x and b_x, both kept\"]:::good\n  M[\"docs/firmware/protocol.md mentions protocol\"] --> R(\"its own file references it\")\n  R -- \"this PR\" --> K[\"stays one node, link ends on docs/protocol.md\"]:::good"
     },
     "4353": {
-      "summary": "Step 1 of /graphify now fails loudly when it cannot save its files, and every reader keeps the saved folder name exactly.",
+      "summary": "Stacked on #4344, review that first; its last 4 commits are this PR's own. Step 1 of /graphify now fails loudly when it cannot save its files, and every reader keeps the saved folder name exactly.",
       "why": "On a full disk, Step 1 left .graphify_python and .graphify_root empty and still exited 0. The next step then failed with \"bash: : command not found\", and graphify update rebuilt the current folder instead of the project. Six readers also trimmed spaces from the saved folder, so \"proj \" came back as \"proj\".",
-      "what": "Step 1 writes each file to a temp file and renames it into place. On any error it cleans up, names the file and exits 1. A new read_root_marker() removes only a byte-order mark and a final newline, and graphify update, build.py, watch.py, reflect.py and the git hooks all use it.",
+      "what": "Step 1 writes each file to a temp file and renames it into place. On any error it cleans up, names the file and exits 1. A new read_root_marker() removes only a byte-order mark and a final newline, and graphify update, build.py, watch.py, reflect.py and the git hooks all use it. Step 1 now has both checks: the line-break refusal from #4344 and the loud failure on a failed write from this PR. read_scan_root() from #4344 now calls read_root_marker(), so there is one rule for reading the marker.",
       "helps": "Anyone whose disk fills up during Step 1 gets a clear error at that step, not a confusing failure one step later. Anyone with a trailing space in a folder name gets that folder from graphify update.",
       "diagram": "sequenceDiagram\n  participant S as Step 1\n  participant D as graphify-out\n  participant N as Next step\n  rect rgba(212, 76, 71, 0.10)\n  Note over S,N: Before, with a full disk\n  S->>D: write .graphify_python\n  D-->>S: write fails, file left empty\n  S-->>N: exit 0\n  N->>N: bash: : command not found\n  end\n  rect rgba(68, 131, 97, 0.10)\n  Note over S,N: After, with a full disk\n  S->>D: write a temp file\n  D-->>S: write fails\n  S->>D: remove the temp file\n  S-->>N: exit 1 and name the file\n  end",
       "before": "Step 1 with a full disk (ulimit -f 0): exit code 0, .graphify_python and .graphify_root left empty. The next step fails with \"bash: : command not found\".",
@@ -180,8 +189,8 @@
     },
     "4344": {
       "summary": "Skill scripts read the scan folder, community names and spec path from files the agent writes, instead of pasting them into code.",
-      "why": "The skill told the agent to paste the scan folder, the community names and the spec path into python -c scripts. A value becomes code: a folder named proj$(touch PWNED) ran touch PWNED before Python started, and a label containing a quote could end the Python string early.",
-      "what": "The agent writes each value to a file in graphify-out/ through a quoted heredoc, and the script reads the file. A new read_scan_root() reads the saved folder. The interpreter path is quoted in every skill script.",
+      "why": "The skill told the agent to paste the scan folder, the community names and the spec path into python -c scripts. A value becomes code: a folder named proj$(touch PWNED) ran touch PWNED before Python started, and a label containing a quote could end the Python string early. A scan path that contains a line break could also end the heredoc early (the here-string on PowerShell), and the rest of the path would run as shell. This was reported in a comment on #4309.",
+      "what": "The agent writes each value to a file in graphify-out/ through a quoted heredoc, and the script reads the file. A new read_scan_root() reads the saved folder. The interpreter path is quoted in every skill script. Step 1 now tells the agent to refuse a scan path with a line break and ask for another one. The Python side rejects multi-line input.",
       "helps": "Anyone who runs /graphify on a folder whose name contains shell syntax, or on a path with spaces, no longer runs that name as a command. The scan also stops picking the wrong folder.",
       "diagram": "sequenceDiagram\n  participant A as Agent\n  participant Sh as Shell\n  participant P as Python script\n  participant F as graphify-out file\n  rect rgba(212, 76, 71, 0.10)\n  Note over A,F: Before\n  A->>Sh: python -c with the folder name pasted in\n  Sh->>Sh: expands proj$(touch PWNED) and runs touch\n  Sh->>P: start with the wrong folder\n  end\n  rect rgba(68, 131, 97, 0.10)\n  Note over A,F: After\n  A->>F: write the folder name with a quoted heredoc\n  A->>Sh: run the script, nothing pasted\n  Sh->>P: start\n  P->>F: read the folder name as data\n  end",
       "before": "v8, folder proj$(touch PWNED): the PWNED file is created, then \"could not scan .../proj\", Detected 0 files.",
@@ -189,7 +198,9 @@
       "limits": [
         "Not tested on Windows PowerShell 5.1. The Windows blocks ran under PowerShell 7.4.6 on Linux.",
         "Step 1 leaving empty files on a full disk is a separate bug (#4346), fixed in #4353.",
-        "A step run by hand without Step 1 now stops with \"graphify-out/.graphify_root not found; run Step 1 first\"."
+        "A step run by hand without Step 1 now stops with \"graphify-out/.graphify_root not found; run Step 1 first\".",
+        "The shell ends the heredoc before Python runs, so the agent instruction is the real guard for a path with a line break. The Python check only catches multi-line input that reaches it.",
+        "#4353 is stacked on this PR."
       ],
       "tests": [
         "test_no_pasted_placeholder_inside_a_script_body",
@@ -199,7 +210,11 @@
         "test_read_scan_root_keeps_a_trailing_space",
         "test_read_scan_root_treats_shell_syntax_as_a_plain_name",
         "test_labels_heredoc_keeps_hostile_text_as_data",
-        "test_spec_heredoc_keeps_hostile_text_as_data"
+        "test_spec_heredoc_keeps_hostile_text_as_data",
+        "test_root_capture_skills_are_discovered",
+        "test_every_root_capture_tells_the_agent_to_refuse_a_line_break",
+        "test_root_capture_writes_the_exact_path_and_runs_nothing",
+        "test_root_capture_rejects_input_with_more_than_one_line"
       ]
     },
     "4410": {
