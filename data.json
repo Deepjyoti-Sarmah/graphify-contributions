@@ -45,6 +45,14 @@
       "prs": [
         4456
       ]
+    },
+    {
+      "id": "4461",
+      "title": "backticks in two skill comments make bash run `graphify update` and `changed` mid-merge",
+      "issue": 4461,
+      "prs": [
+        4462
+      ]
     }
   ],
   "prs": {
@@ -396,6 +404,25 @@
         "test_code_only_update_follows_its_paragraph_and_merges_the_new_function[devin]",
         "test_code_only_update_follows_its_paragraph_and_merges_the_new_function[aider]"
       ]
+    },
+    "4462": {
+      "summary": "Dropping the backticks stops bash from running commands inside the merge, so Part C and the update merge hand Python exactly the code shown.",
+      "why": "With graphify installed, Part C ran a full graphify update in the middle of the merge and rewrote graph.json. The update output landed in the Python source, so Part C failed with SyntaxError and .graphify_extract.json was never written. Without graphify on PATH, bash only printed command not found, so nobody noticed.",
+      "what": "Four comment lines lose their backticks and keep their words: three Part C lines and one update merge line. The skills are regenerated from the fixed fragments, with one gen.py audit line updated to match. A new test scans every generated skill two ways: a static check for backticks inside double-quoted -c blocks, and a runtime check that runs each Part C and merge statement under bash with a fake graphify and a fake changed first on PATH.",
+      "helps": "Anyone who runs Part C or the update merge with graphify installed. No stray update rewrites their graph.json, and the merge runs to the end.",
+      "diagram": "flowchart LR\n  C[\"comment with backticks in a -c block\"] --> B[\"bash expands it before Python starts\"]:::bad\n  B --> R[\"graphify update runs, its output lands in the code\"]:::bad\n  R --> E[\"SyntaxError, no .graphify_extract.json\"]:::bad\n  C --> G[\"backticks dropped, the comment passes through\"]:::good\n  G --> M[\"the merge runs\"]:::good",
+      "before": "Part C on v8 with graphify on PATH: exit 1, SyntaxError, graph.json rewritten by the unrequested update, .graphify_extract.json not written.",
+      "after": "Same run on this branch: exit 0, Merged: 1 nodes, 0 edges, graph.json unchanged, .graphify_extract.json written (237 bytes).",
+      "limits": [
+        "The runtime check runs only $(cat graphify-out/.graphify_python) -c \"...\" statements in fenced bash blocks. Other shapes such as \"$PYTHON\" -c \"...\" are not run, though the static check still scans them.",
+        "$VAR expansion inside the quotes is not a command, so neither check looks at it.",
+        "The static check looks for backticks only, not $(...). The runtime check catches $(...) through the shell trace for the statements it runs.",
+        "The windows monolith Part C sits in a PowerShell here-string, so the runtime check skips it on purpose and the runtime test skips on win32.",
+        "The test reads the generated files. It does not render them again."
+      ],
+      "tests": [
+        "tests/test_skill_no_backtick_substitution.py"
+      ]
     }
   },
   "issues": [
@@ -410,6 +437,12 @@
       "title": "[Bug]: aider and devin --update never write .graphify_detect.json, so Part A fails",
       "summary": "On aider and devin update, nothing writes .graphify_detect.json, so Part A fails after a full build.",
       "fixed_by": [4456]
+    },
+    {
+      "number": 4461,
+      "title": "[Bug]: backticks in two skill comments make bash run `graphify update` and `changed` mid-merge",
+      "summary": "With graphify installed, bash runs graphify update from a comment inside Part C, which rewrites graph.json and then makes the merge fail with SyntaxError.",
+      "fixed_by": [4462]
     }
   ],
   "proposals": [
