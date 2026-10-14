@@ -37,6 +37,14 @@
       "prs": [
         4452
       ]
+    },
+    {
+      "id": "4447",
+      "title": "update.md: code-only --update never writes .graphify_extract.json (FileNotFoundError or silently dropped AST)",
+      "issue": 4447,
+      "prs": [
+        4456
+      ]
     }
   ],
   "prs": {
@@ -363,6 +371,24 @@
         "test_an_unstamped_import_on_a_contested_key_ends_where_it_ends_without_the_variable",
         "test_a_swift_type_named_like_the_sibling_extension_keeps_both_file_nodes",
         "test_a_stub_from_a_different_stem_keeps_todays_ids"
+      ]
+    },
+    "4456": {
+      "summary": "A code-only --update on the aider and devin skills now reaches the merge with the new AST in it.",
+      "why": "The code-only paragraph said to run Step 3A and go straight to the merge. Part A writes .graphify_ast.json, the merge reads .graphify_extract.json, and nothing wrote it. Part C would, but it reads .graphify_semantic.json unconditionally and, in these two skills, the Part B fast path was prose with no block that writes it. On aider the only-deletions guard also wrote graphify-out/.graphify_extract.json while its merge read the one in the current directory.",
+      "what": "The paragraph now names Step 3A, the Part B fast path, Part C and the merge. Part B gets the fast-path block that writes an empty semantic file. aider's guard writes the file its merge reads. A separate commit adds the missing block that writes .graphify_detect.json (#4455). A new test renders each skill, runs the steps its code-only paragraph names, and checks the merge.",
+      "helps": "Anyone running --update on the aider or devin skill after a full build. The other 14 skills are fixed by #4313.",
+      "diagram": "flowchart LR\n  A[\"Part A: AST\"] --> B[\"Part B fast path: empty semantic file\"]:::good\n  B --> C[\"Part C: .graphify_extract.json\"]:::good\n  C --> M[\"merge\"]\n  A -. \"before: straight to merge\" .-> M",
+      "before": "merge: FileNotFoundError: '.graphify_extract.json'  (aider)\nmerge: FileNotFoundError: 'graphify-out/.graphify_extract.json'  (devin)",
+      "after": "Part C: Merged: 5 nodes, 3 edges (5 AST + 0 semantic)\nmerge: Merged: 5 nodes, 3 edges  (new function present)",
+      "limits": [
+        "The 14 generated skills are #4313's; the test covers only aider and devin until that lands.",
+        "aider's code_exts lacks .lua and .toc.",
+        "A code-only update that deletes a file is refused by the shrink guard (#479). Separate problem."
+      ],
+      "tests": [
+        "test_code_only_update_follows_its_paragraph_and_merges_the_new_function[devin]",
+        "test_code_only_update_follows_its_paragraph_and_merges_the_new_function[aider]"
       ]
     }
   },
