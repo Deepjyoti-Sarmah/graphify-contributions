@@ -242,6 +242,12 @@
       ]
     },
     "4410": {
+      "landed": {
+        "commits": [
+          "8d5b139"
+        ],
+        "note": "Shipped in v0.9.90. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      },
       "summary": "docs/protocol.md keeps its own node when a top-level protocol.md mints the same bare id, and the real top-level file wins the collapse whatever the labels are.",
       "why": "When the model drops the folder, protocol.md, docs/protocol.md and docs/firmware/protocol.md all mint protocol. #4362 skips any group whose bare id names an input file, because the id may be a reference to it. The collapse then ran and one real document was dropped. The maintainer named this gap when reviewing #4371.",
       "what": "The file whose full stem is the id (protocol.md) keeps it. Each other file with that bare id is decided on its own. With no node spelled like its own full stem, the bare id is its page and is renamed (docs_protocol). With one, the bare id may be a reference and collapses as before. A bare path slice from a file with its own page also ranks as a reference, so protocol.md's node survives whatever the label lengths are.",
