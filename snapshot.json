@@ -1,7 +1,95 @@
-{"fetched_at":"2026-10-13T19:56:26Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 7,
+{"fetched_at":"2026-10-14T11:21:07Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 8,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4452",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4452/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4452/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4452/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4452",
+      "id": 5846845089,
+      "node_id": "PR_kwDOR4-pD88AAAABIYEP-g",
+      "number": 4452,
+      "title": "fix(extract): keep a symbol that spells a sibling's file id (#4449)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-14T11:19:55Z",
+      "updated_at": "2026-10-14T11:20:05Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4452",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4452",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4452.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4452.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4449.\n\nWhen a JS file and a file with another extension share a stem in one folder (`x.mjs` plus `x.sql`) and the `.mjs` declares a variable named like the sibling's extension (`const sql = ...`), the `.mjs` file node ends up labelled `sql`. `graphify explain \"x.mjs\"` finds nothing.\n\n`extract()` renames each file's old file-level id (its path with the extension: `esquema_x_sql` for `esquema/x.sql`) to the canonical one (`esquema_x`). It did that on every node, edge endpoint and raw call that spells the string, whichever file it belonged to. The JS variable `sql` is minted `{stem}_{name}`, which is also `esquema_x_sql`. So it was renamed too, salted next to the file node, and dedup dropped one of the two.\n\nThis PR renames a key only for the file that minted it, and only when another file's own symbol carries the same id. Every other key renames exactly as before.\n\n```diff\n extract.py, the id_remap pass          (key esquema_x_sql -> esquema_x, minted by x.sql)\n\n   node   sql           (x.mjs)  id esquema_x_sql\n-    renamed to esquema_x         (its file did not mint the key)\n+    kept as esquema_x_sql\n\n   edge   contains  x.mjs -> sql        endpoint esquema_x_sql, source_file x.mjs\n-    renamed: now x.mjs -> x.mjs, a self-loop\n+    kept: still points at the sql variable\n\n   edge   imports_from  x.mjs -> x.sql  endpoint esquema_x_sql, target_file x.sql\n     renamed (x.sql minted the key), then salted onto the x.sql file node\n\n   edge   imports  main.pas -> util.pas   (no target_file, main.pas holds no such node)\n     renamed, as before\n```\n\nA key is contested only when a node of a different file carries it as one of that file's own symbol ids. For a contested key, an item is renamed if its file minted the key, kept if its file holds a node with that id, and renamed otherwise. Which file an item belongs to: a node, its `source_file`; an edge source, the edge's `source_file`; an edge target, the `target_file` stamp if there is one, else the edge's `source_file`; a `raw_calls` `caller_nid`, the record's `source_file`. Paths are compared resolved. Swift extension `nid`s and Objective-C field-table keys follow the same rule.\n\nThe later `ext_id_remap` pass already has an ownership guard (`owned_ids`, from #2231 and #2243). The first pass lacked it.\n\n### Before / after\n\nThe issue's repro, `graphify extract . --code-only`:\n\n```text\nbefore:  [graphify] note: node 'esquema_x_mjs_esquema_x' was extracted twice from 'esquema/x.mjs'\n         under different labels (keeping 'sql', dropping 'x.mjs').\n         5 nodes, 4 edges\n         esquema_x_mjs_esquema_x | sql          <- should be the file node \"x.mjs\"\n         esquema_x_prueba        | prueba()\n         esquema_x_sql_esquema_x | x.sql\n         esquema_x_t             | t\n\nafter:   no note.   6 nodes, 5 edges\n         esquema_x_mjs_esquema_x | x.mjs\n         esquema_x_sql           | sql\n         esquema_x_prueba        | prueba()\n         esquema_x_sql_esquema_x | x.sql\n         esquema_x_t             | t\n```\n\nTests, `tests/test_ext_tagged_id_clash.py`:\n\n```text\nbefore fix:  8 failed, 6 passed   (the 6 are guards that must not move)\nafter fix:   14 passed\n```\n\nThe same cause hit other pairs. Each is a test:\n\n- `x.ts` + `x.css` (`export const css = ...`): `css` took the file node's id, and nothing was salted because `x.css` has no nodes.\n- `x.js` + `x.js.map` (`const js_map`): the variable was renamed to the id of `x.js.map`, a node that does not exist.\n- `x.py` + `x.sql` (`def sql()`): the function was lost and its `calls` edge started at the file node.\n- `x.swift` + `x.sql` with `struct sql` and `extension sql`: without the Swift hunk the fix would delete both file nodes, so the hunk is required, and a test covers it.\n\n### Merge danger\n\n**Door:** two-way. No stored format changes. Reverting is one commit.\n\n**Blast radius:** narrow. The rename changes only for a key that a node of another file also carries as its own symbol id; every other key takes the old path.\n\n- **Ids:** a corpus with no such clash gets the same ids as before. An affected corpus gets its swallowed symbol back under its own id, with its edges. An unchanged affected file keeps its old state in an existing `graph.json` until it is re-extracted.\n- **Caches and skills:** the semantic cache key, the AST cache and the generated skill files do not change. `.mjs`, `.js`, `.ts` and similar are never in the AST cache (`_JS_CACHE_BYPASS_SUFFIXES`).\n- **Cost:** one extra pass over `all_nodes` before the rename loop, dictionary lookups and memoized path resolution.\n- **Open PRs:** none of #4344, #4353, #4371 touches `graphify/extract.py`.\n\n### Not covered\n\n- The Objective-C hunk has no test that reaches it. I could not build a case where an Objective-C class node holds a contested id. It runs only when some key is contested (`if contested:`), and the 5 existing objc tests pass with it.\n- Unstamped cross-file imports to a same-stem file (for example Pascal `uses util` next to `util.js`) already end on a node that does not exist after salting, with or without this bug. A contested key now behaves like an uncontested one there. That dangling edge is not repaired.\n- A symbol named like its own file's extension (`const js` in `x.js`, `def py()` in `z.py`) is lost. The same file owns the key, so this rename fix does not touch it. It needs its own issue.\n- Stub nodes: I scanned graphify's own repo and its test fixtures for a node whose file did not mint the key. The one hit is `sample` in `tests/fixtures/sample.lpk`, a Lazarus unit reference minted with `sample.pas`'s old id. Before this fix it collided with the lpk's own file node; now it keeps its own id and its edge follows. Other languages and extractors were not scanned.\n- Through `graphify extract .`, only siblings of a supported type (such as `.sql`) trigger the bug. `collect_files` skips `.css` and `.map`, so those two pairs need an explicit `extract([...])` call.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nInvariant: a symbol is never renamed because of a file it does not belong to, and everything that refers to a file node still ends on that file node.\n\n- The issue repro runs with relative and absolute paths: three distinct ids for the file node, the variable and the `x.sql` file node.\n- After `build()`, the labels `x.mjs`, `sql` and `x.sql` all exist.\n- With `import raw from \"./x.sql\"` in `x.mjs`: `imports_from` ends on the `x.sql` file node, `contains` and `calls` end on the variable, and there is no self-loop.\n- An unstamped Pascal import on a contested key ends exactly where the same edge ends with no clashing variable.\n- Controls from the issue (`const db`, `const sql = 1`, no sibling, a sibling with another stem), and a Lazarus stub from a different stem, keep their ids.\n- Gating only the node rename, and leaving edge endpoints on the old id-only rule, was tried and does not work: it leaves a `contains x.mjs -> x.mjs` self-loop and a `calls` edge that starts at the file node.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n## How was this tested?\n\nRun with `PYTHONPATH=/var/tmp/wt-4449` and the repo venv's Python, so the code under test is this branch and not an editable install of another checkout. `graphify.__file__` was checked to be inside the worktree.\n\n```text\n# the issue repro (in /var/tmp/scratch-4449/repro2)\npython -m graphify extract . --code-only\n  before: 5 nodes, 4 edges, \"extracted twice ... keeping 'sql', dropping 'x.mjs'\"\n  after:  6 nodes, 5 edges, no note\n\npython -m pytest tests/test_ext_tagged_id_clash.py -q --basetemp=/var/tmp/pt-4449 -p no:cacheprovider\n  before fix: 8 failed, 6 passed, 12 warnings in 1.61s\n  after fix:  14 passed, 12 warnings in 2.31s\n\npython -m pytest tests/test_swift_cross_file_calls.py tests/test_objc_field_table_remap.py -q --basetemp=/var/tmp/pt-4449b -p no:cacheprovider\n  22 passed, 21 warnings in 1.55s\n\npython -m pytest <the 18 covering files> -q --basetemp=/var/tmp/pt-4449c -p no:cacheprovider\n  1183 passed, 295 warnings in 38.41s\n  (test_extract, test_incremental, test_js_import_resolution, test_node_id_canonical,\n   test_file_node_id_spec, test_astro_import_ids, test_extract_path_memo,\n   test_cross_extension_reexport_self_cycle, test_id_normalization_contract,\n   test_objc_field_table_remap, test_dotnet, test_languages, test_incomplete_build_guard,\n   test_extraction_spec_ids, test_jsconfig_baseurl, test_package_json_subpath_imports,\n   test_cjs_module_extension, test_typescript_module_extensions)\n\npython -m pytest -q --basetemp=/var/tmp/pt-4449-full -p no:cacheprovider\n  8011 passed, 14 skipped, 2055 warnings in 541.55s (0:09:01)\n\nruff check graphify/extract.py tests/test_ext_tagged_id_clash.py\n  All checks passed!\npyright graphify/extract.py\n  131 errors, same as upstream/v8 (041771be); tests/test_ext_tagged_id_clash.py: 0\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (No fragments changed.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4452/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4452/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4434",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -55,7 +143,7 @@
       "milestone": null,
       "comments": 1,
       "created_at": "2026-10-13T19:53:34Z",
-      "updated_at": "2026-10-13T19:53:45Z",
+      "updated_at": "2026-10-13T20:11:52Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -135,16 +223,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-13T10:43:11Z",
-      "updated_at": "2026-10-13T11:18:41Z",
-      "closed_at": null,
+      "updated_at": "2026-10-13T22:32:30Z",
+      "closed_at": "2026-10-13T22:32:30Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [

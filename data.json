@@ -29,6 +29,14 @@
       "prs": [
         4434
       ]
+    },
+    {
+      "id": "4449",
+      "title": "File node takes the label of a module-level variable when a same-stem sibling file exists (x.mjs + x.sql, const sql)",
+      "issue": 4449,
+      "prs": [
+        4452
+      ]
     }
   ],
   "prs": {
@@ -327,6 +335,34 @@
         "test_skill_cache_step_writes_a_stem_for_every_uncached_file",
         "test_spec_states_the_unicode_rule",
         "test_llm_prompt_states_the_unicode_rule"
+      ]
+    },
+    "4452": {
+      "summary": "A symbol that spells a sibling file's old id (const sql in x.mjs next to x.sql) keeps its own node, so the file node is no longer relabelled.",
+      "why": "extract() renames each file's old file-level id (its path with the extension, esquema_x_sql for x.sql) to the canonical one, on every node, edge endpoint and raw call that spells it. The JS variable sql in x.mjs is minted with the same string, so it took the file node's id and dedup dropped one of the two. The x.mjs file node ended up labelled sql and graphify explain \"x.mjs\" found nothing.",
+      "what": "A key is renamed only for the file that minted it, and only when another file's own symbol carries the same id. Nodes, edge endpoints and raw calls each use the file they belong to. Every other key renames exactly as before. Swift extension nids and Objective-C field-table keys follow the same rule.",
+      "helps": "Anyone with a script next to a same-stem file, such as a migration runner foo.mjs beside foo.sql that uses a client named sql. The file node keeps its filename and the variable gets its own id.",
+      "diagram": "flowchart LR\n  K[\"key esquema_x_sql minted by x.sql\"] --> Q(\"whose item is it?\")\n  Q -- \"x.sql, its own file\" --> R[\"renamed to esquema_x\"]:::good\n  Q -- \"sql variable in x.mjs\" --> S[\"kept as esquema_x_sql\"]:::good\n  Q -- \"file that only refers to x.sql\" --> R",
+      "before": "5 nodes, 4 edges\nnote: node 'esquema_x_mjs_esquema_x' was extracted twice from 'esquema/x.mjs' (keeping 'sql', dropping 'x.mjs')\nesquema_x_mjs_esquema_x | sql   <- should be the file node x.mjs",
+      "after": "6 nodes, 5 edges, no note\nesquema_x_mjs_esquema_x | x.mjs\nesquema_x_sql           | sql",
+      "limits": [
+        "The Objective-C hunk has no test that reaches it.",
+        "Unstamped cross-file imports to a same-stem file already dangle today, with or without this bug, and are not repaired.",
+        "A symbol named like its own file's extension (const js in x.js, def py() in z.py) is a separate bug and needs its own issue.",
+        "Stub nodes were scanned only in graphify's own repo and fixtures.",
+        "Through graphify extract ., only siblings of a supported type (such as .sql) trigger it. .css and .map need an explicit extract([...]) call.",
+        "An existing graph.json keeps its old state for an unchanged affected file until it is re-extracted."
+      ],
+      "tests": [
+        "test_variable_named_like_the_sibling_extension_keeps_its_own_node",
+        "test_the_file_node_is_still_found_by_label_after_build",
+        "test_edges_follow_the_right_node_when_x_mjs_also_imports_x_sql",
+        "test_a_sibling_without_nodes_still_keeps_the_variable_apart",
+        "test_a_variable_keeps_the_id_the_extractor_gave_it_next_to_a_js_map",
+        "test_a_python_function_named_like_the_sibling_extension_keeps_its_calls",
+        "test_an_unstamped_import_on_a_contested_key_ends_where_it_ends_without_the_variable",
+        "test_a_swift_type_named_like_the_sibling_extension_keeps_both_file_nodes",
+        "test_a_stub_from_a_different_stem_keeps_todays_ids"
       ]
     }
   },
