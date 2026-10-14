@@ -392,6 +392,20 @@
       ]
     }
   },
+  "issues": [
+    {
+      "number": 4346,
+      "title": "[Bug]: /graphify skill \"Step 1 - Ensure graphify is installed\" exits 0 and leaves empty graphify-out files when a write fails; .graphify_root readers trim folder names",
+      "summary": "Step 1 of the skill exits 0 and leaves empty marker files when a write fails, so the next step fails.",
+      "fixed_by": [4353]
+    },
+    {
+      "number": 4455,
+      "title": "[Bug]: aider and devin --update never write .graphify_detect.json, so Part A fails",
+      "summary": "On aider and devin update, nothing writes .graphify_detect.json, so Part A fails after a full build.",
+      "fixed_by": [4456]
+    }
+  ],
   "proposals": [
     {
       "id": "node-identity",

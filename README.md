@@ -3,6 +3,7 @@
 A static page listing every pull request by Deepjyoti-Sarmah on
 [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify). Each PR shows
 its write-up (why, what changed, how it helps, limits) next to live GitHub status.
+An "Issues I raised" section lists bugs found while using Graphify, with live state and the pull requests that fix them.
 A Proposals section lists ideas the maintainer can approve before any code is written.
 
 There is no build step and no npm. The files are served as they are.
@@ -14,7 +15,7 @@ There is no build step and no npm. The files are served as they are.
 | `index.html` | Loads the libraries, the Tailwind config and the styles, and mounts `#root`. |
 | `app.js` | All React components, written with `htm` (no JSX). |
 | `data.json` | Hand-written write-ups, the PR groups and the proposals. |
-| `snapshot.json` | Fallback copy of the GitHub search result, used when GitHub is rate-limited or unreachable. |
+| `snapshot.json` | Fallback copies of the GitHub PR and issue search results, used when GitHub is rate-limited or unreachable. |
 | `scripts/snapshot.sh` | Refreshes `snapshot.json` with `curl`. |
 | `.nojekyll` | Stops GitHub Pages from running Jekyll. |
 
@@ -29,6 +30,7 @@ There is no build step and no npm. The files are served as they are.
   - `diagram` (optional): a Mermaid source string (for example `flowchart TD\n  A --> B`). Shown first in the expanded card, in a box that scrolls sideways. It is rendered in the browser by Mermaid 10.9.1 with `securityLevel: 'strict'`, in the page theme. If the source does not parse, the page shows "Diagram could not be rendered" above the raw source, so fix the syntax (try it at https://mermaid.live) and reload.
   - `cases` (optional): rows with `case`, `correct`, `before` (v8), `pr_first_version` (the first version of the PR, shown as "PR before"), `after` (this PR, shown as "PR now") and `covered_by`. Below `sm` (640px) each case is a stacked card; at `sm` and wider it is a table.
 - `prs[n].landed` (optional): see "Landed PRs" below.
+- `issues`: an array in display order. Each entry has `number`, one plain sentence `summary` on what goes wrong, and `fixed_by` (PR numbers, shown with the live state the page already knows). `title` is optional and is used only when the issue is missing from both the live search and the snapshot, so the card never shows a bare number. The issue title and its open or closed state always come from GitHub when available.
 - `proposals`: an array (empty for now; the page shows "No proposals yet").
   - `id`, `title`, `problem`, `evidence` (text), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers), `diagram` (optional, same Mermaid source string as for PRs; shown first in the card, same failure behaviour).
 
@@ -71,6 +73,8 @@ Do not add `landed` to a PR that GitHub shows as merged; the merge takes precede
 It needs `curl`. `jq` is optional and adds a check that the search did not return a partial page.
 Set `GITHUB_TOKEN` to raise GitHub's rate limit (60 requests per hour unauthenticated).
 Commit the new `snapshot.json` to update the fallback.
+The file holds `search` (the PR search, unchanged so old page code keeps loading) and `issue_search` (the issue search).
+A snapshot without `issue_search` still loads; the issues then render without state badges.
 
 ## Running locally
 

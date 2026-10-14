@@ -8,8 +8,10 @@ const REPO = 'Graphify-Labs/graphify';
 const AUTHOR = 'Deepjyoti-Sarmah';
 const API_BASE = window.CONTRIB_API_BASE || 'https://api.github.com';
 const SEARCH_PATH = `/search/issues?q=repo:${REPO}+author:${AUTHOR}+is:pr&per_page=100&sort=created&order=desc`;
+const ISSUE_SEARCH_PATH = `/search/issues?q=repo:${REPO}+author:${AUTHOR}+is:issue&per_page=100&sort=created&order=desc`;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const SEARCH_CACHE_KEY = 'contrib:search:v1';
+const ISSUE_CACHE_KEY = 'contrib:issue-search:v1';
 const THEME_KEY = 'contrib:theme';
 const STATUSES = ['open', 'draft', 'merged', 'closed'];
 const STATUS_ORDER = { open: 0, draft: 1, merged: 2, landed: 2, closed: 3 };
@@ -109,6 +111,29 @@ async function loadPullRequests(force) {
     const snap = await loadSnapshot();
     return {
       items: snap.search.items,
+      source: 'snapshot',
+      at: Date.parse(snap.fetched_at),
+      reason: err.rateLimited ? 'GitHub rate limit' : 'GitHub unreachable',
+    };
+  }
+}
+
+// Same pattern for the issues the author raised: live issue search first (own cache key),
+// committed snapshot on any failure. Old snapshots have no "issue_search", so items is [].
+async function loadIssues(force) {
+  if (!force) {
+    const hit = freshCache(ISSUE_CACHE_KEY);
+    if (hit) return { items: hit.data, source: 'live', at: hit.t };
+  }
+  try {
+    const data = await github(ISSUE_SEARCH_PATH);
+    const at = Date.now();
+    storage.write(ISSUE_CACHE_KEY, { t: at, data: data.items });
+    return { items: data.items, source: 'live', at };
+  } catch (err) {
+    const snap = await loadSnapshot();
+    return {
+      items: (snap.issue_search && snap.issue_search.items) || [],
       source: 'snapshot',
       at: Date.parse(snap.fetched_at),
       reason: err.rateLimited ? 'GitHub rate limit' : 'GitHub unreachable',
@@ -646,6 +671,37 @@ function PRList({ rows, openPr, toggle, groupOf, onOpenPr }) {
     </ul>`;
 }
 
+// An issue the author raised: number linked to GitHub, live title, live open/closed badge,
+// one hand-written sentence, and the author's fix PRs with the live state the page knows.
+function IssueItem({ issue, state, fixRows, onOpenPr }) {
+  return html`
+    <li class="border-b border-line py-6">
+      <div class="flex flex-wrap items-center gap-2">
+        ${state ? html`<${Tag} tag=${STATUS_META[state].tag} label=${STATUS_META[state].label} />` : null}
+        <a class="link font-mono text-[13.5px]" href=${ISSUE_URL(issue.number)} target="_blank" rel="noopener noreferrer">#${issue.number}</a>
+      </div>
+      <p class="mt-2 text-[18.5px] font-medium leading-snug tracking-[-0.01em] text-ink">${issue.title}</p>
+      <p class="mt-1.5 max-w-[68ch] text-[16px] leading-relaxed text-muted"><${Rich} text=${issue.summary} /></p>
+      ${fixRows.length ? html`
+        <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-muted">Fixed by
+          ${fixRows.map((r, i) => html`<${Fragment} key=${r.n}>${i ? ', ' : ''}${r.status
+            ? html`<a class="link font-mono" href=${`#pr=${r.n}`} onClick=${(e) => { e.preventDefault(); onOpenPr(r.n); }}>#${r.n}</a> <${Tag} tag=${STATUS_META[r.status].tag} label=${STATUS_META[r.status].label} />`
+            : html`<${ExternalLink} className="font-mono" href=${`https://github.com/${REPO}/pull/${r.n}`}>#${r.n}</${ExternalLink}>`}</${Fragment}>`)}
+        </p>` : null}
+    </li>`;
+}
+
+function Issues({ items, prByNumber, onOpenPr }) {
+  if (!items.length) return null;
+  return html`
+    <ul class="border-t border-line">
+      ${items.map((it) => html`
+        <${IssueItem} key=${it.number} issue=${it} state=${it.state}
+          fixRows=${(it.fixed_by || []).map((n) => ({ n, status: prByNumber[n] || null }))}
+          onOpenPr=${onOpenPr} />`)}
+    </ul>`;
+}
+
 /* ---------- proposals ---------- */
 
 // Comments are GitHub Discussions in this page's own repo (category "Proposals"), one thread per
@@ -909,15 +965,19 @@ function App() {
   const [content, setContent] = useState(null);
   const [contentFailed, setContentFailed] = useState(false);
   const [pulls, setPulls] = useState({ loading: true });
+  const [issues, setIssues] = useState({ loading: true });
   const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState(filtersFromHash);
 
   const load = useCallback(async (force) => {
     setRefreshing(true);
     try {
-      setPulls({ loading: false, ...(await loadPullRequests(force)) });
+      const [prRes, issueRes] = await Promise.all([loadPullRequests(force), loadIssues(force)]);
+      setPulls({ loading: false, ...prRes });
+      setIssues({ loading: false, ...issueRes });
     } catch (err) {
       setPulls({ loading: false, failed: true });
+      setIssues({ loading: false, failed: true });
     } finally {
       setRefreshing(false);
     }
@@ -960,6 +1020,31 @@ function App() {
     rows.forEach((r) => { c[r.status === 'landed' ? 'merged' : r.status] += 1; });
     return c;
   }, [rows]);
+
+  const prByNumber = useMemo(() => {
+    const m = {};
+    rows.forEach((r) => { m[r.pr.number] = r.status; });
+    return m;
+  }, [rows]);
+
+  // data.json issues joined to the live/snapshot issue items by number. The title falls back
+  // to data.json so the card never shows a bare number; the state stays null when unknown.
+  // Group titles on this page drop the "[Bug]: " / "[Feature]: " prefix, so issue titles do too.
+  const cleanIssueTitle = (t) => String(t || '').replace(/^\[(Bug|Feature)\]:\s*/, '');
+  const issueRows = useMemo(() => {
+    if (!content) return [];
+    const byNumber = new Map((issues.items || []).map((it) => [it.number, it]));
+    return (content.issues || []).map((entry) => {
+      const live = byNumber.get(entry.number);
+      return {
+        number: entry.number,
+        title: cleanIssueTitle((live && live.title) || entry.title) || `#${entry.number}`,
+        state: live ? live.state : null,
+        summary: entry.summary,
+        fixed_by: entry.fixed_by || [],
+      };
+    });
+  }, [content, issues.items]);
 
   const visible = useMemo(() => {
     const q = filters.q.trim().toLowerCase();
@@ -1035,6 +1120,14 @@ function App() {
           ${!pulls.loading && !pulls.failed && content && visible.length !== rows.length && html`
             <p class="mb-2 mt-4 text-xs text-muted">Showing ${visible.length} of ${rows.length}</p>`}
           <div class="mt-4">${body}</div>
+        </section>
+
+        <section aria-labelledby="issues-heading" class="pt-24">
+          <h2 id="issues-heading" class="font-serif text-[2rem] font-medium leading-tight tracking-[-0.02em]">Issues I raised</h2>
+          <p class="mb-8 mt-3 max-w-[60ch] text-[16.5px] leading-[1.7] text-muted">
+            Bugs I found while using Graphify. Each one says what goes wrong and which of my pull requests fixes it. State comes live from GitHub.
+          </p>
+          ${content ? html`<${Issues} items=${issueRows} prByNumber=${prByNumber} onOpenPr=${openPr} />` : null}
         </section>
 
         <section aria-labelledby="proposals-heading" class="pt-24">

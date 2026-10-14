@@ -1,4 +1,4 @@
-{"fetched_at":"2026-10-14T14:56:50Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+{"fetched_at":"2026-10-14T15:13:55Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
   "total_count": 9,
   "incomplete_results": false,
   "items": [
@@ -793,6 +793,197 @@
       "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4326/timeline",
       "performed_via_github_app": null,
       "state_reason": null,
+      "score": 1.0
+    }
+  ],
+  "search_type": "lexical"
+}
+,"issue_search":{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4455",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4455/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4455/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4455/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/4455",
+      "id": 5849377846,
+      "node_id": "I_kwDOR4-pD88AAAABXKZsNg",
+      "number": 4455,
+      "title": "[Bug]: aider and devin --update never write .graphify_detect.json, so Part A fails",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 10600255148,
+          "node_id": "LA_kwDOR4-pD88AAAACd9MOrA",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/bug",
+          "name": "bug",
+          "color": "d73a4a",
+          "default": true,
+          "description": "Something isn't working",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-10-14T14:11:20Z",
+      "updated_at": "2026-10-14T14:57:46Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "### Pre-flight checks\n\n- [x] I have checked the Troubleshooting section in the README\n\n### What happened?\n\nAfter a normal build, the first --update fails on aider and devin. Part A reads\n.graphify_detect.json, Step 9 deletes that file at the end of every build, and\nnothing in the --update section writes it again.\n\nThe other 14 skills avoid this. Their references/update.md has a block that\nwrites the file from .graphify_incremental.json. aider and devin keep their\nupdate steps inside the skill file, and that block was never added there.\n\nExpected: the --update section writes .graphify_detect.json first, like the\nother skills do.\n\n### Steps to reproduce\n\n```shell\n# graphify v8 at fe085ced, from a source checkout\n# 1. Make a project with a.py and b.py and build its graph.\n# 2. Run the Step 9 cleanup lines from the aider or devin skill file.\n# 3. Edit a.py.\n# 4. Run the --update section's detect block and its code_only check.\n#    It prints code_only: True.\n# 5. Run Part A from the same file.\n#\n# Check: the opencode skill fails the same way if I skip its\n# \"populate .graphify_detect.json\" block, and works when I run it.\n```\n\n### Error output or graph output\n\n```text\naider: FileNotFoundError: [Errno 2] No such file or directory: '.graphify_detect.json'\ndevin: FileNotFoundError: [Errno 2] No such file or directory: 'graphify-out/.graphify_detect.json'\naider: FileNotFoundError: [Errno 2] No such file or directory: '.graphify_detect.json'\ndevin: FileNotFoundError: [Errno 2] No such file or directory: 'graphify-out/.graphify_detect.json'\n```\n\n### Graphify version\n\n0.9.90\n\n### Operating System\n\nLinux\n\n### Python Version\n\n3.13\n\n### Installation Method\n\nbuilt from source (git clone)\n\n### Additional Environment Details\n\nNo provider environment variables involved. Reproduced on a clean checkout of v8.\n\n### Additional context\n\nToday only Step 2 of the full build writes this file (aider line 118, devin\nline 131), and Step 9 deletes it (aider line 744, devin line 862).\n\nThis is separate from #4447, where the merge fails on .graphify_extract.json.\n#4313 fixes that for the 14 generated skills. I'm opening a PR for aider and\ndevin, and the fix for this bug is its own commit there.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4455/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4455/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "pinned_comment": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4346",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4346/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4346/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4346/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/4346",
+      "id": 5804311175,
+      "node_id": "I_kwDOR4-pD88AAAABWfbChw",
+      "number": 4346,
+      "title": "[Bug]: /graphify skill \"Step 1 - Ensure graphify is installed\" exits 0 and leaves empty graphify-out files when a write fails; .graphify_root readers trim folder names",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 10600255148,
+          "node_id": "LA_kwDOR4-pD88AAAACd9MOrA",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/bug",
+          "name": "bug",
+          "color": "d73a4a",
+          "default": true,
+          "description": "Something isn't working",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-11T19:17:45Z",
+      "updated_at": "2026-10-11T19:17:53Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "### Pre-flight checks\n\n- [x] I have checked the Troubleshooting section in the README\n\n### What happened?\n\nStep 1 of the `/graphify` skill (\"Step 1 - Ensure graphify is installed\") saves two files that every later step depends on:\n\n- `graphify-out/.graphify_python`: which Python to run\n- `graphify-out/.graphify_root`: which folder is being scanned\n\nThere are two bugs around these files.\n\n**Bug 1: Step 1 reports success when it can't write them**\n\nActual: Step 1 writes each file with `open(path, 'w').write(...)`. Opening the file creates it right away, so when the write fails (for example on a full disk), Python prints `OSError: [Errno 28] No space left on device`, but the empty file stays behind and Step 1 exits 0. After that:\n\n- Every later step runs `$(cat graphify-out/.graphify_python) -c \"...\"`, which becomes an empty command. Bash prints `bash: : command not found`, and nothing points back to Step 1 or the full disk.\n- `graphify update` with no path reads the empty `.graphify_root` as `Path(\"\")`, which is the current directory, so it rebuilds whatever folder you're in instead of the project, without a warning.\n\nThe Windows version of Step 1 does the same: `[System.IO.File]::WriteAllText` throws, PowerShell prints the error, and the script keeps going.\n\nExpected: if Step 1 can't write a file, it exits non-zero with a message naming the file (for example `could not write graphify-out/.graphify_root (disk full?)`), and it doesn't leave an empty file behind.\n\n**Bug 2: readers trim spaces off the saved folder name**\n\nActual: Linux and macOS allow a folder name to end with a space, such as `proj `. Step 1 saves the path exactly, but `graphify update` (`cli.py`), `_infer_merge_root` (`build.py`) and both git hook scripts (`hooks.py`) read it back with `.strip()` and get `proj`. If a `proj` folder also exists, they work on that folder instead.\n\nExpected: readers use the path exactly as Step 1 saved it. They only remove a UTF-8 byte-order mark (added by Windows PowerShell 5.1, see #3028) and a trailing newline.\n\n### Steps to reproduce\n\n```shell\nLinux, from the root of a `v8` checkout (commit `b4e6307`). No root access needed. The full disk is a private 2 MB filesystem that disappears when the command ends.\n\n**Setup (both bugs):** save Step 1 from the skill to a script.\n\n\npython3 - > /tmp/step1.sh <<'EOF'\nimport re\ntext = open(\"graphify/skill.md\").read()\nblocks = re.findall(r\"\\n(.*?)\\n\", text, re.S)\nprint(next(b for b in blocks if \"graphify_root\" in b))\nEOF\n\n\n**Bug 1: run Step 1 on a full disk**\n\n\nunshare -rm bash -c '\n  mkdir -p /tmp/fullfs && mount -t tmpfs -o size=2M tmpfs /tmp/fullfs\n  mkdir -p \"/tmp/fullfs/work/my project\"\n  dd if=/dev/zero of=/tmp/fullfs/fill bs=64k 2>/dev/null   # fill the disk\n  cd /tmp/fullfs/work\n  sed \"s|^INPUT_PATH\\$|/tmp/fullfs/work/my project|\" /tmp/step1.sh > /dev/shm/step1.sh\n  bash /dev/shm/step1.sh; echo \"Step 1 exit code: $?\"\n  stat -c \"%s bytes  %n\" graphify-out/.graphify_python graphify-out/.graphify_root\n  $(cat graphify-out/.graphify_python) -c \"print(1)\"; echo \"next step exit code: $?\"\n'\n\n\nOutput:\n\n\nOSError: [Errno 28] No space left on device      (printed twice)\nStep 1 exit code: 0\n0 bytes  graphify-out/.graphify_python\n0 bytes  graphify-out/.graphify_root\nbash: line 9: : command not found\nnext step exit code: 127\n\n\n**Bug 2: a folder name ending in a space**\n\n\nmkdir -p /tmp/sp/\"proj \" /tmp/sp/proj && cd /tmp/sp\nsed \"s|^INPUT_PATH\\$|/tmp/sp/proj |\" /tmp/step1.sh | bash\npython3 -c \"\nfrom pathlib import Path\nsaved = Path('graphify-out/.graphify_root').read_text(encoding='utf-8-sig')\nprint('Step 1 saved:', repr(saved))\nprint('readers get: ', repr(saved.strip()))\n\"\n\n\nOutput:\n\n\nStep 1 saved: '/tmp/sp/proj '\nreaders get:  '/tmp/sp/proj'\n\n\n`/tmp/sp/proj` is a different, existing folder, so `graphify update` and the git hooks would work on it instead of `proj `.\n```\n\n### Error output or graph output\n\n```text\n**Bug 1: what Step 1 prints on a full disk**\n\nPython reports both failed writes, but only as \"Exception ignored\" while shutting down, so neither the command nor Step 1 fails:\n\n\nException ignored in: <_io.TextIOWrapper name='graphify-out/.graphify_python' mode='w' encoding='utf-8'>\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nOSError: [Errno 28] No space left on device\nException ignored in: <_io.TextIOWrapper name='/tmp/fullfs/work/graphify-out/.graphify_root' mode='w' encoding='utf-8'>\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nOSError: [Errno 28] No space left on device\nStep 1 exit code: 0\n\n\nWhat's left on disk, and what the next step prints:\n\n\n0 bytes  graphify-out/.graphify_python\n0 bytes  graphify-out/.graphify_root\nbash: line 9: : command not found\nnext step exit code: 127\n\n\nHow an empty `.graphify_root` is read by `graphify update` (no path):\n\n\nPath(\"\") -> current directory\n\n\n**Bug 2: the saved folder vs. what readers get**\n\n\nStep 1 saved: '/tmp/sp/proj '\nreaders get:  '/tmp/sp/proj'      <- a different folder that exists\n\n\nThere's no graph output to show: both bugs happen before or around the graph build, by pointing it at the wrong folder or stopping it with an unclear error.\n```\n\n### Graphify version\n\n0.9.85 (v8 branch, commit b4e6307)\n\n### Operating System\n\nLinux\n\n### Python Version\n\n3.13\n\n### Installation Method\n\nuv tool install (recommended)\n\n### Additional Environment Details\n\n- Provider environment variables: none set (no OPENAI_API_KEY, ANTHROPIC_API_KEY, GRAPHIFY_* or similar). Neither bug involves a provider: both happen in Step 1's file writes and in the readers of `.graphify_root`, before any extraction.\n- Clean checkout: yes. Both bugs reproduced in a fresh worktree of `upstream/v8` at `b4e6307`, with no local changes.\n- OS: Fedora 43 (Linux, x86_64), bash 5.3. Bug 2 also applies to macOS. Windows doesn't allow trailing spaces in folder names, but its Step 1 has the same write problem as Bug 1 (`WriteAllText` throws and the script continues).\n- Full disk was simulated with a private 2 MB tmpfs (`unshare -rm`), as in the steps above. I first hit Bug 1 on a real full `/tmp` while running the test suite.\n\n\n### Additional context\n\n**Where the code is (line numbers on `v8` at `b4e6307`)**\n\nBug 1, where Step 1 writes the files. The skill text is generated from these fragments, so a fix goes here and then `python -m tools.skillgen --bless`:\n\n- `tools/skillgen/fragments/shell/posix.md` lines 32-40: writes `.graphify_python` and `.graphify_root` with `open(...).write(...)`\n- `tools/skillgen/fragments/core/aider.md` and `core/devin.md`: their own copies of Step 1 (ending at lines 100 and 113)\n- `tools/skillgen/fragments/shell/powershell.md` lines 59 and 68: the Windows Step 1, writing both files with `WriteAllText`\n\nBug 2, the readers that call `.strip()` on `.graphify_root`:\n\n- `graphify/cli.py` line 2552: `graphify update` with no path\n- `graphify/build.py` line 624: `_infer_merge_root`\n- `graphify/hooks.py` lines 227 and 302: the post-commit and post-checkout hook scripts. These are templates copied into `.git/hooks`, so hooks that are already installed keep the old code until they're reinstalled.\n\n**How I found it**\n\nWhile running the test suite for #4309, `/tmp` filled up, because some tests create a ~168 MB home folder each. After that, `test_step1_still_resolves_a_legitimate_path` started failing with the repo folder where the project folder should be. The cause was Bug 1: Step 1 had left `.graphify_root` empty, and the test read `Path(\"\")`, which resolves to the current directory.\n\n**Related**\n\n- #4309: its PR adds `read_scan_root()`, which reads `.graphify_root` with `.strip()` like the readers above. Whichever fix lands second should update it.\n- #3028: why the readers decode with `utf-8-sig` (Windows PowerShell 5.1 adds a byte-order mark). A fix should keep that.\n\nI'm happy to send a PR for both bugs.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4346/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4346/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "pinned_comment": null,
       "score": 1.0
     }
   ],
