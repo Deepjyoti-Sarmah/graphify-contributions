@@ -53,6 +53,14 @@
       "prs": [
         4462
       ]
+    },
+    {
+      "id": "4463",
+      "title": "post-merge hook never rebuilds on Git for Windows 2.54: MERGE_HEAD still exists during post-merge",
+      "issue": 4463,
+      "prs": [
+        4476
+      ]
     }
   ],
   "prs": {
@@ -422,6 +430,53 @@
       ],
       "tests": [
         "tests/test_skill_no_backtick_substitution.py"
+      ]
+    },
+    "4476": {
+      "summary": "Removing one MERGE_HEAD check lets the post-merge hook rebuild the graph after every real merge, not only fast-forwards.",
+      "why": "After git merge --no-ff, a merge of diverged branches, or git pull, the hook printed nothing and graph.json kept the old code. The hook exits if .git/MERGE_HEAD exists, and git 2.54 still has that file on disk while post-merge runs. It deletes it only after the hook returns.",
+      "what": "The MERGE_HEAD check is gone from the post-merge script only, and the comment that said MERGE_HEAD was already gone is corrected. The same check stays in post-commit and post-checkout, where it keeps those hooks quiet during a conflicted merge.",
+      "helps": "Anyone with graphify hooks installed who merges or pulls. The background rebuild now runs after the merge, so the #2418 cleanup of symbols brought back by the union merge driver also runs.",
+      "diagram": "flowchart LR\n  M[\"git merge --no-ff / git pull\"] --> H[\"post-merge runs, MERGE_HEAD still on disk\"]\n  H --> X[\"v8: MERGE_HEAD check exits\"]:::bad\n  X --> S[\"graph.json stays stale\"]:::bad\n  H --> F[\"this PR: no MERGE_HEAD check\"]:::good\n  F --> R[\"background rebuild launches\"]:::good",
+      "before": "+ '[' -d .git/rebase-merge ']'\n+ '[' -d .git/rebase-apply ']'\n+ '[' -f .git/MERGE_HEAD ']'\n+ exit 0",
+      "after": "+ '[' -d .git/rebase-merge ']'\n+ '[' -d .git/rebase-apply ']'\n+ '[' -f .git/CHERRY_PICK_HEAD ']'\n[graphify] Merge completed - launching background rebuild",
+      "limits": [
+        "Hooks already installed keep the old check until the user re-runs graphify hook install.",
+        "If an older git deletes MERGE_HEAD before running post-merge, the new test passes there even without the fix. Which git versions do that is not checked.",
+        "The full test suite was not run, only tests/test_hooks.py (147 passed)."
+      ],
+      "tests": [
+        "test_post_merge_hook_runs_after_a_real_merge"
+      ],
+      "cases": [
+        {
+          "case": "fast-forward merge",
+          "correct": "rebuild",
+          "before": "rebuild",
+          "after": "rebuild",
+          "covered_by": "manual probe"
+        },
+        {
+          "case": "git merge --no-ff",
+          "correct": "rebuild",
+          "before": "exits, no rebuild",
+          "after": "rebuild",
+          "covered_by": "test_post_merge_hook_runs_after_a_real_merge"
+        },
+        {
+          "case": "merge of diverged branches",
+          "correct": "rebuild",
+          "before": "exits, no rebuild",
+          "after": "rebuild",
+          "covered_by": "manual probe"
+        },
+        {
+          "case": "git pull (diverged)",
+          "correct": "rebuild",
+          "before": "exits, no rebuild",
+          "after": "rebuild",
+          "covered_by": "manual probe"
+        }
       ]
     }
   },
