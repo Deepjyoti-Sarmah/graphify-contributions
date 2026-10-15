@@ -61,6 +61,14 @@
       "prs": [
         4476
       ]
+    },
+    {
+      "id": "4490",
+      "title": "hooks never rebuild after a clean cherry-pick, a rebase, or git pull --rebase",
+      "issue": 4490,
+      "prs": [
+        4491
+      ]
     }
   ],
   "prs": {
@@ -478,6 +486,34 @@
           "covered_by": "manual probe"
         }
       ]
+    },
+    "4491": {
+      "summary": "The hooks now rebuild the graph once after a clean cherry-pick, a rebase, a pull --rebase, or a range pick or revert, instead of never.",
+      "why": "After a clean git cherry-pick, git rebase or git pull --rebase, no rebuild ran and graph.json kept the old code. post-commit exited on CHERRY_PICK_HEAD, which git leaves on disk while the hook runs. During a rebase every hook skips while rebase-merge/ exists, and graphify installed no post-rewrite hook to rebuild at the end.",
+      "what": "post-commit no longer checks CHERRY_PICK_HEAD. During a range pick or revert it skips every step but the last, then rebuilds once from sequencer/head so every picked commit is covered. A stale sequencer/ left by git reset --hard is ignored. A new post-rewrite hook rebuilds after a rebase and ignores amend.",
+      "helps": "Anyone with graphify hooks who cherry-picks, rebases or pulls with --rebase. The graph matches the code after the operation, and a tracked graph.json is never rewritten between picks, so git never refuses the next pick.",
+      "diagram": "flowchart LR\n  P[\"cherry-pick / rebase finishes\"] --> V[\"v8: CHERRY_PICK_HEAD or rebase-merge/ still on disk\"]:::bad\n  V --> S[\"every hook exits, graph stale\"]:::bad\n  P --> F[\"post-commit: last sequencer step / post-rewrite: rebase\"]:::good\n  F --> R[\"one rebuild covering the whole operation\"]:::good",
+      "before": "git cherry-pick side   -> 0 rebuilds\ngit rebase main        -> 0 rebuilds\ngit commit (control)   -> 1 rebuild",
+      "after": "git cherry-pick side   -> 1 rebuild\ngit rebase main        -> 1 rebuild\ngit commit (control)   -> 1 rebuild",
+      "limits": [
+        "--skip on the last pick and --quit still leave the graph stale, as on v8: git runs no hook when a sequence ends that way.",
+        "Editing the commit message while resolving a pick, or reverting a Revert \"...\" commit, makes that step rebuild mid-sequence. Inferred from the logic, not tested.",
+        "Hooks already installed keep the old behaviour until graphify hook install is run again.",
+        "Windows and a clean range racing the rebuild were not tested."
+      ],
+      "tests": [
+        "tests/test_hooks_rewrite.py",
+        "test_single_cherry_pick_rebuilds_once",
+        "test_range_cherry_pick_rebuilds_once",
+        "test_rebase_rebuilds_once",
+        "test_pull_rebase_rebuilds_once",
+        "test_conflicted_rebase_continues_and_rebuilds_once",
+        "test_range_cherry_pick_lands_every_new_function",
+        "test_skip_mid_range_rebuilds_the_picks_that_landed",
+        "test_revert_range_rebuilds_once_and_removes_the_functions",
+        "test_tracked_graph_range_pick_with_conflict_completes",
+        "test_abandoned_range_pick_does_not_silence_later_commits"
+      ]
     }
   },
   "issues": [
@@ -498,6 +534,12 @@
       "title": "[Bug]: backticks in two skill comments make bash run `graphify update` and `changed` mid-merge",
       "summary": "With graphify installed, bash runs graphify update from a comment inside Part C, which rewrites graph.json and then makes the merge fail with SyntaxError.",
       "fixed_by": [4462]
+    },
+    {
+      "number": 4490,
+      "summary": "After a clean cherry-pick, a rebase or a pull --rebase, the git hooks never rebuild the graph.",
+      "fixed_by": [4491],
+      "title": "hooks never rebuild after a clean cherry-pick, a rebase, or git pull --rebase"
     }
   ],
   "proposals": [
