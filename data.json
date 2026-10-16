@@ -419,7 +419,15 @@
       "tests": [
         "test_code_only_update_follows_its_paragraph_and_merges_the_new_function[devin]",
         "test_code_only_update_follows_its_paragraph_and_merges_the_new_function[aider]"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "ea2bc68b",
+          "b4406d7c",
+          "68011640"
+        ],
+        "note": "Shipped in v0.9.92. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      }
     },
     "4462": {
       "summary": "Dropping the backticks stops bash from running commands inside the merge, so Part C and the update merge hand Python exactly the code shown.",
@@ -438,7 +446,14 @@
       ],
       "tests": [
         "tests/test_skill_no_backtick_substitution.py"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "0a273212",
+          "f2f1b66c"
+        ],
+        "note": "Shipped in v0.9.92. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      }
     },
     "4476": {
       "summary": "Removing one MERGE_HEAD check lets the post-merge hook rebuild the graph after every real merge, not only fast-forwards.",
@@ -485,7 +500,13 @@
           "after": "rebuild",
           "covered_by": "manual probe"
         }
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "b3af3565"
+        ],
+        "note": "Shipped in v0.9.92. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      }
     },
     "4491": {
       "summary": "The hooks now rebuild the graph once after a clean cherry-pick, a rebase, a pull --rebase, or a range pick or revert, instead of never.",
@@ -513,7 +534,13 @@
         "test_revert_range_rebuilds_once_and_removes_the_functions",
         "test_tracked_graph_range_pick_with_conflict_completes",
         "test_abandoned_range_pick_does_not_silence_later_commits"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "74ed051b"
+        ],
+        "note": "Shipped in v0.9.92. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      }
     }
   },
   "issues": [
