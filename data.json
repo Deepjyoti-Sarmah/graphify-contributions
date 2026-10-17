@@ -564,6 +564,7 @@
         "A graph where some nodes have a repo attribute and others do not is not covered by tests."
       ],
       "tests": [
+        "tests/test_same_basename_repos.py",
         "test_explain_names_both_repos_not_one_file",
         "test_explain_hint_gives_the_full_node_id_for_same_basename",
         "test_full_node_id_still_resolves",
