@@ -596,6 +596,14 @@
       "summary": "After a clean cherry-pick, a rebase or a pull --rebase, the git hooks never rebuild the graph.",
       "fixed_by": [4491],
       "title": "hooks never rebuild after a clean cherry-pick, a rebase, or git pull --rebase"
+    },
+    {
+      "number": 4512,
+      "summary": "In a merged graph, explain and path say two same-named files are one file, and list bare line numbers.",
+      "fixed_by": [
+        4520
+      ],
+      "title": "[Bug]:merged graph — ambiguity refusal reports cross-repo same-basename nodes as being in one file"
     }
   ],
   "proposals": [
