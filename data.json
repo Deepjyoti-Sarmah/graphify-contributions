@@ -80,7 +80,7 @@
     },
     {
       "id": "4508",
-      "title": "export wiki: a community relabelled only by case loses its article on case-insensitive filesystems (orphan sweep compares names case-sensitively)",
+      "title": "wiki export deletes a page when its community label changes only in letter case (macOS, Windows)",
       "issue": 4508,
       "prs": [
         4521
@@ -89,17 +89,17 @@
   ],
   "prs": {
     "4521": {
-      "summary": "On macOS and Windows, a community renamed only by case keeps its wiki page, and the index link still works.",
-      "why": "On macOS and Windows, groups.md and Groups.md are the same file. When a community's label changed from groups to Groups, graphify wrote the page, then the end-of-run cleanup deleted it, because it compared file names with case. index.md kept linking to the deleted page.",
-      "what": "The cleanup now compares files by identity (device and inode), not by name. A page written in this run is kept and renamed to the new case. A stale page that is a separate file is still removed.",
-      "helps": "Anyone on macOS or Windows who re-exports a wiki after a community label changes only in case.",
+      "summary": "A community whose label changes only in case keeps its wiki page on macOS and Windows.",
+      "why": "On macOS and Windows, groups.md and Groups.md are the same file. When a label changes from groups to Groups, the export writes Groups.md into the existing groups.md, and the file keeps its old name. The cleanup at the end of the export compares names with case, finds groups.md missing from its list of written pages, and deletes it. index.md still links to Groups.md, so the link breaks.",
+      "what": "The cleanup now compares files by device and inode, the values that identify a file on disk, not by name. A page written in this run is kept, and if its name still has the old case it is renamed to the new case. A page that is a different file, such as an old page from before the relabel, is still deleted.",
+      "helps": "Anyone on macOS or Windows whose community label changes in case between exports. Before this fix, their wiki lost the page and the index link broke.",
       "diagram": "flowchart LR\n  subgraph Before\n    B1[\"write Groups.md<br/>(lands in groups.md)\"] --> B2{\"cleanup: 'groups.md' in written pages?\"}\n    B2 -- \"no (case differs)\" --> B3[\"delete groups.md<br/>index.md links to a missing file\"]:::bad\n  end\n  subgraph After\n    A1[\"write Groups.md<br/>(lands in groups.md)\"] --> A2{\"cleanup: same file as a written page?\"}\n    A2 -- yes --> A3[\"keep, rename to Groups.md\"]:::good\n    A2 -- no --> A4[\"delete stale page\"]\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
-      "before": "['Groups.md', 'index.md', 'other.md']\nGroups.md readable: False\nindex.md links to Groups.md: True",
-      "after": "['Groups.md', 'index.md', 'other.md']\nGroups.md readable: True\nindex.md links to Groups.md: True",
+      "before": "relabel groups -> Groups (case-insensitive disk, simulated)\n['Groups.md', 'index.md', 'other.md']\nGroups.md readable: False\nindex.md links to Groups.md: True",
+      "after": "relabel groups -> Groups (case-insensitive disk, simulated)\n['Groups.md', 'index.md', 'other.md']\nGroups.md readable: True\nindex.md links to Groups.md: True",
       "limits": [
-        "Not run on a real APFS or NTFS disk. The test simulates one with a symlink.",
+        "Tested with a simulated case-insensitive disk (a symlink). Not run on a real APFS or NTFS volume.",
         "Windows inode numbers were not checked on Python 3.14.",
-        "to_obsidian has a similar case-only collision (#2650). Not changed here."
+        "to_obsidian has the same case-only collision (#2650). Not changed here."
       ],
       "tests": [
         "tests/test_wiki_case_only_relabel.py",
