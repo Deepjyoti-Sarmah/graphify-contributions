@@ -69,6 +69,14 @@
       "prs": [
         4491
       ]
+    },
+    {
+      "id": "4512",
+      "title": "merged graph: ambiguity refusal reports cross-repo same-basename nodes as being in one file",
+      "issue": 4512,
+      "prs": [
+        4520
+      ]
     }
   ],
   "prs": {
@@ -541,6 +549,27 @@
         ],
         "note": "Shipped in v0.9.92. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
       }
+    },
+    "4520": {
+      "summary": "explain and path now name each candidate's repo when two merged files share a basename, instead of saying both are in one file.",
+      "why": "In a merged graph, web/dup.py and ml/dup.py both store source_file as dup.py. The same-file check used that bare name, so explain and path said both nodes were in dup.py and listed bare L1 lines. The hint could not tell them apart.",
+      "what": "A file is now the pair (repo, source_file). The refusal shows web/dup.py and ml/dup.py. When the same path exists in two repos, the hint asks for the full node id and says why.",
+      "helps": "Anyone who merges repos that share file names, such as dup.py, __init__.py or index.ts. The refusal now shows which repo each candidate came from.",
+      "diagram": "flowchart LR\n  A[\"web/dup.py + ml/dup.py\"] --> B[\"v8: both stored as dup.py\"]\n  B --> C[\"one file, bare L1 lines\"]:::bad\n  A --> D[\"now: key is repo + file\"]\n  D --> E[\"web/dup.py and ml/dup.py listed\"]:::good\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "explain Config -> exit 3\n  Ambiguous: 'Config' matches 2 nodes in dup.py.\n  L1 / id: web::dup_config\n  L1 / id: ml::dup_config\n  Retry with the full node id.",
+      "after": "explain Config -> exit 3\n  Ambiguous: 'Config' matches 2 nodes in different files.\n  web/dup.py / id: web::dup_config\n  ml/dup.py / id: ml::dup_config\n  Retry with the full node id: the same path exists in more than one repo, so a path cannot tell them apart.",
+      "limits": [
+        "query and --seed still answer silently for same-named files from two repos. That is the #4511 fix, which is a separate branch.",
+        "Repo-qualified paths such as web/dup.py::Config do not resolve. The refusal gives the node id instead.",
+        "A graph where some nodes have a repo attribute and others do not is not covered by tests."
+      ],
+      "tests": [
+        "test_explain_names_both_repos_not_one_file",
+        "test_explain_hint_gives_the_full_node_id_for_same_basename",
+        "test_full_node_id_still_resolves",
+        "test_path_endpoint_names_both_repos",
+        "test_same_repo_wording_is_unchanged"
+      ]
     }
   },
   "issues": [
