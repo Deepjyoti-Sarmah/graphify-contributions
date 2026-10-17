@@ -634,6 +634,86 @@
         3257,
         3328
       ]
+    },
+    {
+      "id": "indexing-cost-time",
+      "title": "Make indexing cheaper, faster and safer without a rewrite",
+      "status": "Planning, nothing built yet",
+      "problem": "On big repos with many users, graphify pays the LLM again on every machine for the same doc, re-bills a whole big doc for a one-line edit, runs most steps after parsing on one core, and can drop a node or an edge without an error.",
+      "evidence": "From the code on 0.9.92 (86c57be8): the semantic cache sits in each checkout (cache.py:1015); its key is the whole file's hash even for sliced docs (cache.py:511); the model is not in the key; --update copies edges of unchanged files without re-resolving them (watch.py:1981); same-id nodes overwrite each other with nothing counted (build.py:9-16); graph.json writes schema_version but nothing reads it (export.py:476). No cost or time numbers yet: stage 0 measures them.",
+      "parts": [
+        {
+          "label": "1. What goes wrong",
+          "md": "Three things get worse as a repo and its team grow.\n\n- **LLM cost.** Every laptop and every CI runner pays for the same unchanged doc, because the semantic cache lives inside each checkout.\n- **Time.** Parsing runs on all cores, but the steps after it (resolving calls, dedup, clustering, writing files) run on one core.\n- **Wrong graphs with no error.** When two different things get the same id, one is dropped and nothing counts it. After a commit, an unchanged file that calls a newly added function may get no edge to it (suspected, test pending).\n\nI have no numbers yet for any of these. Stage 0 below measures them before anything changes.",
+          "diagram": "flowchart LR\n  DOC[\"docs/guide.md<br/>unchanged\"] --> A[\"laptop A<br/>cache miss, LLM call\"]:::bad\n  DOC --> B[\"laptop B<br/>cache miss, LLM call\"]:::bad\n  DOC --> C[\"CI runner<br/>cache miss, LLM call\"]:::bad\n  A --> CA[\"graphify-out/cache on A\"]\n  B --> CB[\"graphify-out/cache on B\"]\n  C --> CC[\"graphify-out/cache on CI\"]\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111",
+          "caption": "Today: three machines pay the LLM for the same unchanged doc"
+        },
+        {
+          "label": "2. Why it happens",
+          "md": "Each problem has one cause in the code (references are to 0.9.92, `86c57be8`):\n\n| Problem | Cause | Where |\n|---|---|---|\n| Same doc billed on every machine | the semantic cache folder sits under `graphify-out/` in each checkout | `cache_dir`, `cache.py:1015` |\n| A typo re-bills a whole big doc | big docs are split into slices, but the cache key is the hash of the whole file | `file_hash`, `cache.py:511`; `file_slice.py` |\n| Switching models replays old output | the model is not part of the cache key and not stored with the entry | `cache.py` |\n| Missing call edge after a commit | `--update` re-reads changed files only; edges of unchanged files are copied, never re-resolved. #2406 fixed the other direction | `watch.py:1981` |\n| Silent drop on the same id | the last node with an id overwrites the first, by design, with nothing counted | `build.py:9-16`, `dedupe_nodes` `build.py:886` |\n| Slow on big repos | only parsing is parallel | `_extract_parallel`, `extract.py:8949` |\n| No safe way to change ids | `graph.json` stores `schema_version`, but no reader checks it | `export.py:176`, `export.py:476` |"
+        },
+        {
+          "label": "3. How a commit can miss an edge",
+          "md": "This is the correctness gap I suspect, not one I've proven. A test that compares `--update` with a full rebuild will settle it.\n\nRenames are fine: if you rename `foo` and fix its callers in the same commit, both files are re-read. The gap is a name that **appears** or **moves** while its caller stays untouched.",
+          "diagram": "sequenceDiagram\n  participant Dev as Developer\n  participant Hook as post-commit hook\n  participant Ex as extract\n  participant Old as saved graph.json\n  Dev->>Hook: commit adds def foo in b.py\n  Hook->>Ex: re-extract b.py only\n  Ex-->>Hook: new node foo\n  Hook->>Old: copy edges of unchanged a.py\n  Note over Old: a.py already called foo, but its call was unresolved last time\n  Hook-->>Dev: graph has foo, no edge from a.py to foo\n  Note over Dev,Old: a full rebuild would have the edge",
+          "caption": "The caller in a.py is never re-read, so its call to the new foo stays unresolved"
+        },
+        {
+          "label": "4. How this affects the project",
+          "md": "- Teams pay per person, not per repo. Ten people on one docs-heavy repo pay about ten times.\n- An agent answers from the graph with confidence. A dropped node or a missing edge turns into a wrong answer, not an error.\n- Id bugs get fixed one shape at a time (#4449, #4432, #4362, #4410), because no check shows how many collisions there are.\n- Any change to the prompt or to ids resets every user's cache, so the fixes that matter most are also the most expensive to ship."
+        },
+        {
+          "label": "5. The fix, part 1: share the cache and cache by slice",
+          "md": "Two ideas from build tools (Bazel, sccache, restic):\n\n1. **A shared, content-addressed cache.** A setting points graphify at a shared folder. CI writes to it. Laptops only read. The key is the file's content hash, so a changed file can never match a stale entry.\n2. **Cache each slice of a big doc by its own hash**, with slices that break at headings. An edit then re-bills only the slice it is in.\n\nSmall extra: store the model name with each entry and warn when it differs. The key stays the same, so nobody's cache is lost.",
+          "diagram": "sequenceDiagram\n  participant CI as CI job on main\n  participant S as shared cache folder\n  participant Dev as developer laptop\n  participant LLM as LLM API\n  CI->>LLM: extract docs that miss\n  LLM-->>CI: nodes and edges\n  CI->>S: write entries, key is content hash\n  Dev->>S: read entry for docs/guide.md\n  S-->>Dev: hit, no LLM call\n  Dev->>LLM: only files the developer changed\n  Note over Dev,S: laptops read only, so they cannot poison the shared folder",
+          "caption": "CI fills the shared folder once; laptops read it and pay only for their own edits"
+        },
+        {
+          "label": "6. Slices today vs proposed",
+          "diagram": "flowchart TD\n  F[\"handbook.md, 300 pages\"] --> T{\"today: key is hash of whole file\"}\n  T -->|typo on page 2| ALL[\"send every slice again\"]:::bad\n  F --> P{\"proposed: key is hash of each slice,<br/>slices break at headings\"}\n  P -->|typo on page 2| ONE[\"send slice 1 only,<br/>other slices hit the cache\"]:::good\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
+          "caption": "Slice-level keys make the cost of an edit follow the edit, not the file"
+        },
+        {
+          "label": "7. The fix, part 2: correctness and speed",
+          "md": "- **Count collisions first, change nothing.** Log and report how often two different things share an id. That gives real numbers for the node-identity proposal.\n- **Re-resolve only when names change.** Store the set of top-level names each file defines. When a commit adds or moves a name, re-resolve the unchanged files whose unresolved calls use it. Body-only edits do no extra work.\n- **Speed up the one-core steps** only where the benchmark points, and only in ways that leave `graph.json` byte-identical. Starting Leiden from the last run's communities changes output, so it goes behind a flag."
+        },
+        {
+          "label": "8. The order, and why",
+          "md": "Changes that keep ids and the prompt as they are ship first, as small PRs that are easy to undo. Changes to ids, the prompt, slice breaks and the `graph.json` layout ship **once**, together, so users pay the cache reset one time.\n\nBefore that release, a small PR makes readers check `schema_version`, so older graphify versions refuse a newer graph instead of misreading it. The release then ships a translator from old ids to new ids, like `_semantic_id_remap` (`build.py:963`) did after #1504, so saved graphs and cached LLM output carry over without new LLM calls.",
+          "diagram": "flowchart LR\n  M[\"0. measure<br/>benchmark script\"] --> C[\"1. correctness<br/>no id or prompt change\"]\n  C --> K[\"2. cost and time<br/>no id or prompt change\"]\n  K --> V[\"3. one breaking release<br/>ids, prompt, slices, format<br/>with version and translator\"]:::oneway\n  classDef oneway fill:#fff4d6,stroke:#b7791f,color:#111",
+          "caption": "Two-way doors first, one batched one-way door last"
+        },
+        {
+          "label": "9. What I'm doing now",
+          "md": "Nothing is built yet. The first piece is a benchmark script that lives outside graphify, so it needs no PR. It runs the CLI on three repos:\n\n| Repo | Why |\n|---|---|\n| graphify itself | mid size, easy to check by hand |\n| kubernetes | about 15k Go files, no LLM cost, shows where the time goes |\n| fastapi `docs/en` | real prose, shows where the LLM cost goes |\n\nIt records time per step, tokens split by cache hit and miss, nodes lost in dedup, and `graph.json` size per field. The paid run is capped at $5. I'll post the numbers here before opening any PR."
+        },
+        {
+          "label": "10. Questions for you",
+          "md": "1. Is a shared cache folder that CI writes and laptops read something you'd take, or would you rather keep the cache per checkout?\n2. Would you review the report-only collision count and the `schema_version` check as two small PRs?\n3. For the breaking release: v1 graphs keep working with a warning for two minor releases. Is that long enough?\n4. Is there a repo you'd rather I benchmark than kubernetes and fastapi?"
+        }
+      ],
+      "plan": [
+        "Stage 0: benchmark script outside graphify, CLI only, three repos, LLM spend capped at $5. Numbers posted here first.",
+        "Stage 1: count id collisions in the log and the report. Graph output unchanged. Easy to undo.",
+        "Stage 1: a test that compares --update with a full rebuild for: a new function an unchanged file calls, a function moved behind a re-export, and a body-only edit.",
+        "Stage 1: readers check schema_version and refuse a newer graph with a clear message. Easy to undo.",
+        "Stage 2: a shared semantic cache folder, read-only by default, written by CI. Model stored with each entry, with a warning on mismatch. Easy to undo.",
+        "Stage 2: if stage 1's test shows the gap, re-resolve unchanged files whose unresolved calls use a name that was added or moved.",
+        "Stage 2: speed up the one-core steps the benchmark points at, with a byte-identical graph.json test. Leiden warm start behind a flag.",
+        "Stage 3, one release: new ids (see the node-identity proposal), slice-level cache with heading breaks, a smaller graph.json layout, schema_version 2 and an old-to-new id translator. Only after you agree."
+      ],
+      "size": "large",
+      "risk": "medium",
+      "related": [
+        1252,
+        1939,
+        1369,
+        2406,
+        1504,
+        4167,
+        4449,
+        4432
+      ]
     }
   ]
 }
