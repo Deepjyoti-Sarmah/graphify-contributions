@@ -551,15 +551,15 @@
       }
     },
     "4520": {
-      "summary": "explain and path now name each candidate's repo when two merged files share a basename, instead of saying both are in one file.",
-      "why": "In a merged graph, web/dup.py and ml/dup.py both store source_file as dup.py. The same-file check used that bare name, so explain and path said both nodes were in dup.py and listed bare L1 lines. The hint could not tell them apart.",
-      "what": "A file is now the pair (repo, source_file). The refusal shows web/dup.py and ml/dup.py. When the same path exists in two repos, the hint asks for the full node id and says why.",
-      "helps": "Anyone who merges repos that share file names, such as dup.py, __init__.py or index.ts. The refusal now shows which repo each candidate came from.",
-      "diagram": "flowchart LR\n  A[\"web/dup.py + ml/dup.py\"] --> B[\"v8: both stored as dup.py\"]\n  B --> C[\"one file, bare L1 lines\"]:::bad\n  A --> D[\"now: key is repo + file\"]\n  D --> E[\"web/dup.py and ml/dup.py listed\"]:::good\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
-      "before": "explain Config -> exit 3\n  Ambiguous: 'Config' matches 2 nodes in dup.py.\n  L1 / id: web::dup_config\n  L1 / id: ml::dup_config\n  Retry with the full node id.",
-      "after": "explain Config -> exit 3\n  Ambiguous: 'Config' matches 2 nodes in different files.\n  web/dup.py / id: web::dup_config\n  ml/dup.py / id: ml::dup_config\n  Retry with the full node id: the same path exists in more than one repo, so a path cannot tell them apart.",
+      "summary": "explain and path now name the repo of each candidate when two merged files share a basename, instead of calling both one file.",
+      "why": "In a merged graph, web/dup.py and ml/dup.py are both stored as dup.py. The same-file check compared that bare name, so both nodes looked like one file. explain and path then said \"matches 2 nodes in dup.py\", listed two bare L1 lines, and gave a hint that could not tell them apart.",
+      "what": "A file is now its repo plus its source_file. When candidates span more than one repo, the refusal shows web/dup.py and ml/dup.py. When the same path exists in two repos, the hint says so and asks for the full node id.",
+      "helps": "Anyone who merges repos that share file names such as dup.py, __init__.py or index.ts. The refusal now shows which repo each candidate came from, and the node-id retry is clear.",
+      "diagram": "flowchart LR\n  subgraph Before\n    A1[\"web/dup.py\"] --> K1[\"key: dup.py\"]\n    A2[\"ml/dup.py\"] --> K1\n    K1 --> M1[\"one file: 'matches 2 nodes in dup.py'\"]:::bad\n  end\n  subgraph After\n    B1[\"web/dup.py\"] --> K2[\"key: web + dup.py\"]\n    B2[\"ml/dup.py\"] --> K3[\"key: ml + dup.py\"]\n    K2 --> M2[\"two files: web/dup.py, ml/dup.py\"]:::good\n    K3 --> M2\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "explain Config   (exit 3)\nAmbiguous: 'Config' matches 2 nodes in dup.py.\n  L1\n    id: web::dup_config\n  L1\n    id: ml::dup_config\nRetry with the full node id.",
+      "after": "explain Config   (exit 3)\nAmbiguous: 'Config' matches 2 nodes in different files.\n  web/dup.py\n    id: web::dup_config\n  ml/dup.py\n    id: ml::dup_config\nRetry with the full node id: the same path exists in more than one repo, so a path cannot tell them apart.",
       "limits": [
-        "query and --seed still answer silently for same-named files from two repos. That is the #4511 fix, which is a separate branch.",
+        "query and --seed still answer silently for same-named files from two repos. Their fix is on a separate branch (#4511).",
         "Repo-qualified paths such as web/dup.py::Config do not resolve. The refusal gives the node id instead.",
         "A graph where some nodes have a repo attribute and others do not is not covered by tests."
       ],
