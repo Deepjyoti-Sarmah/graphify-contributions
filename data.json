@@ -411,6 +411,12 @@
       ]
     },
     "4452": {
+      "landed": {
+        "commits": [
+          "c29950f8"
+        ],
+        "note": "Shipped in v0.9.91. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      },
       "summary": "A symbol that spells a sibling file's old id (const sql in x.mjs next to x.sql) keeps its own node, so the file node is no longer relabelled.",
       "why": "extract() renames each file's old id, which is its path with the extension (esquema_x_sql for x.sql), to the final id. It does this on every node, edge end and raw call that spells it. The JS variable sql in x.mjs is minted with the same string, so it took the file node's id and dedup dropped one of the two. The x.mjs file node ended up labelled sql, and graphify explain \"x.mjs\" found nothing.",
       "what": "A key is renamed only for the file that minted it, and only when another file's own symbol carries the same id. Nodes, edge ends and raw calls each follow the file they belong to. Every other key renames as before. Swift extension ids and Objective-C field tables follow the same rule.",
