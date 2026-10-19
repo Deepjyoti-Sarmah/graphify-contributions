@@ -109,6 +109,14 @@
       "prs": [
         4572
       ]
+    },
+    {
+      "id": "4570",
+      "title": "VB.NET: cross-file and VB -> C# calls produce no calls edges (Module functions, typed locals, C# statics)",
+      "issue": 4570,
+      "prs": [
+        4573
+      ]
     }
   ],
   "prs": {
@@ -836,6 +844,94 @@
           "before": "-",
           "after": "passes every hard test and probe except the separate monorepo bug",
           "covered_by": "test matrix in the PR"
+        }
+      ]
+    },
+    "4573": {
+      "summary": "VB.NET calls that cross files, or go from VB to C#, now get calls edges, so affected, path and explain see real VB callers.",
+      "why": "The VB extractor only knew the types declared in the file it was reading. A call to a Module in another file, through a local variable, or to a C# type had no owner, so it was dropped before any cross-file resolver could see it. An unqualified Module call was sent with the caller's own type as owner and found nothing. In a VB project most calls cross files, so most callers were missing. v8 also bound two calls wrongly: .Save() inside a With block and a call of a local delegate went to a same-named method on the caller's own type.",
+      "what": "The extractor keeps every call, with its receiver, the declared type of a local or parameter, the caller's namespace and the file's Imports. A new VB resolver follows the compiler's lookup order: the caller's own type and its bases first, at any arity; a field, property or local with the name hides everything else; then Modules in scope by namespace. It makes an edge only when exactly one target matches. Each rule was checked against the VB compiler (dotnet SDK 8.0) first. watch.py forwards four more metadata keys so incremental rebuilds resolve the same way. The AST cache schema goes from 17 to 18.",
+      "helps": "Anyone indexing a VB.NET or mixed VB and C# solution. Calls to Module functions, typed locals and C# statics now show up as callers, and the With-block and local-delegate calls no longer point at the wrong method. C# incremental rebuilds now bind namespaced types the same way a full build does.",
+      "diagram": "flowchart LR\n  subgraph Before\n    C1[\"Caller.vb: LogIt / Helpers.LogIt / w.Save / CsRules.IsLocked\"] --> O1{\"owner declared in this file?\"}\n    O1 -->|no| D1[\"call dropped, no edge\"]:::bad\n  end\n  subgraph After\n    C2[\"Caller.vb: same calls\"] --> R2[\"raw call with receiver, type, namespace, Imports\"]\n    R2 --> L2{\"VB lookup order: own type, bases, members, Modules in scope\"}\n    L2 -->|one match| E2[\"calls edge\"]:::good\n    L2 -->|none or several| N2[\"no edge\"]\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "A_SameFileSelf -> B_Target()   EXTRACTED\n.G_CsToVb      -> LogIt()      EXTRACTED",
+      "after": "A_SameFileSelf      -> B_Target()    EXTRACTED\nC_UnqualifiedModule -> LogIt()       EXTRACTED  call\nD_QualifiedModule   -> LogIt()       EXTRACTED  call\nE_TypedLocal        -> Save()        INFERRED   call\nF_CsStatic          -> .IsLocked()   EXTRACTED  call\n.G_CsToVb           -> LogIt()       EXTRACTED  call",
+      "limits": [
+        "A receiver typed by a field (Private _w As Worker, then _w.Save()) is not tracked.",
+        "The target of a With block is not tracked, so .Save() gets no edge rather than w.Save.",
+        "Project-level Imports and RootNamespace from the .vbproj are not visible. This can only miss a Module, except in a corpus of several projects that don't reference each other.",
+        "Shared versus instance members are not modeled, and a C# target with overloads gets no edge from VB.",
+        "#4567, #4572 and this PR all bump the cache schema from 17 to 18, so whichever lands later needs the next number.",
+        "Separate bugs found while testing: the C# member resolver ignores arity when calling an overloaded VB Module, and nested VB types are not extracted."
+      ],
+      "tests": [
+        "tests/test_vbnet_extractor.py",
+        "test_an_unqualified_call_reaches_a_module_sub_in_another_file",
+        "test_a_module_qualified_call_reaches_a_module_sub_in_another_file",
+        "test_a_call_through_a_local_typed_in_its_declaration_reaches_the_types_method",
+        "test_a_vb_call_to_a_csharp_static_method_reaches_it",
+        "test_a_call_from_a_class_with_an_external_base_reaches_the_module_as_inferred",
+        "test_a_member_call_inside_a_with_block_is_not_a_call_on_the_callers_own_type",
+        "test_a_call_of_a_local_delegate_is_not_a_call_of_a_same_named_method",
+        "test_a_property_or_field_named_like_a_module_sub_hides_it",
+        "test_two_modules_declaring_the_same_name_give_no_edge_to_either",
+        "test_the_callers_own_method_wins_over_a_module_method_of_the_same_name"
+      ],
+      "cases": [
+        {
+          "case": "LogIt(\"x\"), Module in another file",
+          "correct": "the Module",
+          "before": "no edge",
+          "after": "the Module, EXTRACTED",
+          "covered_by": "test_an_unqualified_call_reaches_a_module_sub_in_another_file"
+        },
+        {
+          "case": "Helpers.LogIt(\"x\"), Module in another file",
+          "correct": "the Module",
+          "before": "dropped",
+          "after": "the Module, EXTRACTED",
+          "covered_by": "test_a_module_qualified_call_reaches_a_module_sub_in_another_file"
+        },
+        {
+          "case": "Dim w As New Worker(): w.Save()",
+          "correct": "Worker.Save",
+          "before": "dropped",
+          "after": "Worker.Save, INFERRED",
+          "covered_by": "test_a_call_through_a_local_typed_in_its_declaration_reaches_the_types_method"
+        },
+        {
+          "case": "CsRules.IsLocked(1) from VB",
+          "correct": "the C# method",
+          "before": "dropped",
+          "after": "the C# method, EXTRACTED",
+          "covered_by": "test_a_vb_call_to_a_csharp_static_method_reaches_it"
+        },
+        {
+          "case": ".Save() inside With w",
+          "correct": "w.Save",
+          "before": "wrong edge to the caller's Save",
+          "after": "no edge",
+          "covered_by": "test_a_member_call_inside_a_with_block_is_not_a_call_on_the_callers_own_type"
+        },
+        {
+          "case": "handler(1), a local delegate",
+          "correct": "the delegate",
+          "before": "wrong edge to a handler method",
+          "after": "no edge",
+          "covered_by": "test_a_call_of_a_local_delegate_is_not_a_call_of_a_same_named_method"
+        },
+        {
+          "case": "two Modules declare LogIt",
+          "correct": "compile error (ambiguous)",
+          "before": "no edge",
+          "after": "no edge",
+          "covered_by": "test_two_modules_declaring_the_same_name_give_no_edge_to_either"
+        },
+        {
+          "case": "caller's class has its own LogIt",
+          "correct": "the class method",
+          "before": "the class method",
+          "after": "the class method",
+          "covered_by": "test_the_callers_own_method_wins_over_a_module_method_of_the_same_name"
         }
       ]
     }
