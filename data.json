@@ -93,6 +93,14 @@
       "prs": [
         4565
       ]
+    },
+    {
+      "id": "4564",
+      "title": "Rust: a `use` rooted at a child module (`pub use item::X;`) still mints a stub that makes `affected`/`explain` ambiguous",
+      "issue": 4564,
+      "prs": [
+        4567
+      ]
     }
   ],
   "prs": {
@@ -683,6 +691,84 @@
           "before": "partial",
           "after": "partial",
           "covered_by": "test_truncated_chunk_that_acknowledges_its_file_stays_partial"
+        }
+      ]
+    },
+    "4567": {
+      "summary": "A Rust re-export like pub use item::Invoice; next to mod item; now reaches the real Invoice, so affected and explain resolve the name again.",
+      "why": "The #4439 fix lends the rewire a node only for a use that starts with crate, self or super, so that use serde::Serialize never lands on a corpus Serialize. item::Invoice starts with item, which that check cannot tell apart from serde. The edge dangled, build minted an external stub invoice, and affected and explain tied on it.",
+      "what": "A use is now also named when its first segment is a mod declared beside it in the same scope, unless the path starts with ::. Rust resolves exactly this way: a local mod serde shadows the serde crate (E0432), and only ::serde reaches the crate. The AST cache schema goes from 17 to 18.",
+      "helps": "Anyone indexing a Rust crate whose lib.rs, mod.rs or main.rs re-exports items from child modules. On the reporter's workspace this pattern left 83 names tied with a stub.",
+      "diagram": "flowchart LR\n  subgraph Before\n    U1[\"mod item; pub use item::Invoice\"] --> C1{\"first segment crate, self or super?\"}\n    C1 -->|no| S1[\"external stub invoice\"]:::bad\n    S1 --> X1[\"explain Invoice: ambiguous\"]:::bad\n  end\n  subgraph After\n    U2[\"mod item; pub use item::Invoice\"] --> C2{\"first segment a sibling mod, no leading ::?\"}\n    C2 -->|yes| R2[\"Invoice in src/model/item.rs\"]:::good\n    R2 --> X2[\"explain Invoice: resolves\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "graph.json: NODE invoice type=external source_file=''\n            EDGE src_model -> invoice\naffected Invoice  No unique node match for Invoice   (exit 0)\nexplain Invoice   Ambiguous: 'Invoice' matches 2 nodes in different files.   (exit 3)",
+      "after": "graph.json: EDGE src_model -> src_model_item_invoice   (no external node)\nexplain Invoice   Node: Invoice  ID: src_model_item_invoice  Source: src/model/item.rs L1",
+      "limits": [
+        "An incremental extract without --force skips files whose content hash matches manifest.json before it reads the AST cache, so an existing graph keeps the stub until --force or an edit to the file. Every schema bump has this gap.",
+        "The alias in use item::Invoice as Bill still leaks into the raw target id (invoice_as_bill). The rewire hides it whenever it resolves the edge.",
+        "A use inside a fn body gets no edge, and r#item paths are not matched. Both are unchanged from v8.",
+        "The self as items binding in pub use item::{self as items, Invoice} names a module, which has no declaration node, so it stays a stub."
+      ],
+      "tests": [
+        "tests/test_rust_use_trees.py",
+        "test_a_use_rooted_at_a_child_mod_lands_on_the_declaration",
+        "test_the_issue_repro_builds_without_an_external_stub",
+        "test_a_group_and_a_nested_path_from_a_child_mod_land_on_the_declarations",
+        "test_a_use_of_a_mod_declared_inline_lands_on_the_declaration",
+        "test_a_use_rooted_at_a_local_mod_named_like_a_crate_lands_on_the_local_declaration",
+        "test_a_cache_entry_from_before_child_mod_names_is_not_served",
+        "test_a_use_of_another_crate_still_does_not_land_on_a_same_named_declaration",
+        "test_a_second_import_of_the_same_item_does_not_change_the_result",
+        "test_two_types_with_one_name_stay_two_nodes_and_are_not_swapped"
+      ],
+      "cases": [
+        {
+          "case": "mod item; pub use item::Invoice;",
+          "correct": "lands on Invoice",
+          "before": "external stub",
+          "after": "lands on Invoice",
+          "covered_by": "test_a_use_rooted_at_a_child_mod_lands_on_the_declaration[plain]"
+        },
+        {
+          "case": "use written before mod item;",
+          "correct": "lands on Invoice",
+          "before": "external stub",
+          "after": "lands on Invoice",
+          "covered_by": "test_a_use_rooted_at_a_child_mod_lands_on_the_declaration[use_first]"
+        },
+        {
+          "case": "pub use item::Invoice as Bill;",
+          "correct": "lands on Invoice",
+          "before": "stub invoice_as_bill",
+          "after": "lands on Invoice",
+          "covered_by": "test_a_use_rooted_at_a_child_mod_lands_on_the_declaration[rename]"
+        },
+        {
+          "case": "inline mod outer { mod item {..} pub use item::Invoice; }",
+          "correct": "lands on Invoice",
+          "before": "external stub",
+          "after": "lands on Invoice",
+          "covered_by": "test_a_use_of_a_mod_declared_inline_lands_on_the_declaration"
+        },
+        {
+          "case": "mod serde; use ::serde::Serialize;",
+          "correct": "the crate, not a corpus Serialize",
+          "before": "stub",
+          "after": "stub",
+          "covered_by": "test_a_use_of_another_crate_still_does_not_land_on_a_same_named_declaration[leading_colons]"
+        },
+        {
+          "case": "top-level mod serde; mod tests { use serde::Serialize; }",
+          "correct": "the crate",
+          "before": "stub",
+          "after": "stub",
+          "covered_by": "test_a_use_of_another_crate_still_does_not_land_on_a_same_named_declaration[inner_scope]"
+        },
+        {
+          "case": "two Invoice types, each re-exported by its own parent",
+          "correct": "two nodes, never cross-linked",
+          "before": "two nodes, unresolved",
+          "after": "two nodes, unresolved",
+          "covered_by": "test_two_types_with_one_name_stay_two_nodes_and_are_not_swapped"
         }
       ]
     }
