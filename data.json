@@ -85,6 +85,14 @@
       "prs": [
         4521
       ]
+    },
+    {
+      "id": "4547",
+      "title": "Semantic extraction cannot tell a file with no entities from an omitted file, so empty files arm the shrink guard",
+      "issue": 4547,
+      "prs": [
+        4565
+      ]
     }
   ],
   "prs": {
@@ -603,6 +611,79 @@
         "test_full_node_id_still_resolves",
         "test_path_endpoint_names_both_repos",
         "test_same_repo_wording_is_unchanged"
+      ]
+    },
+    "4565": {
+      "summary": "A file the model read and found empty no longer fails graphify extract. Only files the model leaves out still arm the shrink guard.",
+      "why": "A file sent for semantic extraction counted as covered only if a returned node named it as source_file. A robots.txt, an HTML shell or a short compose file has nothing worth a node, so it landed in uncovered_files. That armed the shrink guard, and any run where the graph got smaller exited non-zero, every time. The response format had no way to say \"read it, nothing here\".",
+      "what": "The response format has an optional files list: one entry per file with its entity count. A file with no nodes that the model lists with entities 0 goes in empty_files and does not arm the guard. A file the model does not list, or lists with entities but no node, is still uncovered. A chunk holding only empty files is no longer treated as hollow and retried. The full uncovered list is written to graphify-out/uncovered_files.txt.",
+      "helps": "Anyone running graphify extract in CI on a repo with files that have nothing to extract. Those runs now write the graph. When files really are left out, CI can read the whole list from uncovered_files.txt instead of five names and \"+N more\".",
+      "diagram": "flowchart LR\n  subgraph Before\n    A1[\"robots.txt: 0 nodes\"] --> U1[\"uncovered_files\"]\n    B1[\"skipped.md: 0 nodes\"] --> U1\n    U1 --> G1[\"guard armed, exit 1\"]:::bad\n  end\n  subgraph After\n    A2[\"robots.txt: 0 nodes, listed entities 0\"] --> E2[\"empty_files\"]\n    E2 --> W2[\"graph written\"]:::good\n    B2[\"skipped.md: 0 nodes, not listed\"] --> U2[\"uncovered_files\"]\n    U2 --> G2[\"guard armed\"]\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "[graphify] WARNING: 1/2 dispatched file(s) produced no nodes and are absent from the graph: robots.txt. The model returned a response but omitted them; a re-run will retry them.\n[graphify extract] semantic extraction is incomplete: 1 dispatched file(s) produced no nodes ... The shrink guard stays armed for this write",
+      "after": "[graphify] 1 dispatched file(s) were read and have no extractable content: robots.txt.\n(graph written, force stays on)",
+      "limits": [
+        "The guard trusts the model's 0. If the model writes nodes for some files and falsely lists the others as entities 0, those files do not arm the guard.",
+        "If a large document is split into slices and one slice reports 0 while another is never mentioned, the file counts as empty.",
+        "references/extraction-spec.md has no files rule, so skill-driven extraction is unchanged.",
+        "Empty files are still re-sent every run, because #2927 keeps zero-node results out of the semantic cache."
+      ],
+      "tests": [
+        "tests/test_empty_file_ack.py",
+        "test_empty_acknowledged_file_is_not_uncovered",
+        "test_chunk_of_only_an_empty_file_succeeds_without_retry",
+        "test_files_only_response_is_not_hollow_but_empty_and_junk_are",
+        "test_extract_force_writes_when_an_empty_file_is_acknowledged",
+        "test_uncovered_list_has_every_path_and_is_removed_on_a_clean_run",
+        "test_unacknowledged_file_without_nodes_stays_uncovered",
+        "test_response_without_files_key_behaves_as_before",
+        "test_acknowledged_with_entities_but_no_node_stays_uncovered",
+        "test_acknowledgement_for_a_path_not_in_the_chunk_is_ignored",
+        "test_truncated_chunk_that_acknowledges_its_file_stays_partial",
+        "test_files_only_response_that_misses_a_file_is_still_hollow"
+      ],
+      "cases": [
+        {
+          "case": "no nodes, listed with entities 0",
+          "correct": "empty, guard off",
+          "before": "uncovered, guard armed",
+          "after": "empty_files, guard off",
+          "covered_by": "test_empty_acknowledged_file_is_not_uncovered"
+        },
+        {
+          "case": "chunk with only an empty file",
+          "correct": "empty, no retry",
+          "before": "hollow, retried twice, partial",
+          "after": "empty_files, one call",
+          "covered_by": "test_chunk_of_only_an_empty_file_succeeds_without_retry"
+        },
+        {
+          "case": "no nodes, not listed",
+          "correct": "uncovered",
+          "before": "uncovered",
+          "after": "uncovered",
+          "covered_by": "test_unacknowledged_file_without_nodes_stays_uncovered"
+        },
+        {
+          "case": "no nodes, listed with entities > 0",
+          "correct": "uncovered",
+          "before": "uncovered",
+          "after": "uncovered",
+          "covered_by": "test_acknowledged_with_entities_but_no_node_stays_uncovered"
+        },
+        {
+          "case": "response with no files key",
+          "correct": "as before",
+          "before": "uncovered",
+          "after": "uncovered",
+          "covered_by": "test_response_without_files_key_behaves_as_before"
+        },
+        {
+          "case": "truncated chunk that lists the file as 0",
+          "correct": "partial",
+          "before": "partial",
+          "after": "partial",
+          "covered_by": "test_truncated_chunk_that_acknowledges_its_file_stays_partial"
+        }
       ]
     }
   },
