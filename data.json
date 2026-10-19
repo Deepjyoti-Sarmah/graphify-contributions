@@ -101,6 +101,14 @@
       "prs": [
         4567
       ]
+    },
+    {
+      "id": "4569",
+      "title": "package.json dependencies produce two unlinked nodes with the same label",
+      "issue": 4569,
+      "prs": [
+        4572
+      ]
     }
   ],
   "prs": {
@@ -769,6 +777,65 @@
           "before": "two nodes, unresolved",
           "after": "two nodes, unresolved",
           "covered_by": "test_two_types_with_one_name_stay_two_nodes_and_are_not_swapped"
+        }
+      ]
+    },
+    "4572": {
+      "summary": "A package.json dependency's manifest entry is linked to the code that imports the package again, and explain react finds one node instead of two.",
+      "why": "Each dependency made two nodes labelled react: the manifest entry, which has the version line, and ref_react, which code imports resolve to. The #1764 fix moved the imports edge to the manifest so it would stop reading as react imports react, and that removed the only link between them. On v8 the entry is 4 hops from the importing code, the two land in different communities, and explain react exits 3 as ambiguous.",
+      "what": "The manifest entry gets a declares edge to ref_react and is relabelled name@range, for example react@^19.0.0. The range is kept to one line and capped at 40 characters. ref_react keeps the bare name, so no edge joins two react nodes and react resolves to one node. A blank range links nothing, the same as an empty one. The AST cache schema goes from 17 to 18.",
+      "helps": "Anyone indexing a JavaScript or TypeScript project. The manifest line for react now sits next to main.tsx in the graph, explain and affected resolve react, and an unimported @types/* devDependency is no longer listed as isolated.",
+      "diagram": "flowchart LR\n  subgraph Before\n    K1[\"react (manifest entry)\"]:::bad\n    R1[\"ref_react\"] --- M1[\"main.tsx\"]\n    P1[\"package.json\"] -->|imports| R1\n    P1 -->|contains| K1\n  end\n  subgraph After\n    K2[\"react@^19.0.0\"] -->|declares| R2[\"ref_react\"]:::good\n    R2 --- M2[\"main.tsx\"]\n    P2[\"package.json\"] -->|imports| R2\n    P2 -->|contains| K2\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "dependencies --contains--> react [code]\npackage.json --contains--> dependencies\npackage.json --contains--> name\npackage.json --imports--> react [concept]\nexplain react   Ambiguous: 'react' matches 2 nodes in package.json   (exit 3)",
+      "after": "dependencies --contains--> react@^19.0.0 [code]\npackage.json --contains--> dependencies\npackage.json --contains--> name\npackage.json --imports--> react [concept]\nreact@^19.0.0 --declares--> react [concept]",
+      "limits": [
+        "A v2 package-lock.json already takes this path on v8 because of its top-level dependencies key, so its nested entries get the new label and edge too: 99 declares edges on a 340-package lockfile.",
+        "npm reads \"\" and \"   \" as *. graphify has never linked \"\"; \"   \" used to mint ref_react and an imports edge and now matches \"\".",
+        "A small community named after its hub can now carry a range, such as left-pad@workspace:*.",
+        "Obsidian note names drop the caret (react@19.0.0.md). The existing dedup handles collisions.",
+        "With two package.json files, each manifest's ref id is file-qualified while code imports a separate ref_react, so in a monorepo the manifest and the code still don't connect. Separate bug, kept as a strict xfail."
+      ],
+      "tests": [
+        "tests/test_extract.py",
+        "test_a_dependency_entry_is_connected_to_the_code_that_imports_the_package",
+        "test_every_dependency_block_connects_its_entries_to_the_importing_code",
+        "test_a_cache_entry_from_before_the_dependency_link_is_not_served",
+        "test_the_manifest_entry_label_carries_a_one_line_capped_version",
+        "test_an_empty_or_blank_version_keeps_the_bare_name_and_makes_no_ref_or_link",
+        "test_a_key_shared_by_two_sibling_blocks_is_labelled_with_the_range_on_its_own_line",
+        "test_no_import_runs_between_two_nodes_with_the_same_label_and_no_edge_is_a_self_loop",
+        "test_a_dependency_named_like_a_local_module_stays_a_namespaced_external_ref",
+        "test_no_edge_of_any_relation_joins_two_nodes_with_the_same_label",
+        "test_a_dev_dependency_nothing_imports_is_not_reported_isolated"
+      ],
+      "cases": [
+        {
+          "case": "option A: declares edge",
+          "correct": "connected, one react node, no react -> react edge",
+          "before": "-",
+          "after": "connected, but react -> react edge and explain ambiguous",
+          "covered_by": "test matrix in the PR"
+        },
+        {
+          "case": "option A2: references edge",
+          "correct": "same",
+          "before": "-",
+          "after": "as A, and affected lists the manifest line as a consumer",
+          "covered_by": "test matrix in the PR"
+        },
+        {
+          "case": "option B: no key node",
+          "correct": "same",
+          "before": "-",
+          "after": "one node, but breaks test_extract_json_nested_contains and @types/* stays isolated",
+          "covered_by": "test matrix in the PR"
+        },
+        {
+          "case": "option C: edge + name@range (chosen)",
+          "correct": "same",
+          "before": "-",
+          "after": "passes every hard test and probe except the separate monorepo bug",
+          "covered_by": "test matrix in the PR"
         }
       ]
     }
