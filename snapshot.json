@@ -1,7 +1,810 @@
-{"fetched_at":"2026-10-14T19:53:53Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 10,
+{"fetched_at":"2026-10-20T22:22:08Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 19,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4573",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4573/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4573/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4573/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4573",
+      "id": 5932921355,
+      "node_id": "PR_kwDOR4-pD88AAAABJcO0IQ",
+      "number": 4573,
+      "title": "fix(vbnet): resolve cross-file calls to Module members, typed locals and C# statics (#4570)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 3,
+      "created_at": "2026-10-19T23:02:06Z",
+      "updated_at": "2026-10-20T22:00:26Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4573",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4573",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4573.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4573.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4570. In a VB.NET project, `calls` edges appeared only when the caller and the callee were in the same file.\n\nFor each invocation, `extract_vbnet` picks the type that owns the target. An unqualified call or a `Me` call gets the caller's own type. A qualified call is looked up in `owner_by_short`, which only holds types declared in that file. Anything else (a Module in another file, a local variable, a C# type) got `target_owner = None` and was dropped: no edge and no raw call, so no resolver could see it. The only VB resolver, `resolve_vbnet_partial_calls`, matches `(owner, name, arity)` for `Partial` types. The shared name pass skips VB calls because they are marked as member calls.\n\n| Call in `Caller.vb` | v8 | This PR |\n|---|---|---|\n| `LogIt(\"x\")`, a Module Sub in another file | raw call with owner `Caller`, no edge | `LogIt` in `Helpers.vb`, EXTRACTED |\n| `Helpers.LogIt(\"x\")`, Module in another file | dropped | EXTRACTED |\n| `Dim w As New Worker()` then `w.Save()` | dropped | `Worker.Save`, INFERRED |\n| `CsRules.IsLocked(1)`, a C# static | dropped | EXTRACTED |\n| `.Save()` inside `With w` | **wrong edge** to the caller's own `Save` | no edge |\n| `handler(1)`, `handler` a local `Action(Of Integer)` | **wrong edge** to a `handler` method | no edge |\n\nThe extractor now emits a raw call for every invocation, with the written receiver, its kind (`none`, `me`, `mybase`, `name`, `local`), the declared type of a local or parameter, the caller's namespace, the file's `Imports` and the caller's nested types. The raw calls keep `is_member_call`, so the shared name pass still never sees them. `resolve_vbnet_calls` replaces the partial-type resolver (the old name stays as an alias and as the registry name) and follows VB's lookup order:\n\n```text\nresolve(call)\n  unqualified / Me\n    nearest of own type, then in-corpus bases, that declares the name -> it decides, at any arity\n    a field, property or event with the name -> no edge\n    else Modules in scope (same, enclosing, global or imported namespace) with that member\n      exactly one Module, exactly one arity match -> edge, else none\n  MyBase                -> the base chain only\n  local / parameter     -> its declared type, then member lookup          (INFERRED)\n  Type.M() / Module.M() -> a field or nested type of that name hides it\n                           else the type unique in scope, VB or C#, then member lookup\n  a VB target must accept the arity; a C# target must be the only method of that name\n  a caller whose base chain leaves the corpus -> INFERRED, context external_base_may_hide\n```\n\nOnly a unique match makes an edge. Nothing falls back to a name match across the corpus.\n\nI checked every rule against the compiler before writing it. I used dotnet SDK 8.0 in a container, offline, with small VB projects that print which method ran:\n\n| Case | Compiler |\n|---|---|\n| unqualified call, Module in another file, same namespace | binds the Module |\n| Module in another namespace, no `Imports` | BC30451 |\n| with `Imports`, or Module in an enclosing namespace | binds the Module |\n| caller's class or its base declares `LogIt` (any arity) | binds the class method, or BC30455 |\n| two Modules declare `LogIt`, even at different arities | BC30562 |\n| field, property, delegate field or nested type with the name | hides the Module |\n| two `Helpers` in namespaces the caller doesn't import | BC30451 |\n| `As New Worker()`, `As Worker = New Worker()`, `Dim w = New Worker()` | `Worker.Save` |\n| `CsRules.IsLocked(1)` and `csrules.islocked(1)` from VB | the C# method |\n| `.Save()` in `With w` | `w.Save` |\n| `handler(1)`, `handler` a local delegate | the delegate |\n\n`watch.py` now forwards `owner`, `full_name`, `accepted_arities` and `namespace` to the context nodes of unchanged files (#2406). Without them, an unchanged `Helpers.vb` reached the resolver with no owner. This has two side effects: the existing partial-type resolver now works on incremental rebuilds too, and `_resolve_csharp_qualified_calls` binds the same as a full build on an incremental rebuild. With `Svc` in both `Alpha` and `Beta` and a caller with `using Beta`, v8 bound an incremental rebuild to `Alpha.Svc.Save`, and now binds `Beta.Svc.Save`. Only the VB resolver and that C# resolver read `metadata.namespace`.\n\n`_AST_CACHE_SCHEMA` goes from 17 to 18. #4567 and #4572 bump the same line from 17 to 18, so whichever lands later needs 19.\n\n**Before** (the issue's repro, `extract --code-only --force`):\n\n```text\nA_SameFileSelf -> B_Target()   EXTRACTED\n.G_CsToVb      -> LogIt()      EXTRACTED\n```\n\n**After:**\n\n```text\nA_SameFileSelf      -> B_Target()    EXTRACTED\nC_UnqualifiedModule -> LogIt()       EXTRACTED  call\nD_QualifiedModule   -> LogIt()       EXTRACTED  call\nE_TypedLocal        -> Save()        INFERRED   call\nF_CsStatic          -> .IsLocked()   EXTRACTED  call\n.G_CsToVb           -> LogIt()       EXTRACTED  call\n```\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nA VB.NET call gets a `calls` edge exactly when the VB compiler's lookup gives one target in the corpus, and never to a target the compiler would not pick.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. New raw-call fields, a resolver, four metadata keys forwarded in `watch.py`, and a cache schema bump. No id, graph format or manifest change. Reverting restores v8 output after one re-extract.\n\n**Blast Radius:** moderate. VB.NET graphs gain many `calls` edges, so `affected`, `path`, `explain`, god nodes and communities change for VB projects. Two kinds of wrong v8 edges go away (`With` blocks, local delegates). C# changes only on incremental rebuilds, where it now matches a full build. Bumping `_AST_CACHE_SCHEMA` invalidates the whole AST cache, so the first forced run after upgrading re-extracts every code file once.\n\n**Limitations**\n\n- A receiver typed by a field (`Private _w As Worker`, then `_w.Save()`) is not tracked. Recorded as a strict xfail.\n- The target of a `With` block is not tracked, so `.Save()` gets no edge rather than `w.Save`. Recorded as a strict xfail.\n- Project-level `Imports` and `RootNamespace` from the `.vbproj` are not visible. This can only miss a Module, never pick a wrong one, because the compiler sees a superset of what graphify sees. Exception: in a corpus with several projects that don't reference each other, a Module from an unreferenced project can be bound.\n- `Shared` versus instance members are not modeled.\n- A C# target with overloads gets no edge from VB, because C# method nodes carry no arity.\n- Found while testing, separate bugs, recorded as strict xfails: the C# member resolver ignores arity when calling an overloaded VB Module (it bound the two-argument overload of `LogIt`), and nested VB types are not extracted at all.\n\n## How was this tested?\n\nNew tests in `tests/test_vbnet_extractor.py`, built on `extract()` with real files under `tmp_path`. They find nodes by label and file name, not by id. Each expected result comes from the compiler cases above.\n\n| Test | v8 | This PR |\n|---|---|---|\n| unqualified call reaches a Module Sub in another file | fail | pass |\n| module-qualified call reaches a Module in another file | fail | pass |\n| local typed `As New T()` / `As T = New T()` (×2) | fail | pass |\n| VB call reaches a C# static | fail | pass |\n| `LogIt` / `logit` / `LOGIT` all bind the Module | fail | pass |\n| incremental rebuild of only the caller keeps the edge (#2406) | fail | pass |\n| external base: unqualified and qualified Module call is INFERRED (×2) | fail | pass |\n| `.Save()` in a `With` block is not a call on the caller's own `Save` | fail: wrong edge | pass |\n| a local delegate call is not a call of a same-named method | fail: wrong edge | pass |\n| schema-17 cache entry is not served | fail | pass |\n| inferred local `Dim w = New Worker()` | fail | pass |\n| parameter typed `As Worker` | fail | pass |\n| Module through `Imports`, Module in an enclosing namespace | fail | pass |\n| edge confidence for each form (×4) | fail | pass |\n| inherited method reached | fail | pass |\n| lowercase VB call reaches a C# method | fail | pass |\n| own method wins; inherited method is never replaced by a Module | pass | pass |\n| class method hides the Module at any arity | pass | pass |\n| two Modules with the same name give no edge (×2) | pass | pass |\n| `As Object` receiver binds to nothing | pass | pass |\n| never binds a same-named Python function | pass | pass |\n| same-file and `Partial` calls keep their edges and context | pass | pass |\n| C# → VB Module call keeps its edge | pass | pass |\n| Module in a namespace that isn't imported is out of scope | pass | pass |\n| unqualified call never binds an unrelated class's method (VB, C#) | pass | pass |\n| field or nested class named like the Module hides it (×2) | pass | pass |\n| two `Helpers` in namespaces not imported give no edge | pass | pass |\n| property, field or delegate field named like the Sub hides it (×3) | pass | pass |\n| field-typed receiver | xfail | xfail (limitation) |\n| `With` block target | xfail | xfail (limitation) |\n| C# call to an overloaded VB Module picks by arity | xfail | xfail (separate bug) |\n| nested class named like the Module is the target | xfail | xfail (separate bug) |\n\nMost of the guards pass on v8 only because v8 binds no cross-file VB calls at all. They protect the new resolver. The three property/field guards failed on an earlier version of this branch, before the member check was added. The cache test fails with the schema set back to 17.\n\n```text\npytest tests/test_vbnet_extractor.py -q (new tests, on v8 86c57be8)   -> 22 failed, 26 passed, 4 xfailed\npytest tests/test_vbnet_extractor.py -q (this branch)                 -> 48 passed, 4 xfailed\npytest -q (full suite, --basetemp=/var/tmp)                           -> 8432 passed, 14 skipped, 4 xfailed\nruff check graphify/ tests/test_vbnet_extractor.py                    -> All checks passed\n```\n\nOne full-suite run had a single failure in `test_pr10_watch_overrides.py::test_ignored_root_configuration_still_rebuilds_the_graph[True]`, a PHP watcher test. It passed on the next full run and 8 out of 8 times alone, on both v8 and this branch.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4573/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4573/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4572",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4572/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4572/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4572/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4572",
+      "id": 5931666514,
+      "node_id": "PR_kwDOR4-pD88AAAABJbPKlw",
+      "number": 4572,
+      "title": "fix(json_config): link a package.json dependency's manifest entry to its ref node (#4569)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-19T21:13:27Z",
+      "updated_at": "2026-10-20T21:13:14Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4572",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4572",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4572.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4572.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4569. Each package.json dependency produced two nodes labelled `react` with no edge between them:\n\n- the manifest entry `<stem>_dependencies_react` (type code, carries the version-range line), reached through `dependencies --contains-->`;\n- the ref node `ref_react` (type concept), reached through `package.json --imports-->`. Code imports (`import React from \"react\"`) resolve here.\n\n5711e9d2 (#1764 follow-up) moved the `imports` edge from `key_nid` to `file_nid` so it would stop reading as `react --imports--> react`. That edge was the only link between the two nodes. On v8 the manifest entry is 4 hops from the code that imports the package, the two land in different communities, `explain react` exits 3 (\"Ambiguous: 'react' matches 2 nodes in package.json\"), and `affected react` prints \"No unique node match\".\n\nThe manifest entry now has a `declares` edge to the ref node and is labelled `name@range`:\n\n```diff\n elif parent_key in _DEP_KEYS and val_text.strip():\n     dep_nid = _make_id(\"ref\", key)\n     add_node(dep_nid, key, line, file_type=\"concept\")\n     add_edge(file_nid, dep_nid, \"imports\", line, context=\"import\")\n+    add_edge(key_nid, dep_nid, \"declares\", line)\n+    version = one line of val_text, capped at 40 chars (\"...\")\n+    relabel key_nid to f\"{key}@{version}\"   # only if its source_location is this line\n```\n\nThe ref node keeps the bare name that imports resolve to, so the two nodes no longer share a label: no `react -> react` edge, and `react` resolves to one node. A blank range (`\"   \"`) now behaves like `\"\"`: bare label, no ref, no edge. `_AST_CACHE_SCHEMA` goes from 17 to 18.\n\nThe relabel checks `source_location` because a key node id carries only the immediate parent key. In a v2 lockfile, `dependencies.semver` under two `node_modules/*` entries mints one node; `add_node` keeps the first, so relabelling every pair would put the later range on the first line (4 of 44 relabelled nodes on a 340-package lockfile).\n\n**Before** (the issue's package.json):\n\n```text\ndependencies --contains--> react [code]\npackage.json --contains--> dependencies\npackage.json --contains--> name\npackage.json --imports--> react [concept]\n```\n\n**After:**\n\n```text\ndependencies --contains--> react@^19.0.0 [code]\npackage.json --contains--> dependencies\npackage.json --contains--> name\npackage.json --imports--> react [concept]\nreact@^19.0.0 --declares--> react [concept]\n```\n\nI chose this after writing tests for the wanted behaviour and running four candidates against them:\n\n| | A: `declares` edge | A2: `references` edge | B: no key node | C: edge + `name@range` (this PR) |\n|---|---|---|---|---|\n| entry connected to importing code | yes | yes | yes | yes |\n| no edge between same-label nodes (#1764) | no | no | yes | yes |\n| `explain` / `affected` resolve `react` | no | no | yes | yes |\n| unimported devDependency not flagged isolated | yes | yes | no | yes |\n| existing tests pass | yes | yes | no (`test_extract_json_nested_contains`) | yes |\n\nA2 also makes `affected` list the manifest line as a consumer, since `references` is in `DEFAULT_AFFECTED_RELATIONS`. `declares` is not, and nothing in graphify whitelists relation names.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nA package.json dependency's manifest entry is connected to the code that imports the package, and no edge joins two nodes with the same label.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. One edge and one relabel in the `_DEP_KEYS` branch, plus a cache schema bump. No id changes. Reverting restores v8 output after one re-extract.\n\n**Blast Radius:** moderate. Every manifest entry under a dependency block changes label (`react` becomes `react@^19.0.0`), and anything keyed on that label sees the new text. The ref node keeps `react`, so searching for the package still finds it. Bumping `_AST_CACHE_SCHEMA` invalidates the whole AST cache, so the first forced run after upgrading re-extracts every code file once.\n\n**Limitations**\n\n- A v2 `package-lock.json` already takes this path on v8 (its top-level `dependencies` key makes it config JSON). Its nested entries get the new label and edge too: 99 `declares` edges on a 340-package lockfile. v3 lockfiles are skipped as data JSON. I did not change `_is_config_json`.\n- npm reads `\"\"` and `\"   \"` as `*`. graphify has never linked `\"\"`, unchanged here; `\"   \"` used to mint `ref_react` and an `imports` edge and now matches `\"\"`.\n- A small community named after its hub can now carry a range, e.g. `left-pad@workspace:*`.\n- Obsidian note names drop the caret (`react@19.0.0.md`); the existing numeric-suffix dedup handles collisions.\n- With two package.json files, each manifest's ref id is file-qualified (`a_package_json_ref_react`) while code imports a separate `ref_react`, so in a monorepo the manifest and the code still don't connect. Separate bug, recorded as a strict xfail.\n- The issue says the `@types/*` key nodes show as isolated. On v8 they are already exempt (#4205); the flagged node is the ref node, which this PR now connects.\n\n## How was this tested?\n\nNew tests in `tests/test_extract.py`, next to the existing json_config tests. The build-level tests run `extract` + `build_from_json` on a package.json and a `.tsx` that imports `react`. The manifest entry is found by structure (`contains` from the dependency block), not by label, so a relabel can't pass them on its own.\n\n| Test | v8 | This PR |\n|---|---|---|\n| entry within 2 hops of the importing code | fail: 4 hops | pass |\n| every dependency block (×4) | fail | pass |\n| stale cache entry not served (fails with schema 17) | fail | pass |\n| one node labelled with the bare name | fail: 2 | pass |\n| `explain` / `affected` resolve the package name | fail: ambiguous | pass |\n| unimported devDependency not reported isolated | fail | pass |\n| label carries a one-line capped range (×8) | fail | pass |\n| blank range: bare name, no ref, no edge | fail | pass |\n| key shared by two sibling blocks labelled with the range on its own line | fail | pass |\n| no same-label `imports`, no self-loop | pass | pass |\n| no edge of any relation between same-label nodes | pass | pass |\n| `utils` dependency stays a namespaced `ref_` | pass | pass |\n| declaring line recorded | pass | pass |\n| two manifests keep their own lines | pass | pass |\n| non-dependency keys unchanged | pass | pass |\n| ref node keeps the bare name | pass | pass |\n| empty range unchanged | pass | pass |\n| non-string values unchanged | pass | pass |\n| two-manifest corpus reaches its entry | xfail | xfail (strict) |\n\nThe ones that pass on v8 guard #1764, J-4 and existing output.\n\n```text\npytest tests/test_extract.py -q (new tests, on v8 86c57be8)   -> 19 failed, 9 passed, 1 xfailed (new tests only)\npytest tests/test_extract.py -q (this branch)                 -> 371 passed, 1 xfailed\npytest -q (full suite, --basetemp=/var/tmp)                   -> 8420 passed, 14 skipped, 1 xfailed\nruff check graphify/extractors/json_config.py graphify/cache.py tests/test_extract.py -> All checks passed\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4572/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4572/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4568",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4568/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4568/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4568/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4568",
+      "id": 5927259887,
+      "node_id": "PR_kwDOR4-pD88AAAABJXtYLw",
+      "number": 4568,
+      "title": "fix(hooks): try python before python3 under Git for Windows so the Store alias never runs (#4563)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-19T16:04:19Z",
+      "updated_at": "2026-10-20T22:14:54Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4568",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4568",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4568.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4568.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4563. When the hook's interpreter probes 1 to 4 all miss, its last resort tried `python3` before `python`. On Windows 10/11, `python3` is usually the Microsoft Store App Execution Alias in `%LOCALAPPDATA%\\Microsoft\\WindowsApps`, because python.org's installer ships `python.exe` but no `python3.exe`. Running the alias opens a console window for about 1.1 s and exits 9009. The hook then falls through to the real `python`, so it works, but every commit, checkout and merge flashes a window and blocks before the detached rebuild starts.\n\nThe last resort is reached when the pinned interpreter, `.graphify_python`, the launcher and the uv-tools scan all miss: a removed venv, graphify moved to another env, or a GUI client with a minimal PATH.\n\nUnder Git for Windows the last resort now tries `python` first. The Windows check is the one `hooks.py` already uses for its pipe-handle handling.\n\n```diff\n # Last resort: try python3 / python (works for system/venv installs on PATH).\n+# Under Git for Windows `python3` is usually the Microsoft Store App Execution Alias\n+# ... Try `python` first there (#4563).\n if [ -z \"$GRAPHIFY_PYTHON\" ]; then\n-    if command -v python3 >/dev/null 2>&1 && python3 -c \"$_GFY_PROBE\" 2>/dev/null; then\n-        GRAPHIFY_PYTHON=\"python3\"\n-    elif command -v python >/dev/null 2>&1 && python -c \"$_GFY_PROBE\" 2>/dev/null; then\n-        GRAPHIFY_PYTHON=\"python\"\n+    if [ -n \"${WINDIR:-}\" ] || [ -n \"${MSYSTEM:-}\" ]; then\n+        _GFY_FIRST=\"python\"; _GFY_SECOND=\"python3\"\n+    else\n+        _GFY_FIRST=\"python3\"; _GFY_SECOND=\"python\"\n+    fi\n+    if command -v \"$_GFY_FIRST\" >/dev/null 2>&1 && \"$_GFY_FIRST\" -c \"$_GFY_PROBE\" 2>/dev/null; then\n+        GRAPHIFY_PYTHON=\"$_GFY_FIRST\"\n+    elif command -v \"$_GFY_SECOND\" >/dev/null 2>&1 && \"$_GFY_SECOND\" -c \"$_GFY_PROBE\" 2>/dev/null; then\n+        GRAPHIFY_PYTHON=\"$_GFY_SECOND\"\n     else\n```\n\nProbes 1 to 4, the probe command, the interpreter names, the \"could not locate a Python\" message and `exit 0` are unchanged. All four generated hooks splice in the same `_PYTHON_DETECT`, so one edit covers post-commit, post-checkout, post-merge and post-rewrite.\n\nI did not take the issue's second suggestion, skipping a `python3` under `*/WindowsApps/*`. A real Store Python also lives there, so skipping it would remove the last resort for Store-Python users.\n\n**Before** (v8 probe block, a fake `WindowsApps/python3` that logs, sleeps 1 s and exits 9009, ahead of a real `python`):\n\n```text\ncalls:  python3 (stub), python\nchose:  python          1.07 s\n```\n\n**After** (`MSYSTEM=MINGW64`):\n\n```text\ncalls:  python\nchose:  python\n```\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nUnder Git for Windows, the hook never runs `python3` while `python` can import graphify. Everywhere else the probe order is unchanged.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. A probe-order change inside a generated hook script. No schema, cache or file-format change. Existing installs pick it up on the next `graphify hook install`.\n\n**Blast Radius:** narrow. Only the last-resort branch changes, and only when `WINDIR` or `MSYSTEM` is set. Linux and macOS keep `python3` then `python`. If `WINDIR` or `MSYSTEM` leaks into a non-Windows shell (for example WSL with `WSLENV`), the only effect is that `python` is tried before `python3`.\n\n**Limitations**\n\n- Not run on Windows. The behavioural tests use `sh`-script fakes and skip on `nt`. The reporter's measurements (about 1.1 s, exit 9009, one `AppInstallerPythonRedirector.exe` per call) are the Windows evidence.\n- Hooks already installed keep the old order until `graphify hook install` is run again.\n- If `python` is itself a Store stub (no real Python on PATH), it still runs once before the warning.\n- If `python` lacks graphify, `python3` is still probed after it.\n\n## How was this tested?\n\nNew tests in `tests/test_hooks.py`. They run the emitted `_PYTHON_DETECT` under a real `sh`, with a temp `HOME` so probes 1 to 4 miss, and only two fake directories on PATH: `WindowsApps/python3` and `bin/python`. Each fake logs its call.\n\n| Test | v8 | This PR |\n|---|---|---|\n| `test_windows_never_runs_the_store_python3_alias_when_python_works` [msystem] | fail: calls `python3, python` | pass: calls `python` |\n| `test_windows_never_runs_the_store_python3_alias_when_python_works` [windir] | fail: same | pass |\n| `test_windows_falls_back_to_python3_when_python_lacks_graphify` | fail: calls `python3` | pass: calls `python, python3`, picks `python3` |\n| `test_outside_windows_python3_is_still_tried_first` | pass | pass |\n| `test_windows_with_no_working_python_still_fails_loudly_and_exits_zero` | pass | pass |\n| `test_every_hook_embeds_the_probe_chain_unchanged` (4 hooks) | pass | pass |\n\nThe ones that pass on v8 guard existing behaviour: the Linux/macOS order, the warning path, and that every hook carries the tested block.\n\nThe same block also ran under `dash` (`debian:stable-slim`) and BusyBox ash (`alpine:3.20`) with podman. Both parse it, and both give the same call order as above, with and without `MSYSTEM`.\n\n```text\npytest tests/test_hooks.py -q (new tests, on v8 86c57be8)          -> 3 failed, 6 passed\npytest tests/test_hooks.py -q (this branch)                        -> 181 passed\npytest -q (full suite, --basetemp=/var/tmp)                        -> 8401 passed, 14 skipped\nruff check graphify/hooks.py tests/test_hooks.py                   -> All checks passed\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4568/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4568/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4567",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4567/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4567/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4567/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4567",
+      "id": 5926533281,
+      "node_id": "PR_kwDOR4-pD88AAAABJXIHxg",
+      "number": 4567,
+      "title": "fix(rust): name a use rooted at a sibling mod so it reaches its declaration (#4564)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-10-19T15:14:47Z",
+      "updated_at": "2026-10-20T18:05:37Z",
+      "closed_at": "2026-10-20T18:05:37Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4567",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4567",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4567.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4567.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4564. A Rust `use` rooted at a child module declared beside it, such as `pub use item::Invoice;` next to `mod item;`, left its `imports_from` edge dangling. Build then minted an `external` stub `invoice`, and `affected` and `explain` tied on it.\n\nThe #4439 fix lends `_rewire_unique_stub_nodes` a temporary node for every edge that carries `_rust_use_name`. `name_use` sets that only when the path's first segment is `crate`, `self` or `super`, so that `use serde::Serialize` never lands on a corpus `Serialize` (5faa05c8). `item::Invoice` starts with `item`, which looks the same as `serde::` to that check, so it got no lent node.\n\nRust settles which one a first segment means. A `mod` declared in the same scope shadows a crate of the same name, and only a leading `::` reaches the crate. Checked with `cargo check` on rustc 1.95.0, using a stand-in `serde` crate:\n\n| Code | Result |\n|---|---|\n| `mod serde { … }` + `use serde::Serialize;`, same scope | E0432 |\n| `mod serde;` (file module) + `use serde::Serialize;` | E0432 |\n| `mod serde` + `use ::serde::Serialize;` | compiles, reaches the crate |\n| top-level `mod serde` + `mod tests { use serde::Serialize; }` | compiles, reaches the crate |\n\nSo the rule is exact: a first segment that names a sibling `mod_item` is this crate's, unless the path starts with `::`.\n\n```diff\n use_declaration\n+  scope_mods = names of mod_item siblings of this use     # either order; an inline mod is its own scope\n   name_use(written, path)\n-    if first segment in (crate, self, super)\n+    if first segment in (crate, self, super)\n+       or (first segment in scope_mods and path does not start with \"::\")\n       edge._rust_use_name = written\n```\n\n`_AST_CACHE_SCHEMA` goes from 17 to 18, so a cached 0.9.92 result without the name is not served.\n\n**Before** (the issue's four files, `extract --code-only --cargo --force`, `cluster-only`):\n\n```text\ngraph.json   NODE invoice  type=external  source_file=''\n             EDGE src_model -> invoice\naffected Invoice   No unique node match for Invoice                      (exit 0)\nexplain Invoice    Ambiguous: 'Invoice' matches 2 nodes in different files.   (exit 3)\n```\n\n**After:**\n\n```text\ngraph.json   EDGE src_model -> src_model_item_invoice    (no external node)\naffected Invoice   Affected nodes for Invoice …\nexplain Invoice    Node: Invoice  ID: src_model_item_invoice  Source: src/model/item.rs L1\n```\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nA Rust `use` reaches its declaration whenever Rust resolves the path inside this crate. A path Rust resolves to another crate never lands on a corpus declaration.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. One extra condition in `name_use` and a cache schema bump. No graph format, id or manifest change. Reverting restores v8 behaviour. The schema bump costs one re-extract of cached Rust files on the next forced run.\n\n**Blast Radius:** narrow. Only Rust `use` edges rooted at a sibling `mod` change, and only from a dangling stub to the real declaration. `use` paths rooted at `crate`, `self`, `super`, `::` or an outside crate behave as on v8. Bumping `_AST_CACHE_SCHEMA` invalidates the whole AST cache, not only Rust entries, so the first forced run after upgrading re-extracts every code file once.\n\n**Limitations**\n\n- An incremental `graphify extract` (no `--force`) skips a file whose content hash matches `manifest.json` before it reads the AST cache (`detect_incremental`). The schema bump never reaches those files, so an existing graph keeps the stub until `--force` or an edit to the file. The same is true of every schema bump, #4439's included, because the manifest does not record the extractor version or schema.\n- `_make_id(\"Invoice as Bill\")` puts the alias in the raw target id (`invoice_as_bill`), for `crate::`, `self::` and bare paths alike. The rewire hides it whenever it resolves the edge. Not changed here.\n- A `use` inside a fn body gets no edge (the extractor does not visit fn bodies), and `r#item` paths are not matched. Both are unchanged from v8.\n- In `pub use item::{self as items, Invoice};`, `Invoice` lands, but the `self as items` binding names a module, which has no declaration node, so it stays a stub as on v8.\n\n## How was this tested?\n\n15 new tests in `tests/test_rust_use_trees.py`, next to the #4439 tests:\n\n| Test | v8 | This PR |\n|---|---|---|\n| `test_a_use_rooted_at_a_child_mod_lands_on_the_declaration` [plain, use_first, pub_crate, rename, self_alias_group] | 5 fail | pass |\n| `test_the_issue_repro_builds_without_an_external_stub` (build level) | fail | pass |\n| `test_a_group_and_a_nested_path_from_a_child_mod_land_on_the_declarations` | fail | pass |\n| `test_a_use_of_a_mod_declared_inline_lands_on_the_declaration` | fail | pass |\n| `test_a_use_rooted_at_a_local_mod_named_like_a_crate_lands_on_the_local_declaration` | fail | pass |\n| `test_a_cache_entry_from_before_child_mod_names_is_not_served` | fail | pass |\n| `test_a_use_of_another_crate_still_does_not_land_on_a_same_named_declaration` [leading_colons, inner_scope, outside_crate] | pass | pass |\n| `test_a_second_import_of_the_same_item_does_not_change_the_result` | pass | pass |\n| `test_two_types_with_one_name_stay_two_nodes_and_are_not_swapped` | pass | pass |\n\nThe five that pass on v8 guard the serde concern, the second-import case that can hide this bug in larger repos, and two distinct `Invoice` types that must not be cross-linked. The cache test fails on this branch with the schema set back to 17 (`assert ['invoice'] == ['src_model_item_invoice']`) and passes with 18.\n\n```text\npytest tests/test_rust_use_trees.py -q (new tests, on v8 86c57be8)    -> 10 failed, 5 passed\npytest tests/test_rust_*.py -q (this branch)                          -> 98 passed\npytest -q (full suite, --basetemp=/var/tmp)                           -> 8407 passed, 14 skipped\nruff check graphify/extractors/rust.py graphify/cache.py tests/test_rust_use_trees.py -> All checks passed\n```\n\nA separate session that did not write the fix also ran 20 end-to-end cases (`extract`, `cluster-only`, `affected`, `explain`) against v8 and this branch, with `cargo check` as ground truth for each. Fixed: the issue's repro, the `use` before the `mod`, a group, a nested path, an inline `mod`, `pub(crate) use` and `as Bill`. Unchanged and never landing on a corpus `Serialize`: `use ::serde::Serialize;`, `use ::serde::{Serialize};` (the group binding reaches `name_use` as `::serde::Serialize`), the `mod tests` inner scope and a plain `use serde::Serialize;`.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4567/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4567/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4565",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4565/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4565/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4565/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4565",
+      "id": 5923668398,
+      "node_id": "PR_kwDOR4-pD88AAAABJU0PkQ",
+      "number": 4565,
+      "title": "fix(extract): let the model acknowledge empty files so they don't arm the shrink guard (#4547)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-19T12:15:58Z",
+      "updated_at": "2026-10-20T20:44:34Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4565",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4565",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4565.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4565.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4547. A file the model read and found empty (a `robots.txt`, an HTML shell, a short compose file) failed `graphify extract` on every run, the same way a file the model skipped does.\n\nA file sent for semantic extraction counts as covered only if a returned node has it as `source_file`. Zero nodes puts it in `uncovered_files`, which sets `_extraction_incomplete`. That turns off `force`, so any run where the graph shrinks is refused and exits non-zero. The response format has only `nodes`, `edges` and `hyperedges`, so the model has no way to say \"read it, nothing here.\" A retry sends the same file and gets the same answer.\n\nA file the model read and found empty also failed a second way. A chunk holding only that file got an empty response, which `_response_is_hollow` treats as hollow. It was retried at 2 s and 8 s, then marked partial, which also arms the guard.\n\nWhat changes, per file sent:\n\n| Model's response for the file | v8 | This PR |\n|---|---|---|\n| nodes | covered | covered |\n| no nodes, listed with `entities: 0` | uncovered, guard armed | `empty_files`, guard not armed |\n| no nodes, not listed | uncovered | uncovered |\n| no nodes, listed with `entities > 0` | uncovered | uncovered |\n| no `files` key at all | uncovered | uncovered |\n| in a truncated or hollow chunk | partial | partial, whatever it says |\n\n```diff\n _EXTRACTION_SYSTEM schema\n-{\"nodes\":[...],\"edges\":[...],\"hyperedges\":[...],\"input_tokens\":0,\"output_tokens\":0}\n+{\"nodes\":[...],\"edges\":[...],\"hyperedges\":[...],\"files\":[{\"path\":\"relative/path\",\"entities\":0}],...}\n\n _extract_with_adaptive_retry\n   result = extract_files_direct(chunk)\n+  _take_acks(result)        # keep 0-entity acks for paths in THIS chunk -> _empty_files\n+                            # acks name only some files and no items -> hollow, normal retry\n\n _response_is_hollow\n-  return not nodes and not edges and not hyperedges\n+  no items and every acknowledged file has entities == 0 -> not hollow\n\n extract_corpus_parallel\n-  uncovered = dispatched - covered\n+  empty_files = (dispatched - covered) & acked_empty - partial\n+  uncovered   = dispatched - covered - empty_files\n```\n\nThe CLI also writes the full uncovered list to `graphify-out/uncovered_files.txt`, with paths relative to the corpus root, and removes a stale copy at the start of the next extract. Before this, the warning named five files and \"+N more\", and the rest were only in memory. The llm.py warning no longer says a re-run will retry the files. They are re-sent every run, but with the same `--token-budget` the model usually skips the same ones.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nOnly a file the model left out, or one from a truncated or hollow chunk, arms the shrink guard. A file the model read and acknowledged as empty does not.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. `files` is optional and is read only by the coverage check. It is popped before anything reaches the cache or `graph.json`. A response without it behaves exactly as on v8. Reverting the commit restores the old behaviour, and no stored data needs migrating.\n\n**Blast Radius:** moderate. Every semantic extraction prompt gains the `files` rule, so each response gets slightly longer (one short entry per file). Runs that failed only because of empty files now write the graph. The guard now trusts a model's 0 for a file that comes back with no nodes.\n\n**Limitations**\n\n- If the model writes nodes for some files and falsely lists the others as `entities: 0`, those files won't arm the guard. The case in #4547 (files never mentioned) is still caught.\n- If a large document is split into slices and one slice acknowledges 0 while another slice is never mentioned, the file counts as empty.\n- `references/extraction-spec.md` has no `files` rule, so skill-driven extraction is unchanged.\n- Empty files are still re-sent on every run. #2927 deliberately keeps zero-node results out of the semantic cache, and I left that rule alone. Caching an acknowledged 0 can be a follow-up if wanted.\n\n## How was this tested?\n\nNew file `tests/test_empty_file_ack.py`, 11 tests. They patch out the model call and the hollow-retry sleep, so they make no network calls and run in about a second.\n\n| Test | v8 | This PR |\n|---|---|---|\n| acknowledged-empty file is not uncovered | fail | pass |\n| chunk with only an empty file succeeds, no retry | fail | pass |\n| files-only response is not hollow; empty and junk `files` still are | fail | pass |\n| `extract` keeps `force=True` when an empty file is acknowledged | fail | pass |\n| `uncovered_files.txt` holds every path, removed on a clean run | fail | pass |\n| unacknowledged file stays uncovered | pass | pass |\n| no `files` key behaves as before | pass | pass |\n| `entities > 0` with no node stays uncovered | pass | pass |\n| ack for a path outside the chunk is ignored | pass | pass |\n| truncated chunk that acknowledges stays partial | pass | pass |\n| files-only response that misses a file is still hollow | pass | pass |\n\nThe six that pass on v8 guard the existing behaviour.\n\n```text\npytest tests/test_empty_file_ack.py -q (on v8 86c57be8)                     -> 5 failed, 6 passed\npytest tests/test_empty_file_ack.py -q (this branch)                        -> 11 passed\npytest tests/test_empty_file_ack.py tests/test_chunking.py \\\n       tests/test_hollow_chunks_arm_shrink_guard.py -q                       -> 51 passed\npytest -q (full suite, --basetemp=/var/tmp)                                  -> 8403 passed, 14 skipped\nruff check graphify/llm.py graphify/cli.py tests/test_empty_file_ack.py     -> All checks passed\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4565/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4565/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4521",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4521/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4521/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4521/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4521",
+      "id": 5898688471,
+      "node_id": "PR_kwDOR4-pD88AAAABJBVDRw",
+      "number": 4521,
+      "title": "fix: keep a wiki page relabelled only by case (#4508)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-17T13:13:14Z",
+      "updated_at": "2026-10-17T13:21:20Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4521",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4521",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4521.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4521.patch",
+        "merged_at": null
+      },
+      "body": "Fixes #4508. A community relabelled only by case keeps its wiki article on case-insensitive filesystems.\r\n\r\n## Summary\r\n\r\nOn APFS (macOS) and NTFS (Windows), `groups.md` and `Groups.md` are one file. When a community's label changes from `groups` to `Groups`, the export writes into the existing entry, and the entry keeps its old case. The end-of-run orphan sweep compared names case-sensitively, so it deleted the page the run had just written.\r\n\r\n```mermaid\r\nflowchart LR\r\n  subgraph Before\r\n    B1[\"write Groups.md<br/>(lands in groups.md)\"] --> B2{\"sweep: 'groups.md' in produced?\"}\r\n    B2 -- \"no (case differs)\" --> B3[\"unlink groups.md<br/>index.md links to missing file\"]\r\n  end\r\n  subgraph After\r\n    A1[\"write Groups.md<br/>(lands in groups.md)\"] --> A2{\"sweep: same device+inode<br/>as a produced page?\"}\r\n    A2 -- yes --> A3[\"keep, rename to Groups.md\"]\r\n    A2 -- no --> A4[\"unlink stale page\"]\r\n  end\r\n```\r\n\r\nThe sweep now matches files by identity (device and inode) instead of by name. A page this run wrote is kept, and its entry is renamed to the produced case. A stale page that is a separate file is still removed. Case-folding the names was the other option in the issue. It was rejected because on Linux `groups.md` and `Groups.md` are two real files, so folding would keep a stale page.\r\n\r\nChanged: `graphify/wiki.py` (the sweep block plus a `_file_id` helper, 21 lines added, 1 removed). New: `tests/test_wiki_case_only_relabel.py` (2 tests).\r\n\r\n## Evidence\r\n\r\n- **Before:** `to_wiki` relabel `groups` → `Groups` on upstream `v8`:\r\n  `['Groups.md', 'index.md', 'other.md']`, but `Groups.md` is not a readable file. `index.md` links to it.\r\n  The test `test_case_only_relabel_keeps_article_on_case_insensitive_fs` fails with `AssertionError` on `Groups.md` `is_file()`.\r\n- **After:** same run on this branch: `Groups.md` is readable and `index.md` links to it. Test passes.\r\n\r\n```text\r\nupstream v8        test_case_only_relabel_keeps_article_on_case_insensitive_fs   FAILED\r\n                   test_case_only_relabel_drops_old_page_on_case_sensitive_fs     passed\r\nthis branch        test_case_only_relabel_keeps_article_on_case_insensitive_fs   passed\r\n                   test_case_only_relabel_drops_old_page_on_case_sensitive_fs     passed\r\nwiki suites (test_wiki, link_filename_parity, idempotent_writes, path_length)  70 passed, 3 skipped\r\nfull suite (tests/)                                                             8394 passed, 14 skipped, 0 failed\r\nruff check graphify/wiki.py + new test                                          All checks passed\r\n```\r\n\r\nThe case-insensitive test simulates APFS and NTFS with a symlink, because the test machine runs Linux. The test helper `_case_insensitive_write` documents this.\r\n\r\n## Merge Danger\r\n\r\n**Door:** two-way. The change touches only the orphan sweep. No file format, schema or cache key changes. Reverting restores the name-based sweep.\r\n\r\n**Blast radius:** wiki export (`to_wiki`). It runs on every `graphify` export that writes a wiki. Output is unchanged unless a case-only relabel happens. The sweep now calls `stat` on each `*.md` in the wiki folder, which is one extra call per page. A stat failure on a dangling symlink still removes the link as before.\r\n\r\n## What does this PR do?\r\n\r\nFixes #4508.\r\n\r\nOn a case-insensitive filesystem, a relabel that changes only case used to delete the new article and leave `index.md` pointing at it. The sweep now keeps any page this run wrote, even when its on-disk name has the old case, and renames the entry to the new case.\r\n\r\n- Single-case runs are unchanged. Each produced page still gets one file.\r\n- A stale page that is a different file is still removed on every platform.\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [ ] Security fix\r\n\r\n## Verification & Invariants\r\n\r\nInvariant: after an export, every page `index.md` links to exists, and the sweep never deletes a page the run wrote.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** that fails on upstream `v8` and passes here.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented **limitations / unsupported cases** explicitly.\r\n\r\n## How was this tested?\r\n\r\n```text\r\nPYTHONPATH=/var/tmp/wt-4508 .venv/bin/python -m pytest -p no:cacheprovider --basetemp=/var/tmp/... -q tests/test_wiki_case_only_relabel.py\r\n  -> 2 passed (this branch); 1 failed, 1 passed (upstream v8)\r\nfull suite: 8394 passed, 14 skipped, 0 failed\r\n```\r\n\r\n## Limitations\r\n\r\n- Not run on a real APFS or NTFS volume. The test simulates one with a symlink.\r\n- Windows `st_ino` values were not checked on Python 3.14. On Windows the sweep relies on device and inode numbers that Python reports for each file.\r\n- `to_obsidian` has a similar case-only collision (#2650). This PR does not change it.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [ ] I updated generated skill artifacts. N/A: no skill fragments changed.\r\n- [x] AST/structural extraction is deterministic. N/A: wiki export only.\r\n- [x] I reviewed security implications: no shell or Python interpolation added.\r\n- [x] No API keys or local-only graph data are included.\r\n- [ ] I disclosed AI authorship in my commit messages. N/A: no AI attribution in the commits.\r\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4521/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4521/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4520",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4520/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4520/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4520/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4520",
+      "id": 5898299288,
+      "node_id": "PR_kwDOR4-pD88AAAABJBB8qg",
+      "number": 4520,
+      "title": "fix: same-named files from two repos are not one file in explain and path (#4512)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-10-17T12:25:42Z",
+      "updated_at": "2026-10-20T18:06:34Z",
+      "closed_at": "2026-10-20T18:06:34Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4520",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4520",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4520.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4520.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4512.\n\nIn a merged multi-repo graph, two nodes can share a label and a repo-relative `source_file`, for example `web/dup.py` and `ml/dup.py`. Both appear as `dup.py`. The same-file check used the bare `source_file`, so the two nodes counted as one file. `explain` and `path` then refused with \"matches 2 nodes in dup.py\", listed bare `L1` lines, and gave a hint that could not tell the candidates apart.\n\nThis PR makes a file the pair (repo, source_file). The refusal names each candidate's file with its repo, and when the same path exists in more than one repo, the hint says so and asks for the full node id.\n\n```text\n_rivals_across_files(tier)\n  before: key = source_file           -> web/dup.py and ml/dup.py collapse to \"dup.py\"\n  after:  key = (repo, source_file)   -> two files, cross-file branch\n\n_ambiguity_message(...)\n  repos differ        -> list \"web/dup.py\", \"ml/dup.py\"\n  same path, 2 repos  -> hint: \"the same path exists in more than one repo ...\"\n  otherwise           -> unchanged\n```\n\n- A repo is shown in the refusal only when the candidates span more than one repo.\n- Single-repo graphs (no `repo` attribute) keep the old wording.\n- Same-file duplicates keep the old same-file branch.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nA same-named file from two repos is never silently merged into one file. A single-repo graph gives the same refusal text as before.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added **regression tests** that fail on the code before this change.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. Only the wording of one refusal and the file key used to detect ambiguity change. No schema, cache or file-format change. Reverting restores the old wording.\n\n**Blast Radius:** ambiguity refusals in merged graphs. `_resolve_single_node` is shared, so `explain`, `path`, and the `get_node` and `get_neighbors` tools all show the new wording. `query` and `--seed` are not changed here. Single-repo output is unchanged.\n\n**Limitations**\n\n- `query` and `--seed` still answer silently for same-named files from two repos. That is tracked by the #4511 fix, which is a separate PR.\n- Repo-qualified paths such as `web/dup.py::Config` do not resolve. The refusal does not suggest them; it gives the node id.\n- A graph where some nodes have a `repo` attribute and others do not is not covered by tests.\n\n## How was this tested?\n\n`tests/test_same_basename_repos.py` (5 tests). Before the fix, 3 fail: the explain message, the explain hint, and the path message. The node-id lookup and the single-repo wording pass before and after.\n\nRepro: two repos, each with `dup.py` defining `Config`, merged with `graphify merge-graphs`.\n\n```text\nbefore (upstream v8)\n  explain Config        exit 3   Ambiguous: 'Config' matches 2 nodes in dup.py.\n                                 L1 / id: web::dup_config / L1 / id: ml::dup_config\n  path Config Config    exit 3   same text as explain\n\nafter\n  explain Config        exit 3   Ambiguous: 'Config' matches 2 nodes in different files.\n                                 web/dup.py  id: web::dup_config\n                                 ml/dup.py   id: ml::dup_config\n                                 Retry with the full node id: the same path exists in more than one repo ...\n  path Config Config    exit 3   same text as explain\n```\n\n```text\ntests/test_same_basename_repos.py                                   5 passed\nrelated files (serve, explain_same_file_tie, path_cli, lookup, http) 248 passed\nfull suite                                                          8397 passed, 14 skipped, 0 failed\nruff check (changed files)                                          All checks passed\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4520/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4520/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4491",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4491/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4491/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4491/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4491",
+      "id": 5875089537,
+      "node_id": "PR_kwDOR4-pD88AAAABIutbkA",
+      "number": 4491,
+      "title": " fix(hooks): rebuild after cherry-pick, rebase and pull --rebase (#4490)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        },
+        {
+          "id": 12626523901,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2_Q",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/needs:title",
+          "name": "needs:title",
+          "color": "fbca04",
+          "default": false,
+          "description": "PR title should follow the conventional-commit format",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 3,
+      "created_at": "2026-10-15T22:44:50Z",
+      "updated_at": "2026-10-16T18:02:10Z",
+      "closed_at": "2026-10-16T18:02:10Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4491",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4491",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4491.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4491.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4490. After a clean `git cherry-pick`, a `git rebase` or a `git pull --rebase`, the hooks never launched a rebuild, so `graph.json` described the old code until the next plain commit.\n\nThere are two causes:\n- **Cherry-pick.** `post-commit` exited on `CHERRY_PICK_HEAD`, which git leaves on disk while the hook runs. This is the same trap as `MERGE_HEAD` in #4463.\n- **Rebase.** `post-commit` and `post-checkout` skip while `rebase-merge/` exists, and no hook rebuilt at the end.\n\n**Before** (the issue's repro, v8 `10130e79`):\n\n```text\ngit cherry-pick side   -> 0 rebuilds\ngit rebase main        -> 0 rebuilds\ngit commit (control)   -> 1 rebuild\n```\n\n**After:**\n\n```text\ngit cherry-pick side   -> 1 rebuild\ngit rebase main        -> 1 rebuild\ngit commit (control)   -> 1 rebuild\n```\n\n```text\npost-commit:\n  drop the CHERRY_PICK_HEAD exit\n  if sequencer/todo exists and its first line is the commit just made:\n    more than one step left  -> skip (mid range pick or revert)\n    last step                -> CHANGED = diff sequencer/head..HEAD   (one rebuild covers the range)\n  else: a stale sequencer/ (left by git reset --hard) is ignored -> normal HEAD~1 rebuild\n\npost-rewrite (new hook):\n  $1 = rebase -> launch an unscoped rebuild, like post-merge\n  $1 = amend  -> exit (post-commit already rebuilt)\n  no rebase-merge check: rebase-merge/ is still on disk when post-rewrite runs\n```\n\nWhy only the last step rebuilds: if `graphify-out/graph.json` is tracked, a rebuild between picks rewrites it, and git then refuses a later pick that touches it (`Your local changes ... would be overwritten by merge: graphify-out/graph.json`). Just dropping the `CHERRY_PICK_HEAD` check hit exactly that.\n\n```diff\n graphify/hooks.py\n   _HOOK_SCRIPT (post-commit)\n-    [ -f \"$GIT_DIR/CHERRY_PICK_HEAD\" ] && exit 0\n+    sequencer/todo check: skip mid-sequence, last step diffs from sequencer/head,\n+    stale sequencer/ ignored\n+  _REWRITE_SCRIPT (new), _REWRITE_HOOK_MARKER / _END\n   install / uninstall / status\n+    post-rewrite, same append/preserve handling as the other hooks\n graphify/__main__.py\n   hook install help line names post-rewrite\n```\n\n### Existing tests this PR changes\n\n| Test | Before | Now | Why |\n|---|---|---|---|\n| `test_hooks_reuse_git_dir_from_env` | every script in `_HOOK_SCRIPTS` must contain `GIT_DIR=${GIT_DIR:-` | required only when the script reads `$GIT_DIR` | the new post-rewrite hook never reads `$GIT_DIR`; adding an unused line would be dead code |\n| `_HOOK_SCRIPTS` parametrize list | 3 hooks | adds `post-rewrite` | the nohup, detach, worker-cap and quote-safety tests now cover the new hook too |\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nEvery git operation that changes the tree launches one rebuild when it finishes, and no hook rebuilds in the middle of a pick, revert or rebase sequence.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. Shell hook scripts and one new hook file. No schema, cache or file-format change.\n\n**Blast Radius:** narrow. This changes when the hooks launch a rebuild, not what a rebuild does:\n- A clean cherry-pick, a rebase and `pull --rebase` now rebuild once.\n- A range pick or revert rebuilds once at the end. A revert range used to rebuild after every step, with the same final graph.\n- Plain commits, amends, checkouts and merges behave as before.\n- `graphify hook install` now also writes `.git/hooks/post-rewrite`, appending to a user's existing one like the other hooks. `GRAPHIFY_SKIP_HOOK=1` turns it off.\n\n**Limitations**\n\n- `--skip` on the last pick and `--quit` still leave the graph stale, as on v8. git runs no hook when a sequence ends that way.\n- If you edit the commit message while resolving a pick, or revert a `Revert \"...\"` commit, the todo line no longer matches HEAD. That step is then treated as a stale sequencer and rebuilds mid-sequence. It never skips a rebuild. This comes from reading the logic, not a test.\n- Hooks already installed keep the old behaviour until `graphify hook install` is run again.\n- This PR doesn't touch `post-merge`. #4476 fixes that, and the two merge cleanly in either order. Merged together, the hook tests give 184 passed.\n\n## How was this tested?\n\nNew `tests/test_hooks_rewrite.py` runs real git operations against the installed hooks and counts rebuild launches. Four of its tests run a real build and check the graph contents. Against v8's hooks it gives 8 failed and 4 passed. The 4 that pass are behaviours v8 already gets right: the plain-commit control, amend, the tracked-graph sequence, and the abandoned pick. They're there to prove this PR doesn't break those cases.\n\n- `test_single_cherry_pick_rebuilds_once`, `test_range_cherry_pick_rebuilds_once`, `test_rebase_rebuilds_once`, `test_pull_rebase_rebuilds_once`, `test_conflicted_rebase_continues_and_rebuilds_once`\n- `test_range_cherry_pick_lands_every_new_function`, `test_skip_mid_range_rebuilds_the_picks_that_landed`, `test_revert_range_rebuilds_once_and_removes_the_functions`\n- `test_tracked_graph_range_pick_with_conflict_completes` (fails if a rebuild runs between picks)\n- `test_abandoned_range_pick_does_not_silence_later_commits` (a `sequencer/` left by `git reset --hard`)\n\n`tests/test_hooks.py` adds install, uninstall, status and append/preserve tests for post-rewrite. It also adds hook-level tests for the sequencer logic: skip mid-sequence, the diff from `sequencer/head` covering every picked file, and the stale-todo cases.\n\n```text\nPYTHONPATH=. .venv/bin/python -m pytest tests/test_hooks.py tests/test_hooks_rewrite.py -q   -> 183 passed\n  tests/test_hooks_rewrite.py against v8 hooks.py                                         -> 8 failed, 4 passed\nPYTHONPATH=. .venv/bin/python -m pytest -q                                                 -> 8087 passed, 14 skipped\nmerged with #4476: tests/test_hooks.py tests/test_hooks_rewrite.py                         -> 184 passed\n.venv/bin/ruff check graphify/hooks.py tests/test_hooks.py tests/test_hooks_rewrite.py     -> All checks passed\n```\n\nI also ran 12 hand-made edge cases (conflicted single pick, revert range, `--skip`, `--abort`, `--quit`, `rebase --exec`, tracked graph) against v8 and this branch, one run each. No case is worse than on v8. Two are fixed (`--skip` mid-range, `rebase --exec`), and the two gaps listed above are unchanged. Not tested: Windows, and a clean range racing the rebuild.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4491/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4491/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4476",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4476/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4476/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4476/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4476",
+      "id": 5866868296,
+      "node_id": "PR_kwDOR4-pD88AAAABIoGfAA",
+      "number": 4476,
+      "title": "fix(hooks): drop MERGE_HEAD guard from post-merge so real merges rebuild (#4463)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-10-15T13:16:55Z",
+      "updated_at": "2026-10-16T18:02:07Z",
+      "closed_at": "2026-10-16T18:02:07Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4476",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4476",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4476.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4476.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4463. The post-merge hook never rebuilt after a merge that makes a merge commit (`--no-ff`, diverged branches, `git pull`). Only fast-forward merges rebuilt.\n\n`_MERGE_SCRIPT` exits early if `.git/MERGE_HEAD` exists. On git 2.54, MERGE_HEAD is still on disk while post-merge runs, and git deletes it after the hook returns. A fast-forward never writes it, which is why those merges still worked. I reproduced this on Linux with git 2.54.0, so it isn't specific to Windows.\n\nWhat the hook sees while it runs:\n\n| Merge | MERGE_HEAD during post-merge | v8 hook |\n|---|---|---|\n| fast-forward | absent | rebuilds |\n| `--no-ff` | present | exits |\n| diverged branches | present | exits |\n| `git pull` (diverged) | present | exits |\n\nSo the #2418 cleanup (removing symbols the union merge driver brings back) never ran on a real merge.\n\n**Before** (`sh -x` on the installed hook, `git merge --no-ff feat`):\n\n```text\n+ '[' -d .git/rebase-merge ']'\n+ '[' -d .git/rebase-apply ']'\n+ '[' -f .git/MERGE_HEAD ']'\n+ exit 0\n```\n\n**After:**\n\n```text\n+ '[' -d .git/rebase-merge ']'\n+ '[' -d .git/rebase-apply ']'\n+ '[' -f .git/CHERRY_PICK_HEAD ']'\n...\n[graphify] Merge completed - launching background rebuild (log: ...)\n```\n\n```diff\n _MERGE_SCRIPT\n-# This hook only fires after a merge completed cleanly, so MERGE_HEAD is\n-# already gone by the time it runs -- ...\n+# git leaves MERGE_HEAD on disk while post-merge runs and deletes it only\n+# after the hook returns, so it must not be checked here (#4463). ...\n [ -d \"$GIT_DIR/rebase-merge\" ] && exit 0\n [ -d \"$GIT_DIR/rebase-apply\" ] && exit 0\n-[ -f \"$GIT_DIR/MERGE_HEAD\" ] && exit 0\n [ -f \"$GIT_DIR/CHERRY_PICK_HEAD\" ] && exit 0\n```\n\nGit only runs post-merge after a successful merge, so the check never protected anything there. The same check in post-commit and post-checkout is unchanged. There it keeps those hooks quiet while a conflicted merge is being resolved.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nEvery merge that changes the tree triggers one post-merge rebuild. Hooks still stay quiet mid rebase or cherry-pick.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. One line removed from a generated hook script, no schema, cache or file-format change. Existing installs pick it up on the next `graphify hook install`.\n\n**Blast Radius:** narrow. Only the post-merge hook changes. After this, every `--no-ff`, diverged or `git pull` merge launches one detached background rebuild, which is what the hook was written to do. Users who merge often will see that rebuild run where it silently didn't before. `GRAPHIFY_SKIP_HOOK=1` still turns it off.\n\n**Limitations**\n\n- Hooks already installed keep the old guard until the user re-runs `graphify hook install`.\n- If an older git deletes MERGE_HEAD before running post-merge, the new test passes there even without the fix. I haven't checked which git versions behave that way.\n\n## How was this tested?\n\nAdded `test_post_merge_hook_runs_after_a_real_merge`. It installs the hooks in a temp repo, runs `git merge --no-ff`, and checks that the hook prints the launch line. It fails on v8 and passes with the fix.\n\n```text\nPYTHONPATH=. .venv/bin/python -m pytest tests/test_hooks.py -q --basetemp=/var/tmp/pt   -> 147 passed\n  same test on unchanged hooks.py                                                    -> 1 failed (new test)\n.venv/bin/ruff check graphify/hooks.py tests/test_hooks.py                             -> All checks passed\n```\n\nI didn't run the full suite. The change is confined to the post-merge hook script.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4476/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4476/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4462",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -47,16 +850,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-14T19:33:45Z",
-      "updated_at": "2026-10-14T19:43:49Z",
-      "closed_at": null,
+      "updated_at": "2026-10-16T18:02:50Z",
+      "closed_at": "2026-10-16T18:02:50Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -135,16 +938,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-14T14:16:38Z",
-      "updated_at": "2026-10-14T15:23:47Z",
-      "closed_at": null,
+      "updated_at": "2026-10-16T18:02:54Z",
+      "closed_at": "2026-10-16T18:02:54Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -223,16 +1026,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-14T11:19:55Z",
-      "updated_at": "2026-10-14T11:28:31Z",
-      "closed_at": null,
+      "updated_at": "2026-10-14T22:20:55Z",
+      "closed_at": "2026-10-14T22:20:55Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -319,7 +1122,7 @@
       "milestone": null,
       "comments": 1,
       "created_at": "2026-10-13T19:53:34Z",
-      "updated_at": "2026-10-14T19:08:23Z",
+      "updated_at": "2026-10-16T18:45:36Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -495,7 +1298,7 @@
       "milestone": null,
       "comments": 4,
       "created_at": "2026-10-12T15:43:29Z",
-      "updated_at": "2026-10-13T17:11:50Z",
+      "updated_at": "2026-10-16T18:45:34Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -682,7 +1485,7 @@
       "milestone": null,
       "comments": 1,
       "created_at": "2026-10-11T22:26:59Z",
-      "updated_at": "2026-10-13T14:13:08Z",
+      "updated_at": "2026-10-16T18:45:40Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -699,7 +1502,7 @@
         "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4353.patch",
         "merged_at": null
       },
-      "body": "**Stacked on #4344. Please review that one first.** The first 8 commits here belong to #4344. This PR adds the last 4.\r\n\r\nWith both applied, Step 1 does two things: it refuses a scan path with a line break (#4344), and it fails loudly when a write fails (this PR). `read_scan_root()` from #4344 now calls `read_root_marker()` from this PR, so one function decides how the marker is read.\r\n\r\n> **In short:** on a full disk, Step 1 left `.graphify_python` and `.graphify_root` empty and still exited 0, and six readers trimmed spaces off the saved folder (`proj ` became a sibling `proj`). Now Step 1 writes safely and fails loudly, and every reader keeps the folder name exactly. Fixes #4346.\r\n>\r\n> **To review:** about 180 hand-written lines in 11 files (list below). The other 32 changed files are regenerated by `uv run python -m tools.skillgen --bless`, and `--check` confirms they match the sources.\r\n\r\n## What does this PR do?\r\n\r\nFixes #4346.\r\n\r\nStep 1 of the `/graphify` skill saves two files that every later step reads: `.graphify_python` (which Python to run) and `.graphify_root` (which folder to scan).\r\n\r\n**1. Step 1 said \"done\" even when it couldn't save them.** On a full disk it left both files empty and exited 0. The next step failed with `bash: : command not found`, and `graphify update` rebuilt the current folder instead of the project. Now Step 1:\r\n\r\n```text\r\ndeletes last run's files\r\nwrites each file to a temp file, then renames it into place\r\non any error: cleans up, says which file, exits 1\r\n```\r\n\r\nSo after Step 1, both files are complete and from this run, or Step 1 failed and said so. The Windows Step 1 does the same.\r\n\r\n**2. Six readers used `.strip()` on the saved folder.** A folder named `proj ` (legal on Linux and macOS) came back as `proj`. A new `read_root_marker()` removes only a byte-order mark (#3028) and a final newline, and every reader uses it: `graphify update`, `build.py`, `watch.py`, `reflect.py` and the two git hooks. `graphify update` now also stops on an empty `.graphify_root` instead of guessing.\r\n\r\n### How to review\r\n\r\n| File | What changed |\r\n|---|---|\r\n| `tools/skillgen/fragments/shell/posix.md` | Step 1 writes both files in one Python call (35 lines) |\r\n| `tools/skillgen/fragments/core/aider.md`, `core/devin.md` | the same Step 1 block, copied |\r\n| `tools/skillgen/fragments/shell/powershell.md` | the Windows Step 1 (23 lines) |\r\n| `graphify/paths.py` | new `read_root_marker()` (11 lines) |\r\n| `graphify/cli.py`, `build.py`, `watch.py`, `reflect.py`, `hooks.py` | each reader switches to it (1–15 lines each) |\r\n| `tools/skillgen/gen.py` | the exact list of changed lines the monolith check allows |\r\n| `tests/test_graphify_root_marker.py`, `tests/test_skillgen_input_path_injection.py` | the tests |\r\n\r\nSkip `graphify/skill*.md`, `graphify/skills/**` and `tools/skillgen/expected/**`. They're generated.\r\n\r\n### Evidence: before and after\r\n\r\nStep 1 with `ulimit -f 0`, so every write fails the way it does on a full disk:\r\n\r\n```text\r\nv8:           Step 1 exit code 0, .graphify_python and .graphify_root left empty\r\nthis branch:  \"could not write graphify-out/.graphify_python (File too large; is the disk full?)\",\r\n              exit code 1, no files left behind\r\n```\r\n\r\n`graphify update` with the saved folder `proj ` and a sibling `proj`:\r\n\r\n```text\r\nv8:           rebuilds proj (the wrong folder)\r\nthis branch:  rebuilds proj  (the saved folder)\r\n```\r\n\r\n<details>\r\n<summary>Reproduce bug 1</summary>\r\n\r\nFrom a checkout of `v8`:\r\n\r\n```bash\r\npython3 - > /tmp/step1.sh <<'EOF'\r\nimport re\r\ntext = open(\"graphify/skill.md\").read()\r\nprint(next(b for b in re.findall(r\"```bash\\n(.*?)\\n```\", text, re.S) if \"graphify_root\" in b))\r\nEOF\r\nmkdir -p \"/tmp/s1/my project\" && cd /tmp/s1\r\nsed -e \"s|^INPUT_PATH\\$|/tmp/s1/my project|\" \\\r\n    -e \"s|^mkdir -p graphify-out\\$|mkdir -p graphify-out\\ntrap '' XFSZ; ulimit -f 0|\" /tmp/step1.sh | bash\r\necho \"exit: $?\"; wc -c graphify-out/.graphify_*      # exit 0, two empty files\r\n```\r\n\r\n</details>\r\n\r\n### Commits\r\n\r\n```text\r\nd8baf79  tests for both bugs\r\n96aa478  Step 1 saves its files safely and fails loudly (bash, aider, devin, Windows)\r\n2d3e236  graphify update, build.py and the hooks read the folder exactly\r\n378d4b2  watch.py and reflect.py too, plus a test that catches any new .strip() reader\r\n```\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [ ] Security fix\r\n\r\n## Verification & Invariants\r\n\r\n**The rule:** if `.graphify_python` or `.graphify_root` exists and isn't empty, it holds what this run of Step 1 found, and every reader gets that exact value.\r\n\r\n**Enforced by:**\r\n\r\n- **Step 1 failing a write:** all three bash copies run under `ulimit -f 0` with old files present. Each must exit non-zero, name the file and leave nothing behind. The Windows Step 1 gets the same test under `pwsh`, with a directory blocking its temp file (`ulimit` stops pwsh itself from starting on CI). That test skips where `pwsh` isn't installed.\r\n- **Readers:** `proj ` and `proj` stay apart in `read_root_marker()`, `build.py`, the hooks and `graphify update`. A guard test fails if any module reads a file as `utf-8-sig` and then calls `.strip()`.\r\n\r\nAll of these fail on `v8` and pass on this branch.\r\n\r\n**What changes for existing setups:**\r\n\r\n- Installed git hooks keep the old code until `graphify hook install` is run again.\r\n- `graphify update` with an **empty** `.graphify_root` now exits 1. A **missing** one still falls back to the current folder.\r\n\r\n**Limitations:** not tested on Windows PowerShell 5.1. The Windows Step 1 ran under PowerShell 7.4.6 on Linux.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n\r\n## How was this tested?\r\n\r\nLinux, Python 3.14, `uv sync --all-extras`, `pwsh` 7.4.6 installed, on top of 0.9.86.\r\n\r\n```text\r\nuv run pytest tests/                              # 7338 passed, 14 skipped, 0 failed\r\nuv run ruff check .                               # no issues\r\nuv run pyright                                    # 612 errors, same as v8: none added\r\nuv run python -m tools.skillgen --check           # 134 files match\r\nuv run python -m tools.skillgen --monolith-roundtrip, --audit-coverage,\r\n  --schema-singleton, --always-on-roundtrip       # all OK\r\n```\r\n\r\nThe Step 1, reader and skillgen tests also passed on Python 3.10 and 3.13.\r\n\r\n## Merge Danger\r\n\r\n**Door:** two-way. A revert restores the old Step 1 and readers. The files keep the same format, so nothing is migrated.\r\n\r\n**Blast Radius:** every skill's Step 1, plus six small reader changes. Extraction and the graph format are untouched.\r\n\r\n- A full disk now stops Step 1 with a clear message instead of a confusing error one step later.\r\n- This PR and #4344 both touch `graphify/paths.py` and `tools/skillgen/gen.py`. I'll rebase whichever lands second.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments.\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). This PR doesn't touch extraction code.\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [x] (If applicable) I disclosed AI authorship in my commit messages.\r\n\r\nAI disclosure: I made these changes with Claude Code (Claude Sonnet and Claude Opus 5.5). Claude Code ran the tests and commands listed above in my local checkout, and I reviewed every change and the results.\r\n",
+      "body": "**Stacked on #4344. Please review that one first.** The first 8 commits here belong to #4344. This PR adds the last 4.\r\n\r\nWith both applied, Step 1 does two things: it refuses a scan path with a line break (#4344), and it fails loudly when a write fails (this PR). `read_scan_root()` from #4344 now calls `read_root_marker()` from this PR, so one function decides how the marker is read.\r\n\r\n> **In short:** on a full disk, Step 1 left `.graphify_python` and `.graphify_root` empty and still exited 0, and six readers trimmed spaces off the saved folder (`proj ` became a sibling `proj`). Now Step 1 writes safely and fails loudly, and every reader keeps the folder name exactly. Fixes #4346.\r\n>\r\n> **To review:** about 180 hand-written lines in 11 files (list below). The other 32 changed files are regenerated by `uv run python -m tools.skillgen --bless`, and `--check` confirms they match the sources.\r\n\r\n## What does this PR do?\r\n\r\nFixes #4346.\r\n\r\nStep 1 of the `/graphify` skill saves two files that every later step reads: `.graphify_python` (which Python to run) and `.graphify_root` (which folder to scan).\r\n\r\n**1. Step 1 said \"done\" even when it couldn't save them.** On a full disk it left both files empty and exited 0. The next step failed with `bash: : command not found`, and `graphify update` rebuilt the current folder instead of the project. Now Step 1:\r\n\r\n```text\r\ndeletes last run's files\r\nwrites each file to a temp file, then renames it into place\r\non any error: cleans up, says which file, exits 1\r\n```\r\n\r\nSo after Step 1, both files are complete and from this run, or Step 1 failed and said so. The Windows Step 1 does the same.\r\n\r\n**2. Six readers used `.strip()` on the saved folder.** A folder named `proj ` (legal on Linux and macOS) came back as `proj`. A new `read_root_marker()` removes only a byte-order mark (#3028) and a final newline, and every reader uses it: `graphify update`, `build.py`, `watch.py`, `reflect.py` and the two git hooks. `graphify update` now also stops on an empty `.graphify_root` instead of guessing.\r\n\r\n### How to review\r\n\r\n| File | What changed |\r\n|---|---|\r\n| `tools/skillgen/fragments/shell/posix.md` | Step 1 writes both files in one Python call (35 lines) |\r\n| `tools/skillgen/fragments/core/aider.md`, `core/devin.md` | the same Step 1 block, copied |\r\n| `tools/skillgen/fragments/shell/powershell.md` | the Windows Step 1 (23 lines) |\r\n| `graphify/paths.py` | new `read_root_marker()` (11 lines) |\r\n| `graphify/cli.py`, `build.py`, `watch.py`, `reflect.py`, `hooks.py` | each reader switches to it (1–15 lines each) |\r\n| `tools/skillgen/gen.py` | the exact list of changed lines the monolith check allows |\r\n| `tests/test_graphify_root_marker.py`, `tests/test_skillgen_input_path_injection.py` | the tests |\r\n\r\nSkip `graphify/skill*.md`, `graphify/skills/**` and `tools/skillgen/expected/**`. They're generated.\r\n\r\n### Evidence: before and after\r\n\r\nStep 1 with `ulimit -f 0`, so every write fails the way it does on a full disk:\r\n\r\n```text\r\nv8:           Step 1 exit code 0, .graphify_python and .graphify_root left empty\r\nthis branch:  \"could not write graphify-out/.graphify_python (File too large; is the disk full?)\",\r\n              exit code 1, no files left behind\r\n```\r\n\r\n`graphify update` with the saved folder `proj ` and a sibling `proj`:\r\n\r\n```text\r\nv8:           rebuilds proj (the wrong folder)\r\nthis branch:  rebuilds proj  (the saved folder)\r\n```\r\n\r\n<details>\r\n<summary>Reproduce bug 1</summary>\r\n\r\nFrom a checkout of `v8`:\r\n\r\n```bash\r\npython3 - > /tmp/step1.sh <<'EOF'\r\nimport re\r\ntext = open(\"graphify/skill.md\").read()\r\nprint(next(b for b in re.findall(r\"```bash\\n(.*?)\\n```\", text, re.S) if \"graphify_root\" in b))\r\nEOF\r\nmkdir -p \"/tmp/s1/my project\" && cd /tmp/s1\r\nsed -e \"s|^INPUT_PATH\\$|/tmp/s1/my project|\" \\\r\n    -e \"s|^mkdir -p graphify-out\\$|mkdir -p graphify-out\\ntrap '' XFSZ; ulimit -f 0|\" /tmp/step1.sh | bash\r\necho \"exit: $?\"; wc -c graphify-out/.graphify_*      # exit 0, two empty files\r\n```\r\n\r\n</details>\r\n\r\n### Commits\r\n\r\n```text\r\nd8baf79  tests for both bugs\r\n96aa478  Step 1 saves its files safely and fails loudly (bash, aider, devin, Windows)\r\n2d3e236  graphify update, build.py and the hooks read the folder exactly\r\n378d4b2  watch.py and reflect.py too, plus a test that catches any new .strip() reader\r\n```\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [ ] Security fix\r\n\r\n## Verification & Invariants\r\n\r\n**The rule:** if `.graphify_python` or `.graphify_root` exists and isn't empty, it holds what this run of Step 1 found, and every reader gets that exact value.\r\n\r\n**Enforced by:**\r\n\r\n- **Step 1 failing a write:** all three bash copies run under `ulimit -f 0` with old files present. Each must exit non-zero, name the file and leave nothing behind. The Windows Step 1 gets the same test under `pwsh`, with a directory blocking its temp file (`ulimit` stops pwsh itself from starting on CI). That test skips where `pwsh` isn't installed.\r\n- **Readers:** `proj ` and `proj` stay apart in `read_root_marker()`, `build.py`, the hooks and `graphify update`. A guard test fails if any module reads a file as `utf-8-sig` and then calls `.strip()`.\r\n\r\nAll of these fail on `v8` and pass on this branch.\r\n\r\n**What changes for existing setups:**\r\n\r\n- Installed git hooks keep the old code until `graphify hook install` is run again.\r\n- `graphify update` with an **empty** `.graphify_root` now exits 1. A **missing** one still falls back to the current folder.\r\n\r\n**Limitations:** not tested on Windows PowerShell 5.1. The Windows Step 1 ran under PowerShell 7.4.6 on Linux.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n\r\n## How was this tested?\r\n\r\nLinux, Python 3.13, rebased on v8 fe085ced (0.9.90), on top of #4344. No pwsh on this run.\r\n\r\n```text\r\nuv run pytest tests/                              # 8205 passed, 71 skipped, 0 failed\r\nuv run ruff check .                               # no issues\r\nuv run pyright                                    # 640 errors, same as v8: none added\r\nuv run python -m tools.skillgen --check           # 134 files match\r\nuv run python -m tools.skillgen --monolith-roundtrip, --audit-coverage,\r\n  --schema-singleton, --always-on-roundtrip       # all OK\r\n```\r\n\r\nThe Step 1, reader and skillgen tests also passed on Python 3.10 and 3.13.\r\n\r\n## Merge Danger\r\n\r\n**Door:** two-way. A revert restores the old Step 1 and readers. The files keep the same format, so nothing is migrated.\r\n\r\n**Blast Radius:** every skill's Step 1, plus six small reader changes. Extraction and the graph format are untouched.\r\n\r\n- A full disk now stops Step 1 with a clear message instead of a confusing error one step later.\r\n- This PR and #4344 both touch `graphify/paths.py` and `tools/skillgen/gen.py`. I'll rebase whichever lands second.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments.\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). This PR doesn't touch extraction code.\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [x] (If applicable) I disclosed AI authorship in my commit messages.\r\n\r\nAI disclosure: I made these changes with Claude Code (Claude Sonnet and Claude Opus 5.5). Claude Code ran the tests and commands listed above in my local checkout, and I reviewed every change and the results.\r\n",
       "reactions": {
         "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4353/reactions",
         "total_count": 0,
@@ -760,7 +1563,7 @@
       "milestone": null,
       "comments": 2,
       "created_at": "2026-10-11T18:31:11Z",
-      "updated_at": "2026-10-13T14:14:16Z",
+      "updated_at": "2026-10-16T18:45:38Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -777,7 +1580,7 @@
         "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4344.patch",
         "merged_at": null
       },
-      "body": "> **In short:** the skill told the agent to paste the scan folder, community names and spec path into `python -c \"...\"` scripts, so a folder named `proj$(touch X)` ran `touch X`. Now the agent writes each value to a file in `graphify-out/` and the script reads the file. Fixes #4309.\r\n>\r\n> **To review:** about 340 hand-written lines in 11 files (list below). The other 172 changed files are regenerated by `uv run python -m tools.skillgen --bless`, and `--check` confirms they match the sources.\r\n\r\n## What does this PR do?\r\n\r\nFixes #4309.\r\n\r\nThe skill told the agent to paste three values into the Python scripts it runs:\r\n\r\n- `INPUT_PATH`, the folder to scan\r\n- `LABELS_DICT`, the community names\r\n- `SPEC_PATH`, the path to the extraction spec\r\n\r\nA pasted value becomes code. A folder named `proj$(touch PWNED)` runs `touch PWNED` before Python starts, and a label like `x'}; ...; #` ends the Python string early.\r\n\r\nNow the agent writes each value to a file through a quoted heredoc (the shell copies it as plain text), and the script reads the file:\r\n\r\n```diff\r\n Step 1        + save the scan folder to graphify-out/.graphify_root\r\n later steps   - detect(Path('INPUT_PATH'))\r\n               + detect(read_scan_root())\r\n Step B0/B3    - prompt_file='SPEC_PATH'\r\n               + prompt_file=<read from graphify-out/.graphify_spec_path>\r\n Step 5        - labels = LABELS_DICT\r\n               + labels = json.loads(<graphify-out/.graphify_labels_in.json>)\r\n```\r\n\r\nIt also quotes the interpreter path, `\"$(cat graphify-out/.graphify_python)\"`, so an interpreter under `/Users/First Last/` no longer splits in two.\r\n\r\n### How to review\r\n\r\nRead these, in this order:\r\n\r\n| File | What changed |\r\n|---|---|\r\n| `tools/skillgen/fragments/core/core.md` | the skill steps: read the saved files instead of pasting |\r\n| `tools/skillgen/fragments/references/shared/update.md`, `references/query/default.md`, and three small `references/shared/*.md` | the same change in the reference pages |\r\n| `tools/skillgen/fragments/core/aider.md`, `core/devin.md` | the same changes in the two single-file skills |\r\n| `graphify/paths.py` | new `read_scan_root()` (20 lines) |\r\n| `tools/skillgen/gen.py` | the Windows translator learns the spec-path heredoc; the monolith check ignores the added interpreter quotes |\r\n| `tests/test_skillgen_no_pasted_placeholders.py` | the new test that fails if any script pastes a value again |\r\n\r\nSkip `graphify/skill*.md`, `graphify/skills/**` and `tools/skillgen/expected/**`. They're generated.\r\n\r\n### Evidence: before and after\r\n\r\nThe real Step 2 script from `graphify/skill.md`, run on a folder named `proj$(touch PWNED)`:\r\n\r\n```text\r\nv8:           PWNED file created, then \"could not scan .../proj\", Detected 0 files\r\nthis branch:  nothing created, Detected 1 files\r\n```\r\n\r\nOn `v8` the folder name runs as a command **and** the wrong folder gets scanned.\r\n\r\n<details>\r\n<summary>Reproduce it</summary>\r\n\r\nFrom a checkout, with graphify installed in `.venv`:\r\n\r\n```bash\r\nmkdir -p /tmp/demo/'proj$(touch PWNED)' /tmp/demo/graphify-out && cd /tmp/demo\r\necho '# notes' > 'proj$(touch PWNED)/notes.md'\r\necho \"$OLDPWD/.venv/bin/python\" > graphify-out/.graphify_python\r\ngit -C \"$OLDPWD\" show upstream/v8:graphify/skill.md \\\r\n  | python3 -c \"import re,sys; t=sys.stdin.read(); print(next(b for b in re.findall(r'\\`\\`\\`bash\\n(.*?)\\n\\`\\`\\`', t, re.S) if 'graphify_detect.json' in b))\" \\\r\n  | sed \"s|INPUT_PATH|$PWD/proj\\$(touch PWNED)|\" | bash\r\nls    # PWNED is here\r\n```\r\n\r\n</details>\r\n\r\n### Commits\r\n\r\n```text\r\n7e36f0c  test: fail when a skill script pastes INPUT_PATH or LABELS_DICT\r\n5f0b6da  read_scan_root() reads the folder Step 1 saved\r\n2b1ef8f  Step 5 reads the community names from a JSON file\r\n9c42b07  every step reads the scan folder from the file\r\ne783cdd  quote the interpreter path\r\n08cf41a  Steps B0 and B3 read the spec path from a file\r\n714f132  read_scan_root() keeps spaces in the saved folder\r\n```\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [x] Security fix\r\n\r\n## Verification & Invariants\r\n\r\n**The rule:** a value the agent supplies never becomes part of a script. Scripts read it from a file in `graphify-out/`.\r\n\r\n**Enforced by** `tests/test_skillgen_no_pasted_placeholders.py`: it renders every skill and fails if a script contains `INPUT_PATH`, `LABELS_DICT` or `SPEC_PATH`, or runs the interpreter unquoted. It fails on the test commit alone (`7e36f0c`) and passes on the branch. Two more tests run the real heredocs with hostile input (``x $(touch PWNED) `touch PWNED2` $HOME``) and check that nothing runs.\r\n\r\n**Limitations:**\r\n\r\n- Not tested on Windows PowerShell 5.1. The Windows blocks ran under PowerShell 7.4.6 on Linux.\r\n- Step 1 leaving empty files on a full disk is a separate bug, #4346, fixed in #4353.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n\r\n## How was this tested?\r\n\r\nLinux, Python 3.14, `uv sync --all-extras`, on top of 0.9.86.\r\n\r\n```text\r\nuv run pytest tests/                              # 7496 passed, 70 skipped, 0 failed\r\nuv run ruff check .                               # no issues\r\nuv run pyright                                    # 612 errors, same as v8: none added\r\nuv run python -m tools.skillgen --check           # 134 files match\r\nuv run python -m tools.skillgen --monolith-roundtrip, --audit-coverage,\r\n  --schema-singleton, --always-on-roundtrip       # all OK\r\n```\r\n\r\nThe changed test files also passed on Python 3.10 and 3.13. The Windows blocks from `skill-windows.md` ran under PowerShell 7.4.6, and the semantic cache still hits on a second run.\r\n\r\n## Merge Danger\r\n\r\n**Door:** two-way. A revert restores the old skill text. No data is migrated.\r\n\r\n**Blast Radius:** every skill. The library gains only `read_scan_root()`.\r\n\r\n- A step run by hand without Step 1 now stops with `graphify-out/.graphify_root not found; run Step 1 first`.\r\n- `graphify-out/` gets two small new files: `.graphify_spec_path` and `.graphify_labels_in.json`.\r\n- This PR and #4353 both touch `graphify/paths.py` and `tools/skillgen/gen.py`. I'll rebase whichever lands second.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments.\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). This PR doesn't touch extraction code.\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [x] (If applicable) I disclosed AI authorship in my commit messages.\r\n\r\nAI disclosure: I made these changes with Claude Code (Claude Opus 5.5). Claude Code ran the tests and commands listed above in my local checkout, and I reviewed every change and the results. \r\n\r\n## Update: rebased on 0.9.89\r\n\r\nOne new commit, `fix(skill): refuse a scan path with a line break in Step 1`, answers the comment on #4309. A path line could end the heredoc early (or the here-string on PowerShell), and anything after it would run as shell. The agent is now told to refuse such a path, and the Python side rejects input of more than one line.\r\n\r\nThe agent instruction is the real guard. The shell ends the heredoc before Python runs, so the Python check only catches multi-line input that reaches it.\r\n\r\n#4353 is stacked on this PR.",
+      "body": "> **In short:** the skill told the agent to paste the scan folder, community names and spec path into `python -c \"...\"` scripts, so a folder named `proj$(touch X)` ran `touch X`. Now the agent writes each value to a file in `graphify-out/` and the script reads the file. Fixes #4309.\r\n>\r\n> **To review:** about 340 hand-written lines in 11 files (list below). The other 172 changed files are regenerated by `uv run python -m tools.skillgen --bless`, and `--check` confirms they match the sources.\r\n\r\n## What does this PR do?\r\n\r\nFixes #4309.\r\n\r\nThe skill told the agent to paste three values into the Python scripts it runs:\r\n\r\n- `INPUT_PATH`, the folder to scan\r\n- `LABELS_DICT`, the community names\r\n- `SPEC_PATH`, the path to the extraction spec\r\n\r\nA pasted value becomes code. A folder named `proj$(touch PWNED)` runs `touch PWNED` before Python starts, and a label like `x'}; ...; #` ends the Python string early.\r\n\r\nNow the agent writes each value to a file through a quoted heredoc (the shell copies it as plain text), and the script reads the file:\r\n\r\n```diff\r\n Step 1        + save the scan folder to graphify-out/.graphify_root\r\n later steps   - detect(Path('INPUT_PATH'))\r\n               + detect(read_scan_root())\r\n Step B0/B3    - prompt_file='SPEC_PATH'\r\n               + prompt_file=<read from graphify-out/.graphify_spec_path>\r\n Step 5        - labels = LABELS_DICT\r\n               + labels = json.loads(<graphify-out/.graphify_labels_in.json>)\r\n```\r\n\r\nIt also quotes the interpreter path, `\"$(cat graphify-out/.graphify_python)\"`, so an interpreter under `/Users/First Last/` no longer splits in two.\r\n\r\n### How to review\r\n\r\nRead these, in this order:\r\n\r\n| File | What changed |\r\n|---|---|\r\n| `tools/skillgen/fragments/core/core.md` | the skill steps: read the saved files instead of pasting |\r\n| `tools/skillgen/fragments/references/shared/update.md`, `references/query/default.md`, and three small `references/shared/*.md` | the same change in the reference pages |\r\n| `tools/skillgen/fragments/core/aider.md`, `core/devin.md` | the same changes in the two single-file skills |\r\n| `graphify/paths.py` | new `read_scan_root()` (20 lines) |\r\n| `tools/skillgen/gen.py` | the Windows translator learns the spec-path heredoc; the monolith check ignores the added interpreter quotes |\r\n| `tests/test_skillgen_no_pasted_placeholders.py` | the new test that fails if any script pastes a value again |\r\n\r\nSkip `graphify/skill*.md`, `graphify/skills/**` and `tools/skillgen/expected/**`. They're generated.\r\n\r\n### Evidence: before and after\r\n\r\nThe real Step 2 script from `graphify/skill.md`, run on a folder named `proj$(touch PWNED)`:\r\n\r\n```text\r\nv8:           PWNED file created, then \"could not scan .../proj\", Detected 0 files\r\nthis branch:  nothing created, Detected 1 files\r\n```\r\n\r\nOn `v8` the folder name runs as a command **and** the wrong folder gets scanned.\r\n\r\n<details>\r\n<summary>Reproduce it</summary>\r\n\r\nFrom a checkout, with graphify installed in `.venv`:\r\n\r\n```bash\r\nmkdir -p /tmp/demo/'proj$(touch PWNED)' /tmp/demo/graphify-out && cd /tmp/demo\r\necho '# notes' > 'proj$(touch PWNED)/notes.md'\r\necho \"$OLDPWD/.venv/bin/python\" > graphify-out/.graphify_python\r\ngit -C \"$OLDPWD\" show upstream/v8:graphify/skill.md \\\r\n  | python3 -c \"import re,sys; t=sys.stdin.read(); print(next(b for b in re.findall(r'\\`\\`\\`bash\\n(.*?)\\n\\`\\`\\`', t, re.S) if 'graphify_detect.json' in b))\" \\\r\n  | sed \"s|INPUT_PATH|$PWD/proj\\$(touch PWNED)|\" | bash\r\nls    # PWNED is here\r\n```\r\n\r\n</details>\r\n\r\n### Commits\r\n\r\n```text\r\n7e36f0c  test: fail when a skill script pastes INPUT_PATH or LABELS_DICT\r\n5f0b6da  read_scan_root() reads the folder Step 1 saved\r\n2b1ef8f  Step 5 reads the community names from a JSON file\r\n9c42b07  every step reads the scan folder from the file\r\ne783cdd  quote the interpreter path\r\n08cf41a  Steps B0 and B3 read the spec path from a file\r\n714f132  read_scan_root() keeps spaces in the saved folder\r\n```\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [x] Security fix\r\n\r\n## Verification & Invariants\r\n\r\n**The rule:** a value the agent supplies never becomes part of a script. Scripts read it from a file in `graphify-out/`.\r\n\r\n**Enforced by** `tests/test_skillgen_no_pasted_placeholders.py`: it renders every skill and fails if a script contains `INPUT_PATH`, `LABELS_DICT` or `SPEC_PATH`, or runs the interpreter unquoted. It fails on the test commit alone (`7e36f0c`) and passes on the branch. Two more tests run the real heredocs with hostile input (``x $(touch PWNED) `touch PWNED2` $HOME``) and check that nothing runs.\r\n\r\n**Limitations:**\r\n\r\n- Not tested on Windows PowerShell 5.1. The Windows blocks ran under PowerShell 7.4.6 on Linux.\r\n- Step 1 leaving empty files on a full disk is a separate bug, #4346, fixed in #4353.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n\r\n## How was this tested?\r\n\r\n\r\nLinux, Python 3.13, rebased on v8 fe085ced (0.9.90).\r\n\r\n```text\r\nuv run pytest tests/                              # 8190 passed, 70 skipped, 0 failed\r\nuv run ruff check .                               # no issues\r\nuv run pyright                                    # 640 errors, same as v8: none added\r\nuv run python -m tools.skillgen --check           # 134 files match\r\nuv run python -m tools.skillgen --monolith-roundtrip, --audit-coverage,\r\n  --schema-singleton, --always-on-roundtrip       # all OK\r\n```\r\n\r\nRebased on v8 fe085ced. One new commit: v8 added tests/test_query_fallback_edges.py, which found the query fallback by the unquoted opener. This branch quotes the interpreter path, so the test now matches on -c \" and the import lines after it.\r\n\r\nThe changed test files also passed on Python 3.10 and 3.13. The Windows blocks from `skill-windows.md` ran under PowerShell 7.4.6, and the semantic cache still hits on a second run.\r\n\r\n## Merge Danger\r\n\r\n**Door:** two-way. A revert restores the old skill text. No data is migrated.\r\n\r\n**Blast Radius:** every skill. The library gains only `read_scan_root()`.\r\n\r\n- A step run by hand without Step 1 now stops with `graphify-out/.graphify_root not found; run Step 1 first`.\r\n- `graphify-out/` gets two small new files: `.graphify_spec_path` and `.graphify_labels_in.json`.\r\n- This PR and #4353 both touch `graphify/paths.py` and `tools/skillgen/gen.py`. I'll rebase whichever lands second.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments.\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). This PR doesn't touch extraction code.\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [x] (If applicable) I disclosed AI authorship in my commit messages.\r\n\r\nAI disclosure: I made these changes with Claude Code (Claude Opus 5.5). Claude Code ran the tests and commands listed above in my local checkout, and I reviewed every change and the results. \r\n\r\n## Update: rebased on 0.9.89\r\n\r\nOne new commit, `fix(skill): refuse a scan path with a line break in Step 1`, answers the comment on #4309. A path line could end the heredoc early (or the here-string on PowerShell), and anything after it would run as shell. The agent is now told to refuse such a path, and the Python side rejects input of more than one line.\r\n\r\nThe agent instruction is the real guard. The shell ends the heredoc before Python runs, so the Python check only catches multi-line input that reaches it.\r\n\r\n#4353 is stacked on this PR.",
       "reactions": {
         "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4344/reactions",
         "total_count": 0,
@@ -887,9 +1690,285 @@
   "search_type": "lexical"
 }
 ,"issue_search":{
-  "total_count": 3,
+  "total_count": 6,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/4603",
+      "id": 5948860333,
+      "node_id": "I_kwDOR4-pD88AAAABYpRnrQ",
+      "number": 4603,
+      "title": "[Bug]: install and wheel tests write into the package and the repo build/, so a killed or concurrent run breaks the checkout",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 10600255148,
+          "node_id": "LA_kwDOR4-pD88AAAACd9MOrA",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/bug",
+          "name": "bug",
+          "color": "d73a4a",
+          "default": true,
+          "description": "Something isn't working",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-20T20:11:19Z",
+      "updated_at": "2026-10-20T20:11:28Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "### Pre-flight checks\n\n- [x] I have checked the Troubleshooting section in the README\n\n### What happened?\n\nTwo test fixtures write into folders that every process shares: the\ninstalled package and the repo's own `build/`. One serial pytest run passes.\nA killed run, or two runs on the same checkout, break in ways the suite\ndoesn't report.\n\n**1. The real `graphify/skills/claude` bundle is moved out of the package.**\n\nThe `fake_bundle` fixture in tests/test_install_references.py (lines 31-64),\nand `test_hard_fail_when_bundle_dir_present_but_references_missing` (line\n180), do this:\n\n```text\nshutil.move(graphify/skills/claude -> a mkdtemp() backup)\nwrite a fake bundle in its place\nrun the test\nmove the real bundle back      <- in finally\n```\n\n`finally` doesn't run when the process gets SIGTERM, which is what `kill`\nand `timeout` send. Python has no handler for it, so the process ends where\nit is. The fake bundle stays in the package, the real files stay in a\nbackup under the temp dir, and `git status` shows them as deleted and\nmodified. Ctrl-C (SIGINT) is fine: Python raises `KeyboardInterrupt`, and\nthe fixture restores the bundle on the way out.\n\nWhile the bundle is moved away, any other process that reads the package\nfails. That includes a second pytest run on the same checkout.\n\n**2. Wheel builds share the repo's `build/` folder.**\n\nThe `wheel_namelist` fixture in tests/test_wheel_packaging.py (lines 55-66)\nruns `python -m build --wheel --no-isolation --outdir <tmp> <repo>`. The\nwheel lands in `<tmp>`, but setuptools still works in `<repo>/build/`. Two\nbuilds at once on one checkout delete each other's files. The fixture then\ncalls `pytest.skip` for every dependent test, so the run that lost reports\n133 skips and no failure.\n\nExpected: a killed or concurrent test run leaves the checkout unchanged,\nand a broken wheel build shows up as a failure, not a skip.\n\n\n### Steps to reproduce\n\n```shell\n# graphify v8 at 86c57be8, from a source checkout, serial (no -n)\n\n# 1a. Kill pytest during a fake_bundle test.\n#     pause.py pauses inside the test, after the fixture has moved the bundle:\ncat > /tmp/pause.py <<'EOF'\nimport os, time, pytest\n@pytest.hookimpl(hookwrapper=True)\ndef pytest_runtest_call(item):\n    open(\"/tmp/paused\", \"w\").write(str(os.getpid()))\n    time.sleep(60)\n    yield\nEOF\nrm -f /tmp/paused\nPYTHONPATH=/tmp pytest -p pause -p no:randomly \\\n  \"tests/test_install_references.py::test_install_stages_references_sidecar\" &\nwhile [ ! -f /tmp/paused ]; do sleep 0.2; done\nkill -TERM \"$(cat /tmp/paused)\"\ngit status --short graphify/skills/claude     # D and M lines\npytest -p no:randomly tests/test_install_references.py tests/test_install.py\n# -> 3 failed, 133 passed, 1 skipped   (intact checkout: 136 passed, 1 skipped)\ngit checkout -- graphify/skills/claude        # restore\n\n# 1b. Two serial runs on one checkout at the same time.\nfor i in $(seq 30); do pytest -q -p no:randomly tests/test_install_references.py; done &\nfor i in $(seq 30); do pytest -q -p no:randomly tests/test_install.py; done\n\n# 2. Two wheel-test runs at the same time.\nrm -rf build\npytest -rs -p no:randomly tests/test_wheel_packaging.py --basetemp=/tmp/w1 &\npytest -rs -p no:randomly tests/test_wheel_packaging.py --basetemp=/tmp/w2\n```\n\n### Error output or graph output\n\n```text\n1a. Stopped while the fake bundle is in place, 3 runs each:\n    SIGINT      exit 2    bundle restored\n    SIGTERM     exit 143  fake bundle left behind\n    SIGKILL     exit 137  fake bundle left behind\n    timeout 30  exit 124  fake bundle left behind (1 run)\n\n    git status:  D graphify/skills/claude/references/add-watch.md\n                 D graphify/skills/claude/references/exports.md\n                 M graphify/skills/claude/references/extraction-spec.md\n                 D graphify/skills/claude/references/github-and-merge.md\n                 D graphify/skills/claude/references/hooks.md\n                 M graphify/skills/claude/references/query.md\n                 D graphify/skills/claude/references/transcribe.md\n                 D graphify/skills/claude/references/update.md\n    leftover:    <TMPDIR>/tmpXXXXXXXX/bundle_backup\n\n    Follow-up run on that checkout: 3 failed, 133 passed, 1 skipped\n\n    FAILED test_install_references.py::test_claude_install_ships_lean_core_and_references\n      assert ['extraction-…', 'query.md'] == ['add-watch.m…', …]\n    FAILED test_install_references.py::test_gemini_install_references_all_resolve\n      dead reference pointers in gemini install: ['update.md', 'github-and-merge.md',\n      'hooks.md', 'exports.md', 'add-watch.md', 'transcribe.md']\n    FAILED test_install_references.py::test_built_wheel_ships_the_full_skill_payload\n\n1b. test_install.py failed in 6, 3 and 6 of 30 iterations with the other loop\n    running, and 0 of 30 alone. test_install_references.py never failed.\n    shutil.Error: [Errno 2] No such file or directory:\n      '.../graphify/skills/claude/references/<file>.md'\n\n2.  5 of 5 times, one run skipped all 133 tests and the other passed:\n    SKIPPED [133] tests/test_wheel_packaging.py:73: wheel build failed in this env:\n    error: [Errno 2] No such file or directory:\n      'build/lib/graphify/skills/kiro/references/add-watch.md'\n    Two runs one after the other: 133 passed both times.\n```\n\n### Graphify version\n\n0.9.92\n\n### Operating System\n\nLinux\n\n### Python Version\n\n3.13\n\n### Installation Method\n\nbuilt from source (git clone)\n\n### Additional Environment Details\n\nNo provider environment variables involved. Reproduced on a clean checkout\nof v8 with a fresh venv, using an editable install of that checkout.\n`graphify.__file__` pointed into the checkout, so the fixture moved the\ncheckout's own `graphify/skills/claude`.\n\n\n### Additional context\n\nEach run had a single pytest process, except 1b and 2, where two serial\nprocesses ran at the same time. Under `pytest -n` both problems show up in\none command: install tests fail with the same `shutil.Error`, and about 110\nwheel tests are skipped.\n\nA CI job that hits its time limit gets SIGTERM, so it can leave a cached\ncheckout in the 1a state. A `graphify install` from that checkout would then\ncopy the fake references, and a wheel built from it ships them\n(`test_built_wheel_ships_the_full_skill_payload` fails on that checkout).\n\nPossible fixes:\n- Bundle: monkeypatch the package dir the install code reads to a copy\n  under `tmp_path`, so nothing in the real package moves.\n- Wheel: build from a copy of the repo under `tmp_path`, so `build/` is\n  private. Separately, fail instead of skipping when `python -m build` is\n  available but the build fails. The `_has_build()` check already covers\n  machines without `build`.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "pinned_comment": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4602",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4602/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4602/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4602/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/4602",
+      "id": 5948708479,
+      "node_id": "I_kwDOR4-pD88AAAABYpIWfw",
+      "number": 4602,
+      "title": "[Bug]: test_the_pool_hands_its_workers_the_overrides never resets _ACTIVE_SCAN_ROOT, so 9 tests fail in a different order",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 10600255148,
+          "node_id": "LA_kwDOR4-pD88AAAACd9MOrA",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/bug",
+          "name": "bug",
+          "color": "d73a4a",
+          "default": true,
+          "description": "Something isn't working",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-20T20:01:18Z",
+      "updated_at": "2026-10-20T20:01:27Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "### Pre-flight checks\n\n- [x] I have checked the Troubleshooting section in the README\n\n### What happened?\n\n`test_the_pool_hands_its_workers_the_overrides` in\ntests/test_language_overrides.py leaves `_ACTIVE_SCAN_ROOT` set to its own\ntmp dir after it finishes. Any test that runs after it and expects\n`active_scan_root()` to be None fails: 2 tests in\ntest_extractor_scan_root_context.py and 7 XAML tests in test_dotnet.py.\n\nThe default test order never runs those files right after the leaking test,\nso a normal `pytest` run passes. A different order fails in one serial\nprocess, with no xdist.\n\nThe test swaps `ProcessPoolExecutor` for a `ThreadPoolExecutor` subclass so\nit can record the pool's initializer. The 25 extractions then run as threads\nin the test process. Each one goes through `_safe_extract_with_xaml_root`\nin graphify/extract.py:\n\n```python\nprevious_root = set_active_scan_root(root.resolve())\ntry:\n    return _safe_extract(extractor, path, scan_root=root)\nfinally:\n    set_active_scan_root(previous_root)\n```\n\n`_ACTIVE_SCAN_ROOT` is one module global in graphify/extractors/base.py, so\nthe threads share it. When two calls overlap, the second saves the first\none's root as `previous_root` and restores it last:\n\n```text\nthread A: previous = None, set root\nthread B: previous = root, set root\nthread A: restore None\nthread B: restore root      <- still set after extract() returns\n```\n\nWith the pool forced to one thread, the global ends as None (3 of 3 runs).\nWith the default thread count, it ends as the tmp dir (3 of 3 runs).\n\nExpected: the global is None again after the test, whatever order the\ntests run in.\n\n\n### Steps to reproduce\n\n```shell\n# graphify v8 at 86c57be8, from a source checkout, serial (no -n)\npytest -p no:randomly \\\n  \"tests/test_language_overrides.py::test_the_pool_hands_its_workers_the_overrides\" \\\n  tests/test_extractor_scan_root_context.py tests/test_dotnet.py\n# -> 9 failed, 42 passed   (3 of 3 runs)\n\npytest -p no:randomly tests/test_extractor_scan_root_context.py tests/test_dotnet.py\n# -> 50 passed             (3 of 3 runs)\n\n# Full suite in random order, serial:\npytest -p randomly --randomly-seed=2\n# -> 9 failed, 8383 passed, 14 skipped: the same 9 tests\n```\n\n### Error output or graph output\n\n```text\nFAILED tests/test_extractor_scan_root_context.py::test_active_scan_root_defaults_to_none\nFAILED tests/test_extractor_scan_root_context.py::test_active_scan_root_set_get_restore_nested\nFAILED tests/test_dotnet.py  (7 XAML tests: viewmodel and DataContext linking,\n       the CommunityToolkit link, prune-noise-dirs, non-UTF-8 code-behind)\n\nactive_scan_root() after the leaking test:\n/var/tmp/.../test_the_pool_hands_its_worker0\n```\n\n### Graphify version\n\n0.9.92\n\n### Operating System\n\nLinux\n\n### Python Version\n\n3.13\n\n### Installation Method\n\nbuilt from source (git clone)\n\n### Additional Environment Details\n\nNo provider environment variables involved. Reproduced on a clean checkout\nof v8 with a fresh venv.\n\n\n### Additional context\n\nOnly the test is affected. Real runs extract through `ProcessPoolExecutor`,\nand each worker process has its own copy of the global. I found no thread\npool on that path.\n\nTwo ways to fix it:\n- In the test, run the pool with `max_workers=1`, or reset `_ACTIVE_SCAN_ROOT`\n  afterwards with `monkeypatch`.\n- In the code, make the scan root a `contextvars.ContextVar`, so each thread\n  has its own value. This also protects any later caller that runs\n  `extract()` from several threads.\n\nFound while timing the suite. Under `pytest -n` it shows up on whichever\nworker runs these files after the leaking test.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4602/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4602/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "pinned_comment": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4490",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4490/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4490/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4490/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/4490",
+      "id": 5874613430,
+      "node_id": "I_kwDOR4-pD88AAAABXid8tg",
+      "number": 4490,
+      "title": "[Bug]: hooks never rebuild after a clean cherry-pick, a rebase, or git pull --rebase",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 10600255148,
+          "node_id": "LA_kwDOR4-pD88AAAACd9MOrA",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/bug",
+          "name": "bug",
+          "color": "d73a4a",
+          "default": true,
+          "description": "Something isn't working",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 3,
+      "created_at": "2026-10-15T22:01:18Z",
+      "updated_at": "2026-10-18T09:42:28Z",
+      "closed_at": "2026-10-18T09:42:28Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "### Pre-flight checks\n\n- [x] I have checked the Troubleshooting section in the README\n\n### What happened?\n\nAfter a clean `git cherry-pick`, a `git rebase` or a `git pull --rebase`, the hooks from `graphify hook install` never launch a rebuild. `graph.json` keeps describing the old code until the next plain commit or branch switch. There are two causes:\n\n1. **Cherry-pick.** `post-commit` exits on `[ -f \"$GIT_DIR/CHERRY_PICK_HEAD\" ] && exit 0` (`graphify/hooks.py:448`). git still has `CHERRY_PICK_HEAD` on disk while `post-commit` runs, even when the pick finished cleanly. This is the same pattern as #4463 with `MERGE_HEAD`. For a range (`git cherry-pick A..B`), every pick hits it, the last one included.\n2. **Rebase.** During a rebase, `post-checkout` (`hooks.py:538`) and every `post-commit` (`hooks.py:445`) see `rebase-merge/` and exit. That part is intended. But git's hook for \"the rebase is finished\" is `post-rewrite`, and `install()` never installs one (`hooks.py:1031-1034` installs post-commit, post-checkout and post-merge only). So nothing rebuilds at the end. `git pull --rebase` goes the same way.\n\n- A conflicted single pick works today: when you finish it with `--continue` or `git commit`, `CHERRY_PICK_HEAD` is already gone, so `post-commit` rebuilds. Only the clean pick is broken.\n- `git commit --amend` works: `post-commit` rebuilds once.\n\nExpected: every git operation that changes the tree launches one rebuild when it finishes.\n\n### Steps to reproduce\n\n```shell\ngit init -q -b main demo && cd demo\nmkdir graphify-out && echo '{}' > graphify-out/graph.json\necho 'def a(): pass' > a.py && git add . && git commit -qm init\ngraphify hook install\n\n# clean cherry-pick\nexport GRAPHIFY_SKIP_HOOK=1\ngit checkout -qb side && echo 'def b(): pass' > b.py && git add . && git commit -qm b\ngit checkout -q main\nunset GRAPHIFY_SKIP_HOOK\ngit cherry-pick side 2>&1 | grep -c \"launching background rebuild\"   # 0\n\n# rebase\nexport GRAPHIFY_SKIP_HOOK=1\ngit checkout -qb feat && echo 'def f(): pass' > f.py && git add . && git commit -qm f\ngit checkout -q main && echo 'def m(): pass' > m.py && git add . && git commit -qm m\ngit checkout -q feat\nunset GRAPHIFY_SKIP_HOOK\ngit rebase main 2>&1 | grep -c \"launching background rebuild\"        # 0\n\n# control\necho 'def z(): pass' > z.py && git add z.py\ngit commit -qm z 2>&1 | grep -c \"launching background rebuild\"       # 1\n```\n\n### Error output or graph output\n\n```text\nRebuild launch lines in git's output, v8 10130e79:\n\noperation              rebuilds launched\nplain commit           1\ngit commit --amend     1\ngit cherry-pick X      0\ngit cherry-pick A..B   0\ngit rebase main        0\ngit pull --rebase      0\n\nState files on disk while each hook runs (probe hook, git 2.54.0):\n\noperation           hook                       on disk\ncherry-pick X       post-commit                CHERRY_PICK_HEAD\ncherry-pick A..B    post-commit (every pick)   CHERRY_PICK_HEAD sequencer/\nrebase main         post-checkout              rebase-merge/\n                    post-commit (every pick)   rebase-merge/ CHERRY_PICK_HEAD\n                    post-rewrite, $1=rebase    rebase-merge/\ncommit --amend      post-commit                none\n                    post-rewrite, $1=amend     none\n```\n\n### Graphify version\n\n0.9.91\n\n### Operating System\n\nLinux\n\n### Python Version\n\n3.13\n\n### Installation Method\n\nbuilt from source (git clone)\n\n### Additional Environment Details\n\ngit 2.54.0. No provider environment variables needed: the bug is in the shell hooks, before Python runs. Reproduced on a clean worktree of v8 10130e79.\n\n### Additional context\n\nFound while writing #4476 (the #4463 fix).\n\nThe probe shows two traps for a fix:\n- A new `post-rewrite` hook can't copy the existing `rebase-merge` check, because `rebase-merge/` is still on disk when it runs.\n- It must ignore `$1 = amend`, because `post-commit` already rebuilt.\n\nSimply dropping the `CHERRY_PICK_HEAD` check is not safe. With a tracked `graphify-out/graph.json`, a rebuild between picks dirties it. A later pick that touches it is then refused with `error: Your local changes to the following files would be overwritten by merge: graphify-out/graph.json`. v8 completes the same sequence.\n\nWhat I tested locally, with 7 launch-count tests, 12 edge cases and `tests/test_hooks.py`, all passing:\n- `post-commit`: skip while `sequencer/todo` has more than one line. On the last pick, diff from `$(cat \"$GIT_DIR/sequencer/head\")` (the HEAD before the sequence started) instead of `HEAD~1`. A range then gets one rebuild covering every pick, and nothing rebuilds mid-sequence.\n- A `post-rewrite` hook that acts only on `$1 = rebase`.\n- Results are the same stacked on #4476.\n\nTwo gaps remain, on v8 and with the fix: `--skip` on the last pick and `--quit`. git runs no hook when a sequence ends that way.\n\nSide notes:\n- `git commit --amend` on a repo's first commit never rebuilds. `git diff HEAD~1 HEAD` has no parent to diff against, and the fallback diff is empty.\n- The comment \"git exports GIT_DIR to hooks\" doesn't hold in a normal repo. `GIT_DIR` was empty in every probe, so the `git rev-parse` fallback runs on every hook.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4490/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4490/timeline",
+      "performed_via_github_app": null,
+      "state_reason": "completed",
+      "pinned_comment": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4461",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -935,16 +2014,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-14T19:29:29Z",
-      "updated_at": "2026-10-14T19:29:38Z",
-      "closed_at": null,
+      "updated_at": "2026-10-18T09:41:19Z",
+      "closed_at": "2026-10-18T09:41:19Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -978,7 +2057,7 @@
       },
       "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4461/timeline",
       "performed_via_github_app": null,
-      "state_reason": null,
+      "state_reason": "completed",
       "pinned_comment": null,
       "score": 1.0
     },
@@ -1027,16 +2106,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 2,
+      "comments": 3,
       "created_at": "2026-10-14T14:11:20Z",
-      "updated_at": "2026-10-14T14:57:46Z",
-      "closed_at": null,
+      "updated_at": "2026-10-18T09:40:54Z",
+      "closed_at": "2026-10-18T09:40:54Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -1070,7 +2149,7 @@
       },
       "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4455/timeline",
       "performed_via_github_app": null,
-      "state_reason": null,
+      "state_reason": "completed",
       "pinned_comment": null,
       "score": 1.0
     },

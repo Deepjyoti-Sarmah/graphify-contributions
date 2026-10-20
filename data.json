@@ -117,6 +117,14 @@
       "prs": [
         4573
       ]
+    },
+    {
+      "id": "4563",
+      "title": "hooks: last-resort `python3` probe launches the Microsoft Store redirector on Windows (visible console flash, exit 9009)",
+      "issue": 4563,
+      "prs": [
+        4568
+      ]
     }
   ],
   "prs": {
@@ -711,6 +719,13 @@
       ]
     },
     "4567": {
+      "landed": {
+        "commits": [
+          "474d23b1",
+          "a378b4dd"
+        ],
+        "note": "Applied to v8 by the maintainer in 0.9.93, authorship kept."
+      },
       "summary": "A Rust re-export like pub use item::Invoice; next to mod item; now reaches the real Invoice, so affected and explain resolve the name again.",
       "why": "The #4439 fix lends the rewire a node only for a use that starts with crate, self or super, so that use serde::Serialize never lands on a corpus Serialize. item::Invoice starts with item, which that check cannot tell apart from serde. The edge dangled, build minted an external stub invoice, and affected and explain tied on it.",
       "what": "A use is now also named when its first segment is a mod declared beside it in the same scope, unless the path starts with ::. Rust resolves exactly this way: a local mod serde shadows the serde crate (E0432), and only ::serde reaches the crate. The AST cache schema goes from 17 to 18.",
@@ -791,7 +806,7 @@
     "4572": {
       "summary": "A package.json dependency's manifest entry is linked to the code that imports the package again, and explain react finds one node instead of two.",
       "why": "Each dependency made two nodes labelled react: the manifest entry, which has the version line, and ref_react, which code imports resolve to. The #1764 fix moved the imports edge to the manifest so it would stop reading as react imports react, and that removed the only link between them. On v8 the entry is 4 hops from the importing code, the two land in different communities, and explain react exits 3 as ambiguous.",
-      "what": "The manifest entry gets a declares edge to ref_react and is relabelled name@range, for example react@^19.0.0. The range is kept to one line and capped at 40 characters. ref_react keeps the bare name, so no edge joins two react nodes and react resolves to one node. A blank range links nothing, the same as an empty one. The AST cache schema goes from 17 to 18.",
+      "what": "The manifest entry gets a declares edge to ref_react and is relabelled name@range, for example react@^19.0.0. The range is kept to one line and capped at 40 characters. ref_react keeps the bare name, so no edge joins two react nodes and react resolves to one node. A blank range links nothing, the same as an empty one. The AST cache schema goes from 20 to 21.",
       "helps": "Anyone indexing a JavaScript or TypeScript project. The manifest line for react now sits next to main.tsx in the graph, explain and affected resolve react, and an unimported @types/* devDependency is no longer listed as isolated.",
       "diagram": "flowchart LR\n  subgraph Before\n    K1[\"react (manifest entry)\"]:::bad\n    R1[\"ref_react\"] --- M1[\"main.tsx\"]\n    P1[\"package.json\"] -->|imports| R1\n    P1 -->|contains| K1\n  end\n  subgraph After\n    K2[\"react@^19.0.0\"] -->|declares| R2[\"ref_react\"]:::good\n    R2 --- M2[\"main.tsx\"]\n    P2[\"package.json\"] -->|imports| R2\n    P2 -->|contains| K2\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
       "before": "dependencies --contains--> react [code]\npackage.json --contains--> dependencies\npackage.json --contains--> name\npackage.json --imports--> react [concept]\nexplain react   Ambiguous: 'react' matches 2 nodes in package.json   (exit 3)",
@@ -850,17 +865,17 @@
     "4573": {
       "summary": "VB.NET calls that cross files, or go from VB to C#, now get calls edges, so affected, path and explain see real VB callers.",
       "why": "The VB extractor only knew the types declared in the file it was reading. A call to a Module in another file, through a local variable, or to a C# type had no owner, so it was dropped before any cross-file resolver could see it. An unqualified Module call was sent with the caller's own type as owner and found nothing. In a VB project most calls cross files, so most callers were missing. v8 also bound two calls wrongly: .Save() inside a With block and a call of a local delegate went to a same-named method on the caller's own type.",
-      "what": "The extractor keeps every call, with its receiver, the declared type of a local or parameter, the caller's namespace and the file's Imports. A new VB resolver follows the compiler's lookup order: the caller's own type and its bases first, at any arity; a field, property or local with the name hides everything else; then Modules in scope by namespace. It makes an edge only when exactly one target matches. Each rule was checked against the VB compiler (dotnet SDK 8.0) first. watch.py forwards four more metadata keys so incremental rebuilds resolve the same way. The AST cache schema goes from 17 to 18.",
+      "what": "The extractor keeps every call, with its receiver, the declared type of a local or parameter, the caller's namespace and the file's Imports. A new VB resolver follows the compiler's lookup order: the caller's own type and its bases first, at any arity; a field, property or local with the name hides everything else; then Modules in scope by namespace. It makes an edge only when exactly one target matches. Each rule was checked against the VB compiler (dotnet SDK 8.0) first. watch.py forwards four more metadata keys so incremental rebuilds resolve the same way. The build kept dropping a resolved VB -> C# edge when it was INFERRED, because its filter for cross-language name matches saw .vb and .cs as different languages. The resolver now marks its edges, and the filter keeps marked ones. The AST cache schema goes from 20 to 21.",
       "helps": "Anyone indexing a VB.NET or mixed VB and C# solution. Calls to Module functions, typed locals and C# statics now show up as callers, and the With-block and local-delegate calls no longer point at the wrong method. C# incremental rebuilds now bind namespaced types the same way a full build does.",
       "diagram": "flowchart LR\n  subgraph Before\n    C1[\"Caller.vb: LogIt / Helpers.LogIt / w.Save / CsRules.IsLocked\"] --> O1{\"owner declared in this file?\"}\n    O1 -->|no| D1[\"call dropped, no edge\"]:::bad\n  end\n  subgraph After\n    C2[\"Caller.vb: same calls\"] --> R2[\"raw call with receiver, type, namespace, Imports\"]\n    R2 --> L2{\"VB lookup order: own type, bases, members, Modules in scope\"}\n    L2 -->|one match| E2[\"calls edge\"]:::good\n    L2 -->|none or several| N2[\"no edge\"]\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
       "before": "A_SameFileSelf -> B_Target()   EXTRACTED\n.G_CsToVb      -> LogIt()      EXTRACTED",
       "after": "A_SameFileSelf      -> B_Target()    EXTRACTED\nC_UnqualifiedModule -> LogIt()       EXTRACTED  call\nD_QualifiedModule   -> LogIt()       EXTRACTED  call\nE_TypedLocal        -> Save()        INFERRED   call\nF_CsStatic          -> .IsLocked()   EXTRACTED  call\n.G_CsToVb           -> LogIt()       EXTRACTED  call",
       "limits": [
-        "A receiver typed by a field (Private _w As Worker, then _w.Save()) is not tracked.",
-        "The target of a With block is not tracked, so .Save() gets no edge rather than w.Save.",
+        "A call through a field (Private _w As Worker, then _w.Save()) or inside a With block still gets no edge. The reporter opened #4588 for these, with the WinForms shapes.",
         "Project-level Imports and RootNamespace from the .vbproj are not visible. This can only miss a Module, except in a corpus of several projects that don't reference each other.",
         "Shared versus instance members are not modeled, and a C# target with overloads gets no edge from VB.",
-        "#4567, #4572 and this PR all bump the cache schema from 17 to 18, so whichever lands later needs the next number.",
+        "#4572 and this PR both bump the cache schema from 20 to 21, so whichever lands second needs 22.",
+        "The mark, _vbnet_resolved, is written to graph.json, like _origin. GraphML export drops it.",
         "Separate bugs found while testing: the C# member resolver ignores arity when calling an overloaded VB Module, and nested VB types are not extracted."
       ],
       "tests": [
@@ -874,7 +889,9 @@
         "test_a_call_of_a_local_delegate_is_not_a_call_of_a_same_named_method",
         "test_a_property_or_field_named_like_a_module_sub_hides_it",
         "test_two_modules_declaring_the_same_name_give_no_edge_to_either",
-        "test_the_callers_own_method_wins_over_a_module_method_of_the_same_name"
+        "test_the_callers_own_method_wins_over_a_module_method_of_the_same_name",
+        "test_an_inferred_vb_call_into_csharp_is_kept_in_the_built_graph",
+        "test_a_csharp_bare_name_never_reaches_a_vb_module_member_in_the_built_graph"
       ],
       "cases": [
         {
@@ -934,6 +951,60 @@
           "covered_by": "test_the_callers_own_method_wins_over_a_module_method_of_the_same_name"
         }
       ]
+    },
+    "4568": {
+      "summary": "Under Git for Windows, graphify's git hooks no longer run the Microsoft Store python3 alias, so commits stop flashing a console window.",
+      "why": "When a hook can't find graphify's Python any other way, its last resort tries python3, then python. On Windows, python3 is usually the Microsoft Store alias, because python.org's installer ships python.exe but no python3.exe. The alias opens a console window for about 1.1 s and exits 9009, and only then does the hook try python. So every commit, checkout and merge flashed a window and waited.",
+      "what": "When WINDIR or MSYSTEM is set, the last resort tries python first, then python3. Everywhere else the order stays python3, then python. All four hooks share this block, so one change covers post-commit, post-checkout, post-merge and post-rewrite.",
+      "helps": "Windows users whose hooks reach the last resort: a removed venv, graphify moved to another env, or a GUI git client with a short PATH. Their commits no longer flash a window or wait about a second before the rebuild starts.",
+      "diagram": "flowchart LR\n  subgraph Before\n    A1[\"hook, last resort\"] --> B1[\"python3: Store alias\"]:::bad\n    B1 -->|\"window ~1.1 s, exit 9009\"| C1[\"python\"]\n  end\n  subgraph After\n    A2[\"hook, last resort, Git for Windows\"] --> C2[\"python\"]:::good\n    C2 -.->|\"only if python lacks graphify\"| B2[\"python3\"]\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "calls:  python3 (stub), python\nchose:  python          1.07 s",
+      "after": "calls:  python\nchose:  python",
+      "limits": [
+        "Not run on Windows. The tests use sh-script fakes and skip on Windows. The reporter's measurements (about 1.1 s, exit 9009) are the Windows evidence.",
+        "Hooks already installed keep the old order until graphify hook install is run again.",
+        "If python is itself a Store stub, with no real Python on PATH, it still runs once before the warning.",
+        "If python lacks graphify, python3 is still tried after it.",
+        "The issue's second idea, skipping any python3 under WindowsApps, was not taken: a real Store Python lives there too."
+      ],
+      "tests": [
+        "tests/test_hooks.py",
+        "test_windows_never_runs_the_store_python3_alias_when_python_works",
+        "test_windows_falls_back_to_python3_when_python_lacks_graphify",
+        "test_outside_windows_python3_is_still_tried_first",
+        "test_windows_with_no_working_python_still_fails_loudly_and_exits_zero",
+        "test_every_hook_embeds_the_probe_chain_unchanged"
+      ],
+      "cases": [
+        {
+          "case": "Git for Windows, python can import graphify",
+          "correct": "python only",
+          "before": "python3 (Store alias), then python",
+          "after": "python only",
+          "covered_by": "test_windows_never_runs_the_store_python3_alias_when_python_works"
+        },
+        {
+          "case": "Git for Windows, python lacks graphify",
+          "correct": "python, then python3",
+          "before": "python3 only",
+          "after": "python, then python3",
+          "covered_by": "test_windows_falls_back_to_python3_when_python_lacks_graphify"
+        },
+        {
+          "case": "Linux or macOS",
+          "correct": "python3 first",
+          "before": "python3 first",
+          "after": "python3 first",
+          "covered_by": "test_outside_windows_python3_is_still_tried_first"
+        },
+        {
+          "case": "Git for Windows, no working Python",
+          "correct": "warning, exit 0",
+          "before": "warning, exit 0",
+          "after": "warning, exit 0",
+          "covered_by": "test_windows_with_no_working_python_still_fails_loudly_and_exits_zero"
+        }
+      ]
     }
   },
   "issues": [
@@ -976,6 +1047,18 @@
         4521
       ],
       "title": "export wiki: a community relabelled only by case loses its article on case-insensitive filesystems (orphan sweep compares names case-sensitively)"
+    },
+    {
+      "number": 4602,
+      "summary": "One language-overrides test leaves the in-flight scan root set, so 9 later tests fail when the suite runs in a different order.",
+      "fixed_by": [],
+      "title": "test_the_pool_hands_its_workers_the_overrides never resets _ACTIVE_SCAN_ROOT, so 9 tests fail in a different order"
+    },
+    {
+      "number": 4603,
+      "summary": "Two test fixtures write into the installed package and the repo's build/ folder, so a killed run breaks the checkout and two runs at once skip 133 wheel tests without failing.",
+      "fixed_by": [],
+      "title": "install and wheel tests write into the package and the repo build/, so a killed or concurrent run breaks the checkout"
     }
   ],
   "proposals": [
