@@ -1,7 +1,194 @@
-{"fetched_at":"2026-10-21T20:37:45Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 22,
+{"fetched_at":"2026-10-21T23:21:57Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 24,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4654",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4654/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4654/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4654/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4654",
+      "id": 5970091512,
+      "node_id": "PR_kwDOR4-pD88AAAABJ55h_g",
+      "number": 4654,
+      "title": "fix: fold SQL table stubs across files and bind schema-qualified names (#4653)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-21T23:18:51Z",
+      "updated_at": "2026-10-21T23:19:00Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4654",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4654",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4654.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4654.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4653. A SQL table got one node per file that read it. A schema-qualified read like `dbo.Customers` never bound to the `CREATE TABLE` in another file, and a plain read like `Invoices` bound to a Python class of the same name.\n\nThere were three causes, all in the cross-file pass in `extract()`:\n\n1. Stubs with the same id and no `source_file` are salted apart by `origin_file` in `_disambiguate_colliding_node_ids`. So each file gets its own `dbo.Orders`.\n2. `_is_type_like_definition` rejects any label with a `.`. A SQL table is `schema.name`, so `_rewire_unique_stub_nodes` never binds `dbo.Customers` to its definition.\n3. `.sql` is not in `_LANG_FAMILY_BY_EXT`, so the cross-language guard treats SQL as unknown and lets the Python class win.\n\nThis PR fixes all three in that pass. It doesn't touch the SQL extractor:\n\n```diff\n _LANG_FAMILY_BY_EXT\n+  \".sql\": \"sql\"\n\n _is_type_like_definition(node)\n-  dotted label -> not a definition\n+  dotted label -> not a definition, unless the node comes from a .sql file\n\n _rewire_unique_stub_nodes\n   remap each stub to its unique definition\n+  for each stub from a .sql file\n+    drop the remap if the definition is in another language\n+    if it binds to nothing, group it by _norm_ident(label)\n+  fold each group into its smallest id (so file order doesn't matter)\n```\n\n**Before** (v8, the issue's repro):\n\n```text\ndbo.ActiveCustomers  reads_from  dbo_customers                      (a stub, not the table)\ndbo.LateOrders       reads_from  views_late_orders_sql_dbo_orders\ndbo.OpenOrders       reads_from  views_open_orders_sql_dbo_orders   (a second dbo.Orders)\ndbo.Recent           reads_from  app_models_invoices                (the Python class)\n```\n\n**After:**\n\n```text\ndbo.ActiveCustomers  reads_from  tables_customers_dbo_customers     (the CREATE TABLE)\ndbo.LateOrders       reads_from  views_late_orders_sql_dbo_orders\ndbo.OpenOrders       reads_from  views_late_orders_sql_dbo_orders   (one dbo.Orders)\ndbo.Recent           reads_from  invoices                           (a SQL stub)\n```\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nEach SQL table is one node across the project. A read binds to the `CREATE TABLE` when exactly one file defines it, and never to a definition in another language.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. Per-file extraction doesn't change, so the AST cache needs no bump. A revert brings back the per-file stubs on the next build.\n\n**Blast Radius:** SQL nodes, and any edge between SQL and another language. On `microsoft/sql-server-samples` `wide-world-importers/wwi-ssdt` (336 `.sql` files):\n\n| | v8 | this PR |\n|---|---|---|\n| nodes | 739 | 645 |\n| table-like nodes | 172 | 79 |\n| tables split across several nodes | 25 | 0 |\n| non-`contains` edges | 146 | 146 |\n| time (median of 3) | 5.5 s | 5.4 s |\n\n`application.cities` goes from 7 nodes to 1, and `application.deliverymethods` from 10 to 1. 94 stub ids go away and none are added.\n\n- **Other languages:** with `.sql` in the families, a call or reference between SQL and another language is no longer a candidate in `_cross_language_candidate`, the function-merge guard, or the cross-file call loop. No test depended on that.\n- **Dotted labels in C#, Elixir and Julia:** the fixtures (`Demo.ViewModels`, `MyApp.Accounts.User`, `Base.Threads`) give the same nodes and edges, by sha256, on v8 and on this PR.\n- **Saved graphs:** I built wwi-ssdt with v8, then ran this PR in the same folder. `graph.json` has 0 dangling edges and none of the 94 old stub ids. The same holds after editing a view and running `graphify update .` again.\n\n**Limitations**\n\n- **Bracket names:** a stub from `[dbo].[Orders]` and one from `dbo.Orders` fold only after #4649, because on v8 the parser's label is `dbo].[Orders`. A bracketed `CREATE TABLE` does bind (covered by a test).\n- **Unqualified names:** `Orders` and `dbo.Orders` stay two tables. The default schema isn't known.\n- **Two definitions:** when two files both `CREATE TABLE dbo.Orders`, reads go to one shared stub, not to either definition.\n- **Old stub ids:** nothing maps an old per-file stub id to the merged node. A saved semantic edge that points at an old id won't follow it.\n\n## How was this tested?\n\nNew tests in `tests/test_sql_cross_file_tables.py` run `extract()` on small projects and compare node ids and `reads_from` targets. None of them calls a private helper.\n\n| Test | v8 | This PR |\n|---|---|---|\n| an undefined table read from two files is one node (`dbo.Orders`, `Orders`) | fail, fail | pass |\n| reads bind to a table defined in another file (`dbo.Orders`) | fail | pass |\n| reads bind to a table defined in another file (`Orders`) | pass | pass |\n| `[dbo].[Orders]` defined, `dbo.Orders` read in another file | fail | pass |\n| a SQL read of `Orders` doesn't bind to a Python `class Orders` | fail | pass |\n| guard: a same-file definition still binds | pass | pass |\n| guard: `dbo.Orders` and `sales.Orders` stay two tables | pass | pass |\n\n```text\npytest tests/test_sql_cross_file_tables.py (tests on v8)    -> 5 failed, 3 passed\npytest tests/test_sql_cross_file_tables.py (this branch)    -> 8 passed\npytest test_multilang.py test_pg_introspect.py test_extract.py test_ejs_extractor.py -> 463 passed\npytest -q -p no:randomly (full suite, serial)               -> 8479 passed, 14 skipped\nruff check (changed files)                                  -> All checks passed\n```\n\nRunning `extract()` with the file list reversed gives the same ids. With three files in all 6 orders, the merged node is always `a_sql_dbo_orders`.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4654/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4654/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4652",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4652/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4652/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4652/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4652",
+      "id": 5969964160,
+      "node_id": "PR_kwDOR4-pD88AAAABJ5zIBg",
+      "number": 4652,
+      "title": " fix(sql): end the statement at GO batch separators (#4651)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        },
+        {
+          "id": 12626523901,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2_Q",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/needs:title",
+          "name": "needs:title",
+          "color": "fbca04",
+          "default": false,
+          "description": "PR title should follow the conventional-commit format",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-10-21T23:06:42Z",
+      "updated_at": "2026-10-21T23:14:24Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4652",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4652",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4652.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4652.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4651. In a T-SQL script, a `GO` line with no `;` before it hid every statement after it. Those tables and views got no node, and their edges were lost or attached to the wrong node.\n\n`GO` is a command for sqlcmd and SSMS, not SQL. tree-sitter-sql reads it as an identifier, so the statement doesn't end there, and the parser puts `GO` and the rest of the file in one ERROR node.\n\nThis PR ends the statement at each `GO` line before parsing:\n\n```diff\n extract_sql\n   source = file bytes\n+  for each GO [n] line found on the masked text (comments and strings blanked)\n+    skip it if a `,` comes right before it, or a `,` or `)` right after it (a column named go)\n+    replace `GO` with `;` plus spaces (same length, so byte offsets and line numbers don't move)\n   tree = parser.parse(source)\n```\n\nA keyword before the line doesn't make it a column. `SET NOCOUNT ON` / `GO` is a real separator, and SSMS writes one before every object.\n\n**Before** (v8):\n\n```sql\nSET NOCOUNT ON\nGO\nCREATE TABLE dbo.Customers (Id INT PRIMARY KEY)\nGO\nCREATE TABLE dbo.Orders (Id INT, CustomerId INT REFERENCES dbo.Customers(Id))\nGO\nCREATE VIEW dbo.OpenOrders AS SELECT Id FROM dbo.Orders\nGO\n```\n\n```text\nnodes: dbo.Customers, schema.sql\ndbo.Customers  references  dbo.Customers\n```\n\n**After:**\n\n```text\nnodes: dbo.Customers, dbo.OpenOrders, dbo.Orders, schema.sql\ndbo.Orders      references  dbo.Customers\ndbo.OpenOrders  reads_from  dbo.Orders\n```\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nEach statement between `GO` lines is parsed as its own statement, with or without a `;`. A `GO` inside a comment or string, or a column named `go`, doesn't end a statement.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. Ids of existing nodes don't change. `_AST_CACHE_SCHEMA` goes 20 -> 21, so cached `.sql` extractions re-run, and a revert re-runs them again. #4649, #4572 and #4573 also take 21, so whichever lands second needs the next number.\n\n**Blast Radius:** `.sql` files only. On `microsoft/sql-server-samples` `wide-world-importers/wwi-ssdt` (336 `.sql` files):\n\n| | v8 | this PR |\n|---|---|---|\n| nodes | 739 | 768 |\n| non-`contains` edges | 146 | 175 |\n| time (median of 3) | 5.5 s | 5.9 s |\n\nA generated file of 2,000 `CREATE TABLE ... GO` batches takes 0.68 s on v8 and finds 1 table. With this PR it takes 0.17 s and finds 2,000.\n\n**Limitations**\n\n- Statements with neither `;` nor `GO` between them still merge in the parser. That's a grammar limit this PR doesn't touch.\n- A `go` column that is the only item of a `SELECT` list and sits alone on its line (`SELECT` / `go` / `FROM t`) has no `,` or `)` next to it, so it is read as a separator.\n- The cache schema number collides with the PRs above and needs a bump at rebase time.\n\n## How was this tested?\n\nNew tests in `tests/test_sql_go_batches.py` run `extract_sql()` on small files and check labels, edges and line numbers. None of them calls the new helper.\n\n| Test | v8 | This PR |\n|---|---|---|\n| two tables split by `GO`, `go`, `GO 5`, `GO -- comment`, CRLF, indented `GO` (6 cases) | fail | pass |\n| a view after `GO` reads the table before it | fail | pass |\n| the second table keeps its own line (`L4`) | fail | pass |\n| `GO` after `SET NOCOUNT ON`, `SET ANSI_NULLS ON`, `SET QUOTED_IDENTIFIER ON`, `PRINT 'x' AS` (4 cases) | fail | pass |\n| guard: `;`-terminated batches | pass | pass |\n| guard: `GO` inside a `/* */` comment | pass | pass |\n| guard: a column named `go` | pass | pass |\n\n```text\npytest tests/test_sql_go_batches.py (tests on v8)           -> 12 failed, 3 passed\npytest tests/test_sql_go_batches.py (this branch)           -> 15 passed\npytest test_multilang.py test_pg_introspect.py test_extract.py -> 448 passed\npytest -q -p no:randomly (full suite, serial)               -> 8486 passed, 14 skipped\nruff check (changed files)                                  -> All checks passed\n```\n\nThe cache bump was checked on a two-table `GO` file. A v8 run writes the cache. This branch with the schema left at 20 serves the stale entry, which has only the first table. At 21 it re-extracts and finds both.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4652/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4652/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4649",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -55,7 +242,7 @@
       "milestone": null,
       "comments": 1,
       "created_at": "2026-10-21T20:31:02Z",
-      "updated_at": "2026-10-21T20:31:11Z",
+      "updated_at": "2026-10-21T20:41:12Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -1954,9 +2141,193 @@
   "search_type": "lexical"
 }
 ,"issue_search":{
-  "total_count": 6,
+  "total_count": 8,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4653",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4653/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4653/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4653/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/4653",
+      "id": 5970060084,
+      "node_id": "I_kwDOR4-pD88AAAABY9fjNA",
+      "number": 4653,
+      "title": "[Bug]: one SQL table becomes one node per file that reads it, and a schema-qualified read never binds to its definition",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 10600255148,
+          "node_id": "LA_kwDOR4-pD88AAAACd9MOrA",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/bug",
+          "name": "bug",
+          "color": "d73a4a",
+          "default": true,
+          "description": "Something isn't working",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-21T23:15:39Z",
+      "updated_at": "2026-10-21T23:15:47Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "### Pre-flight checks\n\n- [x] I have checked the Troubleshooting section in the README\n\n### What happened?\n\n### What happened?\n\nA SQL table that no file defines, read from N files, becomes N nodes. A\nschema-qualified read (`dbo.Customers`) never binds to the `CREATE TABLE`\nin another file. A plain read (`Invoices`) binds to a Python class of the\nsame name.\n\nA project with five files:\n\n```text\ntables/customers.sql   CREATE TABLE dbo.Customers (Id INT PRIMARY KEY);\nviews/active.sql       CREATE VIEW dbo.ActiveCustomers AS SELECT Id FROM dbo.Customers;\nviews/open_orders.sql  CREATE VIEW dbo.OpenOrders AS SELECT Id FROM dbo.Orders;\nviews/late_orders.sql  CREATE VIEW dbo.LateOrders AS SELECT Id FROM dbo.Orders;\nviews/recent.sql       CREATE VIEW dbo.Recent AS SELECT Id FROM Invoices;\napp/models.py          class Invoices: pass\n```\n\nOn v8 the `reads_from` edges are:\n\n```text\ndbo.ActiveCustomers  reads_from  dbo_customers\ndbo.LateOrders       reads_from  views_late_orders_sql_dbo_orders\ndbo.OpenOrders       reads_from  views_open_orders_sql_dbo_orders\ndbo.Recent           reads_from  app_models_invoices\n```\n\n- `dbo_customers` is a stub with no `source_file`. The real table is\n  `tables_customers_dbo_customers`, so there are two `dbo.Customers` nodes\n  and the view points at the empty one.\n- No file defines `dbo.Orders`, so the two views get two nodes,\n  `views_open_orders_sql_dbo_orders` and `views_late_orders_sql_dbo_orders`.\n  A query by either id finds one view. Neither finds both.\n- `dbo.Recent` reads `Invoices`, a table no `.sql` file defines, and the\n  edge lands on `app_models_invoices`, the Python class in\n  `app/models.py`.\n\nThree causes:\n\n1. Stubs with the same id and no `source_file` are salted apart by\n   `origin_file` in `_disambiguate_colliding_node_ids`\n   (graphify/extractors/resolution.py:1060), so each file gets its own\n   stub for the same table.\n2. `_rewire_unique_stub_nodes` (graphify/extract.py:3924, called at\n   :10189) only rewires a stub to a definition that\n   `_is_type_like_definition` accepts. That check returns False for any\n   label with a `.` (graphify/extractors/resolution.py:1201), and a SQL\n   table is `schema.name`, so `dbo.Customers` never rewires.\n3. `.sql` is not in `_LANG_FAMILY_BY_EXT` (graphify/extract.py:3801), so\n   the cross-language guard doesn't apply to SQL nodes and `Invoices`\n   binds to the Python class.\n\nExpected: one node per table across the project. A read binds to the\n`CREATE TABLE` when exactly one file defines it, and never to a\ndefinition in another language.\n\n### Steps to reproduce\n\n```shell\n### Steps to reproduce\n\n\n# graphify v8 at 847a93f3, from a source checkout\n# create the five files listed above, then, from that folder:\nGRAPHIFY_BACKEND=none graphify update .\npython -c \"\nimport json\ng = json.load(open('graphify-out/graph.json'))\nnodes = g['nodes']\nedges = g.get('links') or g.get('edges')\nlabel = {n['id']: n['label'] for n in nodes}\nfor k in ('dbo.customers', 'dbo.orders', 'invoices'):\n    ms = [n for n in nodes if n['label'].lower() == k]\n    print(k, len(ms), [(n['id'], n.get('source_file')) for n in ms])\nfor e in edges:\n    if e['relation'] == 'reads_from':\n        print(label[e['source']], e['relation'], e['target'])\"\n```\n\n### Error output or graph output\n\n```text\n### Error output or graph output\n\n`graphify update .` prints `Rebuilt: 15 nodes, 10 edges, 5 communities`.\nThe script above then prints:\n\n\ndbo.customers 2 [('dbo_customers', ''), ('tables_customers_dbo_customers', 'tables/customers.sql')]\ndbo.orders 2 [('views_late_orders_sql_dbo_orders', ''), ('views_open_orders_sql_dbo_orders', '')]\ninvoices 1 [('app_models_invoices', 'app/models.py')]\ndbo.ActiveCustomers reads_from dbo_customers\ndbo.LateOrders reads_from views_late_orders_sql_dbo_orders\ndbo.OpenOrders reads_from views_open_orders_sql_dbo_orders\ndbo.Recent reads_from app_models_invoices\n\n\nThe edges into `dbo.Orders`: `views_open_orders_sql_dbo_orders` has one\nreader, `dbo.OpenOrders`, and `views_late_orders_sql_dbo_orders` has one\nreader, `dbo.LateOrders`.\n```\n\n### Graphify version\n\n0.9.93\n\n### Operating System\n\nLinux\n\n### Python Version\n\n3.13\n\n### Installation Method\n\nbuilt from source (git clone)\n\n### Additional Environment Details\n\nNo provider environment variables involved. Reproduced on a clean checkout\nof v8 (847a93f3).\n\n\n### Additional context\n\n### Additional context\n\nOn `microsoft/sql-server-samples` `wide-world-importers/wwi-ssdt` (336\n`.sql` files), v8 has 172 table-like nodes for 79 distinct tables, and 25\ntables are split across several nodes. `application.cities` has 7 nodes\nand `application.deliverymethods` has 10.\n\nThe `.` check in `_is_type_like_definition` came in with `e44e6e98`. C#,\nElixir and Julia also produce dotted labels, so a fix should relax the\ncheck only for `.sql` nodes.\n\nFound while fixing #4635.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4653/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4653/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "pinned_comment": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4651",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4651/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4651/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4651/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/4651",
+      "id": 5969934117,
+      "node_id": "I_kwDOR4-pD88AAAABY9X3JQ",
+      "number": 4651,
+      "title": "[Bug]: a GO line with no `;` before it swallows the next T-SQL statement, so its table, view and edges vanish",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 10600255148,
+          "node_id": "LA_kwDOR4-pD88AAAACd9MOrA",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/bug",
+          "name": "bug",
+          "color": "d73a4a",
+          "default": true,
+          "description": "Something isn't working",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-21T23:03:55Z",
+      "updated_at": "2026-10-21T23:04:04Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "### Pre-flight checks\n\n- [x] I have checked the Troubleshooting section in the README\n\n### What happened?\n\n### What happened?\n\nIn a T-SQL script, a `GO` line with no `;` before it hides every\nstatement after it. The tables and views after the first `GO` get no\nnode, and their edges are lost or land on the wrong node.\n\n```sql\nSET NOCOUNT ON\nGO\nCREATE TABLE dbo.Customers (Id INT PRIMARY KEY)\nGO\nCREATE TABLE dbo.Orders (Id INT, CustomerId INT REFERENCES dbo.Customers(Id))\nGO\nCREATE VIEW dbo.OpenOrders AS SELECT Id FROM dbo.Orders\nGO\n```\n\nv8 gives two nodes, `schema.sql` and `dbo.Customers`, and one edge,\n`dbo.Customers references dbo.Customers`. `dbo.Orders` and\n`dbo.OpenOrders` are missing, and the foreign key from `dbo.Orders` is\nattached to `dbo.Customers` itself.\n\n`GO` is not SQL. It is a command for sqlcmd and SSMS that means \"send the\nbatch so far\". tree-sitter-sql has no rule for it, so it reads `GO` as an\nidentifier. Without a `;`, the statement doesn't end there. The parser\nputs `GO` and everything after it in one ERROR node, and\n`extract_sql` (graphify/extractors/sql.py) reads nothing from that node.\nThe parse happens at `sql.py:317`, and nothing before it knows about `GO`.\n\nExpected: each statement between `GO` lines is read as its own\nstatement, with or without a `;`.\n\n### Steps to reproduce\n\n```shell\n### Steps to reproduce\n\n\n# graphify v8 at 847a93f3, from a source checkout\n# save the script above as schema.sql, then:\npython -c \"\nfrom pathlib import Path\nfrom graphify.extract import extract_sql\nr = extract_sql(Path('schema.sql'))\nprint(sorted(n['label'] for n in r['nodes']))\"\n# -> ['dbo.Customers', 'schema.sql']\n\n\nEnding each statement with `;` before the `GO` gives all four nodes.\n```\n\n### Error output or graph output\n\n```text\n### Error output or graph output\n\n\nv8:\n  nodes: dbo.Customers, schema.sql\n  dbo.Customers  references  dbo.Customers\n\nwith each GO line read as the end of a statement:\n  nodes: dbo.Customers, dbo.OpenOrders, dbo.Orders, schema.sql\n  dbo.Orders      references  dbo.Customers\n  dbo.OpenOrders  reads_from  dbo.Orders\n```\n\n### Graphify version\n\n0.9.93\n\n### Operating System\n\nLinux\n\n### Python Version\n\n3.13\n\n### Installation Method\n\nbuilt from source (git clone)\n\n### Additional Environment Details\n\nNo provider environment variables involved. Reproduced on a clean checkout\nof v8 (847a93f3).\n\n\n### Additional context\n\n### Additional context\n\nProjects scripted by SSMS or SSDT end most statements with `GO` and no\n`;`. SSMS also writes `SET ANSI_NULLS ON` / `GO` and\n`SET QUOTED_IDENTIFIER ON` / `GO` before every object, so one script can\nlose everything after its first line.\n\nOn `microsoft/sql-server-samples` `wide-world-importers/wwi-ssdt` (336\n`.sql` files), reading `GO` lines as statement ends adds 29 nodes and 29\nnon-`contains` edges (739 -> 768 nodes, 146 -> 175 edges).\n\nA `go` on its own line can also be a column or alias:\n\n```sql\nSELECT a.id,\n go\nFROM dbo.A a\n```\n\nThat `go` comes right after a comma, so a fix can tell it apart: a `GO`\nline is a separator unless a `,` comes right before it or a `,` or `)`\nright after it. Keywords don't help: `SET NOCOUNT ON` / `GO` is a real\nseparator.\n\nFound while fixing #4635.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4651/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4651/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "pinned_comment": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",

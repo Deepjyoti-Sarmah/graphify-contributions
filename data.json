@@ -149,6 +149,22 @@
       "prs": [
         4649
       ]
+    },
+    {
+      "id": "4651",
+      "title": "a GO line with no `;` before it swallows the next T-SQL statement, so its table, view and edges vanish",
+      "issue": 4651,
+      "prs": [
+        4652
+      ]
+    },
+    {
+      "id": "4653",
+      "title": "one SQL table becomes one node per file that reads it, and a schema-qualified read never binds to its definition",
+      "issue": 4653,
+      "prs": [
+        4654
+      ]
     }
   ],
   "prs": {
@@ -1129,8 +1145,8 @@
       "before": "dbo].[Country reads_from dbo].[tbl_Country\n(3 procedures: contains only)",
       "after": "dbo.Country               reads_from  dbo.tbl_Country\ndbo.GetOrderTotal()       reads_from  dbo.Orders\ndbo.GetOrderTotal()       reads_from  dbo.Payments\ndbo.GetOrderTotalPlain()  reads_from  dbo.Orders\ndbo.GetOrderTotalPlain()  reads_from  dbo.Payments\ndbo.AddPayment()          writes_to   dbo.Orders\ndbo.AddPayment()          writes_to   dbo.Payments",
       "limits": [
-        "A table no file defines, referenced from N files, is still N separate nodes (v8 does the same), so \"what writes to dbo.Orders\" across a project needs a separate fix.",
-        "GO without a semicolon still swallows the next statement, so a second CREATE TABLE after GO is lost.",
+        "A table no file defines, referenced from N files, is still N separate nodes (v8 does the same), so \"what writes to dbo.Orders\" across a project needs a separate fix: #4653, fixed by #4654.",
+        "GO without a semicolon still swallows the next statement, so a second CREATE TABLE after GO is lost: #4651, fixed by #4652.",
         "When a procedure reads and writes the same table, graph.json keeps one edge per pair, so only writes_to shows.",
         "MERGE ... USING records no read; TRUNCATE and EXEC aren't modelled; BULK INSERT counts as a write.",
         "Trigger and index labels keep their brackets.",
@@ -1202,6 +1218,121 @@
           "covered_by": "test_tables_in_comments_and_strings_are_not_read"
         }
       ]
+    },
+    "4652": {
+      "summary": "A GO line in a T-SQL script now ends the statement, so the tables and views after it are no longer lost.",
+      "why": "GO is a command for sqlcmd and SSMS, not SQL. The parser read it as a name, so without a ; the statement didn't end there and everything after the first GO landed in one ERROR node. A script that starts with SET NOCOUNT ON / GO could lose every table in it.",
+      "what": "Before parsing, each GO [n] line found on the masked text (comments and strings blanked) is replaced with ; plus spaces, so byte offsets and line numbers don't move. A go line right after a comma, or right before a comma or ), is a column and stays.",
+      "helps": "Anyone graphing scripts written by SSMS or SSDT, which end most statements with GO and no ;. On the wide-world-importers SSDT sample (336 files), nodes went from 739 to 768 and non-contains edges from 146 to 175.",
+      "diagram": "flowchart LR\n  subgraph Before\n    A1[\"CREATE TABLE dbo.Customers\"] --> G1[\"GO\"]\n    G1 --> E1[\"ERROR: dbo.Orders, dbo.OpenOrders\"]:::bad\n  end\n  subgraph After\n    A2[\"CREATE TABLE dbo.Customers\"] --> S2[\";\"]\n    S2 --> O2[\"CREATE TABLE dbo.Orders\"]:::good\n    O2 --> S3[\";\"]\n    S3 --> V2[\"CREATE VIEW dbo.OpenOrders\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "nodes: dbo.Customers, schema.sql\ndbo.Customers  references  dbo.Customers",
+      "after": "nodes: dbo.Customers, dbo.OpenOrders, dbo.Orders, schema.sql\ndbo.Orders      references  dbo.Customers\ndbo.OpenOrders  reads_from  dbo.Orders",
+      "limits": [
+        "Statements with neither ; nor GO between them still merge in the parser.",
+        "A go column that is the only item of a SELECT and sits alone on its line is read as a separator.",
+        "AST cache schema goes 20 -> 21, the same number #4649, #4572 and #4573 take, so whichever lands second needs the next one."
+      ],
+      "tests": [
+        "tests/test_sql_go_batches.py",
+        "test_go_separated_tables_are_both_found",
+        "test_go_separated_view_reads_its_table",
+        "test_second_table_keeps_its_own_line",
+        "test_go_after_keyword_line_is_a_separator",
+        "test_semicolon_separated_tables_are_both_found",
+        "test_go_inside_block_comment_is_not_a_separator",
+        "test_column_named_go_is_not_a_separator"
+      ],
+      "cases": [
+        {
+          "case": "GO, go, GO 5, GO -- comment, CRLF, indented GO",
+          "correct": "both tables",
+          "before": "first table only",
+          "after": "both tables",
+          "covered_by": "test_go_separated_tables_are_both_found"
+        },
+        {
+          "case": "SET NOCOUNT ON / GO before a table",
+          "correct": "a separator",
+          "before": "tables after it lost",
+          "after": "a separator",
+          "covered_by": "test_go_after_keyword_line_is_a_separator"
+        },
+        {
+          "case": "GO inside /* */",
+          "correct": "not a separator",
+          "before": "not a separator",
+          "after": "not a separator",
+          "covered_by": "test_go_inside_block_comment_is_not_a_separator"
+        },
+        {
+          "case": "a column named go after a comma",
+          "correct": "a column",
+          "before": "a column",
+          "after": "a column",
+          "covered_by": "test_column_named_go_is_not_a_separator"
+        }
+      ]
+    },
+    "4654": {
+      "summary": "A SQL table is now one node across the project, bound to its CREATE TABLE when one file defines it.",
+      "why": "A table that no file defined got one stub node per file that read it, so no single node answered \"who reads dbo.Orders\". A schema-qualified read like dbo.Customers never bound to its definition in another file, because the cross-file pass skipped every label with a dot. A SQL read of Invoices also bound to a Python class Invoices.",
+      "what": "The cross-file pass in extract() now accepts dotted labels from .sql files as definitions, and .sql joins the language families, so SQL no longer binds to another language. SQL stubs that share a normalized name and bind to nothing fold into one node, the one with the smallest id, so file order doesn't matter. The SQL extractor is unchanged.",
+      "helps": "Anyone asking which views or procedures touch a table across a SQL project. On the wide-world-importers SSDT sample, 172 table-like nodes became 79, one per table, and all 25 split tables became one node each.",
+      "diagram": "flowchart LR\n  subgraph Before\n    O1[\"dbo.OpenOrders\"] -->|reads_from| S1[\"views_open_orders_sql_dbo_orders\"]:::bad\n    L1[\"dbo.LateOrders\"] -->|reads_from| S2[\"views_late_orders_sql_dbo_orders\"]:::bad\n    R1[\"dbo.Recent\"] -->|reads_from| P1[\"Python class Invoices\"]:::bad\n  end\n  subgraph After\n    O2[\"dbo.OpenOrders\"] -->|reads_from| T2[\"dbo.Orders\"]:::good\n    L2[\"dbo.LateOrders\"] -->|reads_from| T2\n    R2[\"dbo.Recent\"] -->|reads_from| I2[\"SQL stub Invoices\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "dbo.ActiveCustomers  reads_from  dbo_customers   (a stub, not the table)\ndbo.LateOrders       reads_from  views_late_orders_sql_dbo_orders\ndbo.OpenOrders       reads_from  views_open_orders_sql_dbo_orders\ndbo.Recent           reads_from  app_models_invoices   (the Python class)",
+      "after": "dbo.ActiveCustomers  reads_from  tables_customers_dbo_customers\ndbo.LateOrders       reads_from  views_late_orders_sql_dbo_orders\ndbo.OpenOrders       reads_from  views_late_orders_sql_dbo_orders\ndbo.Recent           reads_from  invoices",
+      "limits": [
+        "Stubs from [dbo].[Orders] and dbo.Orders fold only after #4649, because on v8 the bracket label is dbo].[Orders.",
+        "Orders and dbo.Orders stay two tables, because the default schema isn't known.",
+        "When two files both CREATE TABLE dbo.Orders, reads go to one shared stub, not to either definition.",
+        "Nothing maps an old per-file stub id to the merged node, so a saved semantic edge on an old id won't follow it."
+      ],
+      "tests": [
+        "tests/test_sql_cross_file_tables.py",
+        "test_undefined_table_from_two_files_is_one_node",
+        "test_reads_bind_to_table_defined_in_another_file",
+        "test_bracket_and_plain_names_across_files_are_one_table",
+        "test_sql_read_does_not_bind_to_python_class",
+        "test_same_file_definition_still_binds",
+        "test_different_schemas_stay_different_tables"
+      ],
+      "cases": [
+        {
+          "case": "dbo.Orders read from two files, defined nowhere",
+          "correct": "one node",
+          "before": "two nodes",
+          "after": "one node",
+          "covered_by": "test_undefined_table_from_two_files_is_one_node"
+        },
+        {
+          "case": "dbo.Orders defined in another file",
+          "correct": "binds to the CREATE TABLE",
+          "before": "a separate stub",
+          "after": "binds to the CREATE TABLE",
+          "covered_by": "test_reads_bind_to_table_defined_in_another_file"
+        },
+        {
+          "case": "Orders defined in another file",
+          "correct": "binds to the CREATE TABLE",
+          "before": "binds",
+          "after": "binds",
+          "covered_by": "test_reads_bind_to_table_defined_in_another_file"
+        },
+        {
+          "case": "SQL Orders and a Python class Orders",
+          "correct": "not linked",
+          "before": "binds to the class",
+          "after": "not linked",
+          "covered_by": "test_sql_read_does_not_bind_to_python_class"
+        },
+        {
+          "case": "dbo.Orders and sales.Orders",
+          "correct": "two tables",
+          "before": "two tables",
+          "after": "two tables",
+          "covered_by": "test_different_schemas_stay_different_tables"
+        }
+      ]
     }
   },
   "issues": [
@@ -1264,6 +1395,22 @@
       "summary": "Two test fixtures write into the installed package and the repo's build/ folder, so a killed run breaks the checkout and two runs at once skip 133 wheel tests without failing.",
       "fixed_by": [],
       "title": "install and wheel tests write into the package and the repo build/, so a killed or concurrent run breaks the checkout"
+    },
+    {
+      "number": 4651,
+      "summary": "In a T-SQL script, a GO line with no ; before it hides every statement after it, so those tables and views get no node.",
+      "fixed_by": [
+        4652
+      ],
+      "title": "a GO line with no `;` before it swallows the next T-SQL statement, so its table, view and edges vanish"
+    },
+    {
+      "number": 4653,
+      "summary": "A SQL table read from several files becomes one node per file, and a schema-qualified read never binds to the table defined in another file.",
+      "fixed_by": [
+        4654
+      ],
+      "title": "one SQL table becomes one node per file that reads it, and a schema-qualified read never binds to its definition"
     }
   ],
   "proposals": [
