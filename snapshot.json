@@ -1,7 +1,95 @@
-{"fetched_at":"2026-10-21T13:54:54Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 21,
+{"fetched_at":"2026-10-21T20:37:45Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 22,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4649",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4649/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4649/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4649/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4649",
+      "id": 5968038984,
+      "node_id": "PR_kwDOR4-pD88AAAABJ4QwKA",
+      "number": 4649,
+      "title": "fix(sql): strip T-SQL brackets and add reads_from/writes_to edges for procedures (#4635)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-21T20:31:02Z",
+      "updated_at": "2026-10-21T20:31:11Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4649",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4649",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4649.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4649.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4635. On a T-SQL project the SQL graph was close to empty:\n\n1. Bracket names were mangled. `[dbo].[Country]` got the label `dbo].[Country`, and it never matched `dbo.Country`.\n2. Stored procedures had no `reads_from` edges, in any dialect.\n3. `INSERT`/`UPDATE`/`DELETE`/`MERGE` made no edge.\n\nBoth come from the grammar. tree-sitter-sql 0.3.11 has no T-SQL bracket identifiers: the outer `[` and `]` become ERROR tokens, and the name it keeps is `dbo].[Country`. It also has no `create_procedure` node at all, so the `create_procedure` branch in `sql.py` never runs. Even `CREATE PROCEDURE p AS SELECT a FROM t1;` lands in an ERROR node. The regex recovery then adds the procedure node, and nothing adds its edges. Without `;` between statements, the grammar also merges the body, so the tree has no `insert` or `update` node to read.\n\nSo this PR reads procedure bodies as text, not from the tree:\n\n```diff\n extract_sql\n   labels and lookup keys\n+    strip [ ] from each name part: [dbo].[Orders] -> dbo.Orders, [a]]b] -> a]b\n   routine recovery (_ROUTINE_RECOVERY_RX, when the parse has errors)\n     add routine node\n+    body = after its name, up to the next CREATE/ALTER line, a GO line, or EOF\n+    scan the body on the masked text (comments and strings blanked)\n+      FROM / JOIN                                          -> reads_from\n+      INSERT [INTO] / UPDATE / DELETE [FROM] / MERGE [INTO] / SELECT ... INTO -> writes_to\n+      UPDATE o ... FROM dbo.Orders o                        -> alias resolves to dbo.Orders\n+      skip CTE names, @variables, #temp/##temp, table-valued function calls\n+    one edge per (routine, relation, table)\n```\n\nIds don't change: `_make_id` already dropped the brackets, so only labels and in-file matching were wrong. Double-quoted names (`\"dbo\".\"V\"`) keep their labels. Routines the tree parses cleanly (PostgreSQL `$$` functions) keep their tree-based edges and aren't scanned a second time.\n\n**Before** (the issue's repro, v8, `graphify update .`):\n\n```text\ndbo].[Country reads_from dbo].[tbl_Country\n(3 procedures: contains only)\n```\n\n**After:**\n\n```text\ndbo.Country               reads_from  dbo.tbl_Country\ndbo.GetOrderTotal()       reads_from  dbo.Orders\ndbo.GetOrderTotal()       reads_from  dbo.Payments\ndbo.GetOrderTotalPlain()  reads_from  dbo.Orders\ndbo.GetOrderTotalPlain()  reads_from  dbo.Payments\ndbo.AddPayment()          writes_to   dbo.Orders\ndbo.AddPayment()          writes_to   dbo.Payments\n```\n\n## Type of change\n\n- [x] Bug fix\n- [x] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n`writes_to` is a new relation. Nothing outside `sql.py` lists relation names, so it needs no registration.\n\n## Verification & Invariants\n\nA procedure has a `reads_from` edge to each table it reads and a `writes_to` edge to each table it writes, and none to aliases, variables, temp tables, CTEs, or names in comments and strings. A name gets the same label and key with or without brackets.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. Ids are unchanged. `_AST_CACHE_SCHEMA` goes 20 -> 21 so cached `.sql` extractions re-run, and a revert re-runs them again. #4572 and #4573 also take 21, so whichever lands second needs 22.\n\n**Blast Radius:** SQL only. On `microsoft/sql-server-samples` `wide-world-importers/wwi-ssdt` (336 `.sql` files):\n\n| | v8 | this PR |\n|---|---|---|\n| nodes | 739 | 1011 |\n| non-`contains` edges | 146 | 465 |\n| time (median of 3) | 5.7 s | 5.8 s |\n\n- **Removed:** no v8 edge. The edges that show as removed in a text diff are the same edges with bracket-free labels.\n- **Added:** 190 `reads_from` and 129 `writes_to`. All 319 were checked against the source: 314 have the keyword right before the table name, and 5 are `UPDATE sih ... FROM Warehouse.StockItemHoldings AS sih` alias updates.\n- **False positives:** none among the 61 distinct targets. 13 are `sys.*` catalog views, which are real references. 36 edges sit on routines that only exist because of the mask's known multi-line-string hole (`Configuration_*InMemory.sql` build procedures inside multi-line `N'...'` strings).\n- **Existing tests:** 10 assertions in `test_multilang.py` change their expected routine label to the bracket-free form (`[dbo].[usp_Real]()` -> `dbo.usp_Real()`). `test_sql_tsql_bracketed_procedure_is_recovered` now filters to routine nodes, since the procedure's tables now appear as stubs.\n\n**Limitations**\n\n- **One node per file for undefined tables.** A table no file defines, referenced from N files, becomes N stub nodes. In the repro that's three `dbo.Orders` nodes. v8 does the same. Answering \"what writes to `dbo.Orders`\" across a project needs that fixed. Filed as #<stub-issue>.\n- **`GO` without `;`** still swallows the next statement in the tree, so a second `CREATE TABLE` after `GO` is lost. Filed as #<go-issue>.\n- When a procedure both reads and writes a table, `graph.json` keeps one edge per pair, so only `writes_to` shows. `extract()` returns both.\n- `MERGE ... USING src` records no read. `TRUNCATE` and `EXEC` aren't modelled. `BULK INSERT dbo.T` counts as a write.\n- A `CREATE`/`ALTER` at the start of a line inside a body (`CREATE INDEX ... ON #t`) ends the body early. `CREATE TABLE #t` and `CREATE TABLE @t` don't.\n- Trigger and index labels keep their brackets.\n- The `create_procedure` and `fb_proc_or_trigger` branches are dead on this grammar. They're left as they are.\n\n## How was this tested?\n\nNew tests in `tests/test_sql_tsql_procedures.py` run `extract()` or `extract_sql()` on small files, including the issue's four, and assert `(source, relation, target)` triples. None calls a private helper.\n\n| Test | v8 | This PR |\n|---|---|---|\n| T1: `[dbo].[Orders]` and `dbo.Orders` in one file are one table | fail | pass |\n| T2: no half-stripped labels; labels are `dbo.Orders`, `dbo.AddPayment()`; `[a]]b]` -> `a]b`; `\"dbo\".\"V\"` kept | fail | pass |\n| T3: each repro procedure reads its tables | fail | pass |\n| T4: plain `CREATE PROCEDURE p AS SELECT ...`, with `(x INT)`, with `@x INT ... BEGIN END` | fail | pass |\n| T5: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `SELECT ... INTO` give `writes_to`; `DELETE FROM` isn't a read | fail | pass |\n| T9: `UPDATE o ... FROM dbo.Orders o` writes `dbo.Orders` | fail | pass |\n| T10: `#work`, `##shared`, `@ids` are skipped | fail | pass |\n| T11: `GO`-separated procedures keep their own tables; comments and strings are ignored | fail | pass |\n| guards: aliases, columns, variables, CTEs, two procedures in one file, top-level statements, function and view reads, one edge per triple | pass | pass |\n\nOn v8 the guards pass because v8 makes no procedure edges. They catch a fix that attaches too much.\n\n```text\npytest tests/test_sql_tsql_procedures.py (tests on v8)    -> 25 failed, 8 passed\npytest tests/test_sql_tsql_procedures.py (this branch)    -> 33 passed\npytest test_multilang.py test_pg_introspect.py test_extract.py -> 448 passed\npytest -q -p no:randomly (full suite, --basetemp=/var/tmp) -> 8504 passed, 14 skipped\nruff check (changed files)                                 -> All checks passed\n```\n\nThe cache bump was checked on the repro: a v8 run writes the cache, then this branch with the schema forced back to 20 serves the old labels and the single edge. At 21 it re-extracts and gives the 7 edges above.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4649/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4649/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4636",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -55,7 +143,7 @@
       "milestone": null,
       "comments": 1,
       "created_at": "2026-10-21T13:52:06Z",
-      "updated_at": "2026-10-21T13:52:15Z",
+      "updated_at": "2026-10-21T14:02:34Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",

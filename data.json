@@ -141,6 +141,14 @@
       "prs": [
         4636
       ]
+    },
+    {
+      "id": "4635",
+      "title": "T-SQL: bracket-quoted identifiers are mangled, stored procedures get no reads_from edges, writes are not modelled",
+      "issue": 4635,
+      "prs": [
+        4649
+      ]
     }
   ],
   "prs": {
@@ -1109,6 +1117,89 @@
           "before": "no edge",
           "after": "no edge",
           "covered_by": "test_namespace_member_call_that_must_not_bind"
+        }
+      ]
+    },
+    "4649": {
+      "summary": "T-SQL bracket names now get clean labels (dbo.Orders), and stored procedures get reads_from and a new writes_to edge for the tables they touch.",
+      "why": "On a T-SQL project the SQL graph was nearly empty. [dbo].[Country] came out as the label dbo].[Country, procedures had no edges at all, and INSERT, UPDATE, DELETE and MERGE made no edge. The grammar has no T-SQL bracket names and no create_procedure node, so every procedure only got a node from a regex fallback, in any dialect.",
+      "what": "Labels and lookup keys drop the brackets from each name part, and ids don't change. Each recovered procedure's body, up to the next CREATE or ALTER, a GO line or the end of the file, is scanned as text with comments and strings blanked. FROM and JOIN give reads_from; INSERT, UPDATE, DELETE, MERGE and SELECT ... INTO give writes_to.",
+      "helps": "Anyone graphing a SQL Server or SSDT project, where most business logic sits in procedures. On the wide-world-importers SSDT sample (336 files), non-contains edges went from 146 to 465, and all 319 new edges were checked against the source.",
+      "diagram": "flowchart LR\n  subgraph Before\n    P1[\"[dbo].[AddPayment]()\"] -.->|\"no edges\"| X1[\"nothing\"]:::bad\n    V1[\"dbo].[Country\"]:::bad -->|reads_from| T1[\"dbo].[tbl_Country\"]:::bad\n  end\n  subgraph After\n    P2[\"dbo.AddPayment()\"] -->|writes_to| O2[\"dbo.Orders\"]:::good\n    P2 -->|writes_to| Y2[\"dbo.Payments\"]:::good\n    G2[\"dbo.GetOrderTotal()\"] -->|reads_from| O2\n    V2[\"dbo.Country\"] -->|reads_from| T2[\"dbo.tbl_Country\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "dbo].[Country reads_from dbo].[tbl_Country\n(3 procedures: contains only)",
+      "after": "dbo.Country               reads_from  dbo.tbl_Country\ndbo.GetOrderTotal()       reads_from  dbo.Orders\ndbo.GetOrderTotal()       reads_from  dbo.Payments\ndbo.GetOrderTotalPlain()  reads_from  dbo.Orders\ndbo.GetOrderTotalPlain()  reads_from  dbo.Payments\ndbo.AddPayment()          writes_to   dbo.Orders\ndbo.AddPayment()          writes_to   dbo.Payments",
+      "limits": [
+        "A table no file defines, referenced from N files, is still N separate nodes (v8 does the same), so \"what writes to dbo.Orders\" across a project needs a separate fix.",
+        "GO without a semicolon still swallows the next statement, so a second CREATE TABLE after GO is lost.",
+        "When a procedure reads and writes the same table, graph.json keeps one edge per pair, so only writes_to shows.",
+        "MERGE ... USING records no read; TRUNCATE and EXEC aren't modelled; BULK INSERT counts as a write.",
+        "Trigger and index labels keep their brackets.",
+        "AST cache schema goes 20 -> 21, the same number #4572 and #4573 take, so whichever lands second needs 22."
+      ],
+      "tests": [
+        "tests/test_sql_tsql_procedures.py",
+        "test_bracketed_and_plain_names_resolve_to_the_defined_table",
+        "test_issue_repro_labels_are_bracket_free",
+        "test_issue_repro_procedure_reads_its_tables",
+        "test_plain_procedure_reads_its_tables",
+        "test_procedure_write_makes_a_non_read_edge",
+        "test_issue_repro_addpayment_write_relation",
+        "test_delete_from_is_a_write_not_a_read",
+        "test_select_into_writes_the_target_and_reads_the_source",
+        "test_update_through_an_alias_writes_the_aliased_table",
+        "test_temp_tables_and_table_variables_are_skipped",
+        "test_go_separated_procedures_keep_their_own_tables",
+        "test_tables_in_comments_and_strings_are_not_read"
+      ],
+      "cases": [
+        {
+          "case": "[dbo].[Orders] and dbo.Orders in one file",
+          "correct": "one table",
+          "before": "two nodes",
+          "after": "one table",
+          "covered_by": "test_bracketed_and_plain_names_resolve_to_the_defined_table"
+        },
+        {
+          "case": "label of [dbo].[Country]",
+          "correct": "dbo.Country",
+          "before": "dbo].[Country",
+          "after": "dbo.Country",
+          "covered_by": "test_issue_repro_labels_are_bracket_free"
+        },
+        {
+          "case": "CREATE PROCEDURE p AS SELECT ... FROM t1 JOIN t2",
+          "correct": "reads_from t1 and t2",
+          "before": "no edge",
+          "after": "reads_from both",
+          "covered_by": "test_plain_procedure_reads_its_tables"
+        },
+        {
+          "case": "INSERT / UPDATE / DELETE / MERGE in a procedure",
+          "correct": "writes_to the table",
+          "before": "no edge",
+          "after": "writes_to",
+          "covered_by": "test_procedure_write_makes_a_non_read_edge"
+        },
+        {
+          "case": "UPDATE o ... FROM dbo.Orders o",
+          "correct": "writes_to dbo.Orders",
+          "before": "no edge",
+          "after": "writes_to dbo.Orders",
+          "covered_by": "test_update_through_an_alias_writes_the_aliased_table"
+        },
+        {
+          "case": "#work, ##shared, @ids",
+          "correct": "no edge",
+          "before": "no edge",
+          "after": "no edge",
+          "covered_by": "test_temp_tables_and_table_variables_are_skipped"
+        },
+        {
+          "case": "tables in comments and strings",
+          "correct": "no edge",
+          "before": "no edge",
+          "after": "no edge",
+          "covered_by": "test_tables_in_comments_and_strings_are_not_read"
         }
       ]
     }
