@@ -125,6 +125,14 @@
       "prs": [
         4568
       ]
+    },
+    {
+      "id": "4588",
+      "title": "[Bug]: vbnet: no calls edge through field receivers or With blocks (WinForms-style forms)",
+      "issue": 4588,
+      "prs": [
+        4623
+      ]
     }
   ],
   "prs": {
@@ -1005,6 +1013,25 @@
           "covered_by": "test_windows_with_no_working_python_still_fails_loudly_and_exits_zero"
         }
       ]
+    },
+    "4623": {
+      "summary": "VB.NET calls made through a field, through Me.field, or inside a With block now get calls edges.",
+      "why": "Fields carried no declared type, so a call like _repo.Save() had a receiver the resolver couldn't type: the field hid the call and nothing replaced it. Me._repo was treated as a value of unknown type, and .Save() inside a With block was skipped because the extractor didn't track With. WinForms code calls almost everything through fields, so most of a form's callers were missing.",
+      "what": "Fields and auto-properties store their declared type (As T or As New T()) with the declaring file's namespace and imports. The resolver looks a receiver up as a field of the caller's type across partial files, then in its VB bases nearest first, after locals and parameters, and binds to the member of the declared type as INFERRED. An untyped, external or ambiguous field gives no edge but still hides a same-named type. Me.f, MyClass.f and OwnType.f resolve like f. A stack of With targets makes .M() a call on the innermost target. Each rule was checked against the VB compiler (dotnet SDK 8.0, 30 cases). watch.py forwards declared_type and imports; the AST cache schema goes from 21 to 22. Stacked on #4573.",
+      "helps": "Anyone indexing VB.NET WinForms or service code that holds collaborators in fields. Their callers, including VB to C# calls, now show up in affected, path and explain.",
+      "diagram": "flowchart LR\n  subgraph Before\n    C1[\"_repo.Save() / Me._repo.Save() / With _repo: .Load()\"] --> D1[\"field has no type: no edge\"]:::bad\n  end\n  subgraph After\n    C2[\"same calls\"] --> F2{\"field of caller's type or VB base?\"}\n    F2 -->|declared type known, unique| E2[\"calls edge, INFERRED\"]:::good\n    F2 -->|untyped, external, ambiguous| N2[\"no edge\"]\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "F1-F5, W1-W4, P1: 0 of 10 calls edges",
+      "after": "F1_FieldNew         -> Load()    INFERRED\nF3_MeField          -> Save()    INFERRED\nF4_FieldCSharp      -> .Total()  INFERRED\nW1_WithField        -> Load()    INFERRED\nW4_WithFieldCSharp  -> .Total()  INFERRED\n(10 of 10 found)",
+      "limits": [
+        "A field declared without As (Private x = New T()) is Object to the compiler and gets no edge.",
+        "In the same-file shortcut, a receiver naming a field declared in another partial file or a base class can still bind to a same-named type in the calling file.",
+        "A Module field used unqualified from another class, untyped multi-name declarators and nested VB types are unchanged."
+      ],
+      "tests": [
+        "tests/test_vbnet_extractor.py",
+        "H21-H37 (hard)",
+        "P10-P16 (probes, incl. the issue repro and an incremental rebuild)"
+      ]
     }
   },
   "issues": [
@@ -1012,24 +1039,32 @@
       "number": 4346,
       "title": "[Bug]: /graphify skill \"Step 1 - Ensure graphify is installed\" exits 0 and leaves empty graphify-out files when a write fails; .graphify_root readers trim folder names",
       "summary": "Step 1 of the skill exits 0 and leaves empty marker files when a write fails, so the next step fails.",
-      "fixed_by": [4353]
+      "fixed_by": [
+        4353
+      ]
     },
     {
       "number": 4455,
       "title": "[Bug]: aider and devin --update never write .graphify_detect.json, so Part A fails",
       "summary": "On aider and devin update, nothing writes .graphify_detect.json, so Part A fails after a full build.",
-      "fixed_by": [4456]
+      "fixed_by": [
+        4456
+      ]
     },
     {
       "number": 4461,
       "title": "[Bug]: backticks in two skill comments make bash run `graphify update` and `changed` mid-merge",
       "summary": "With graphify installed, bash runs graphify update from a comment inside Part C, which rewrites graph.json and then makes the merge fail with SyntaxError.",
-      "fixed_by": [4462]
+      "fixed_by": [
+        4462
+      ]
     },
     {
       "number": 4490,
       "summary": "After a clean cherry-pick, a rebase or a pull --rebase, the git hooks never rebuild the graph.",
-      "fixed_by": [4491],
+      "fixed_by": [
+        4491
+      ],
       "title": "hooks never rebuild after a clean cherry-pick, a rebase, or git pull --rebase"
     },
     {
