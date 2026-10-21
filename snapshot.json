@@ -1,7 +1,183 @@
-{"fetched_at":"2026-10-20T22:22:08Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 19,
+{"fetched_at":"2026-10-21T13:54:54Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 21,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4636",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4636/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4636/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4636/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4636",
+      "id": 5961865017,
+      "node_id": "PR_kwDOR4-pD88AAAABJzSILA",
+      "number": 4636,
+      "title": "fix(js): resolve ns.fn() calls through namespace imports (#4619)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-21T13:52:06Z",
+      "updated_at": "2026-10-21T13:52:15Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4636",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4636",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4636.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4636.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4619. A call through a namespace import made no `calls` edge:\n\n```ts\nimport * as ops from './ops'\nexport function dispatch(n: number) { return ops.submit(n) }   // no dispatch -> submit\n```\n\nIt failed in both call paths:\n\n- The symbol-resolution pass (`resolution.py`) never recorded `import * as ops`, and kept only bare-identifier callees, so `ops.submit` was dropped. #3517 fixed aliased named imports here and left namespace imports for later.\n- The per-file engine saw the member call, then looked `submit` up by bare name in the caller's own file. When that file has its own `submit`, the call bound to it, so the edge pointed at the wrong function. Otherwise the call was parked, and the cross-file loop skips every member call.\n\nThe engine now knows which import binds each receiver. The resolution pass resolves `fn` against the module's real exports:\n\n```diff\n engine: member call ns.fn()\n+  if ns is bound by `import * as ns from './m'` (corpus file, not shadowed in the caller)\n+    skip the same-file bare-name lookup\n+    stamp the raw call with (m, \"*\")\n resolution pass\n+  record `import * as ns` as an import fact with imported name \"*\"\n+  turn each stamped call into a use fact `ns.fn`\n+  fn = the one export of m named fn (re-export chains, `export { a as b }`, `export * as ns`)\n+  no export of that name -> no edge\n```\n\nThe lookup uses the export table that named imports already use (`exported_candidates`), so it handles renames the same way. Unlike `resolve_exported_origin`, it doesn't fall back to \"a symbol with that name exists in the file\", so `ns.privateFn()` makes no edge.\n\n**Before** (the issue's repro, v8):\n\n```text\ncalls dispatch() -> helper()\n```\n\n**After:**\n\n```text\ncalls dispatch() -> helper()\ncalls dispatch() -> submit()\ncalls dispatch() -> reveal()\ncalls direct()   -> submit()\n```\n\nI chose this after writing the tests first and running four candidates against them:\n\n| | A: resolution pass only | B: engine + new resolver | C: A + class methods + engine guard | D: engine binding + export table (this PR) |\n|---|---|---|---|---|\n| issue repro (T1) | 4/4 | 4/4 | 4/4 | 4/4 |\n| class methods, nested functions, `.tsx`, `.mjs` (T2) | 3/5 | 5/5 | 4/5 | 5/5 |\n| through barrels (T3) | 3/3 | 3/3 | 3/3 | 3/3 |\n| `export { a as b }`: `x.b()` edge, `x.a()` none | pass | fail | pass | pass |\n| no edge to an unexported function | fail | fail | fail | pass |\n| no edge to a same-named function in the caller's file | fail | pass | pass | pass |\n| shadowing, external package, `import type` (T4) | pass | pass | pass | pass |\n\nB rebuilt the export table from graph labels. That lost the renamed name and treated every `contains` child as an export.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nA call `ns.fn()` through `import * as ns from './m'` has a `calls` edge to the function `m` exports as `fn`, and to nothing else.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. No id changes and no schema bump: JS/TS files skip the per-file AST cache (`_JS_CACHE_BYPASS_SUFFIXES`), so the next extract gives the new edges, and a revert gives v8 output again.\n\n**Blast Radius:** small. Only JS/TS graphs change, and only around namespace imports. On a 2876-file TypeScript project, 12 edges were added and 7 removed out of 15567, and I checked each against the source:\n\n- **Removed:** 7 calls like `ops.add()` inside a class method `add()`, which v8 bound to the class's own `.add()`.\n- **Added:** those 7 calls, plus `ops.list()` and `ops.wakeNow()`, now point at `service/ops.ts`. 3 more are calls inside `it(...)` callbacks, through an `export *` barrel.\n\nExtraction took 37.7 s, against 38.6 s on v8 (median of 3).\n\n**Limitations**\n\n- A top-level `ns.fn()` statement, outside any function, still makes no edge, the same as a bare call. `test_ts_import_require.py` pins the edges of that case.\n- `ops.a.b()` and `const f = ops.submit; f()` still make no edge. `new ops.K()` and `const { submit } = ops; submit()` now do. All four are `xfail(strict=False)`, because their wanted behaviour isn't decided.\n- Only relative imports resolve, the same as other JS imports here (`_resolve_js_module_path`). `tsconfig` path aliases and Vue/Svelte callers are untested.\n- The `\"*\"` import fact goes into the shared alias table. `\"*\"` is never an export name, so a bare `ops()` resolves to nothing.\n\n## How was this tested?\n\nNew tests in `tests/test_js_exported_fn_call_resolution.py`, next to the #3346 tests. Each one runs `extract()` on a small project and asserts `(caller, callee, callee file)` edges. None of them calls a private helper.\n\n| Test | v8 | This PR |\n|---|---|---|\n| T1: issue repro, each of the 3 namespace edges | fail | pass |\n| T1: `dispatch -> helper` | pass | pass |\n| T2: arrow (`.js`), class method, nested function, `.tsx`, `.mjs` | fail | pass |\n| T3: `export *`, `export { x } from`, `export * as ns` barrels | fail | pass |\n| T3b: renamed re-export | fail | pass |\n| T4: no edge to a same-named function in the caller's file | fail: binds to it | pass |\n| T4: name not exported, local and parameter shadow, `react`, `import type` | pass | pass |\n| T4b: no edge to an unexported function | pass | pass |\n| T5: chain, const alias, `new`, destructure | 3 xfail, 1 xpass | 2 xfail, 2 xpass |\n| T6: named, aliased (#3346) and default imports, `imports_from` edges | pass | pass |\n\nOn v8 the tests that pass do so because v8 makes no namespace edges at all. They guard against binding by name.\n\n```text\npytest tests/test_js_exported_fn_call_resolution.py (tests on v8 b90b9df7) -> 13 failed, 16 passed, 3 xfailed, 1 xpassed\npytest tests/test_js_exported_fn_call_resolution.py (this branch)           -> 29 passed, 2 xfailed, 2 xpassed\npytest -q -p no:randomly (full suite, --basetemp=/var/tmp)                  -> 8495 passed, 14 skipped, 2 xfailed, 2 xpassed\nruff check (changed files)                                                  -> All checks passed\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4636/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4636/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4623",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4623/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4623/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4623/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4623",
+      "id": 5958774831,
+      "node_id": "PR_kwDOR4-pD88AAAABJwylkg",
+      "number": 4623,
+      "title": "fix(vbnet): resolve calls through typed fields, Me.field and With blocks (#4588)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-21T10:28:19Z",
+      "updated_at": "2026-10-21T10:37:17Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4623",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4623",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4623.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4623.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4588. Stacked on #4573, so only the last two commits are new: 467f15ba (tests) and 25d072bc (fix).\n\nThe VB resolver dropped calls made through a field, through `Me.field`, and inside `With` blocks:\n\n```vb\nPrivate _repo As Repository        ' F1-F5\n_repo.Save()                       ' no edge\nMe._repo.Save()                    ' no edge\nWith _repo\n    .Load()                        ' no edge\nEnd With\n```\n\nFields had no declared type, so a field receiver hid the call and nothing replaced it.\n\n```diff\n resolve(call)\n   locals / parameters\n+  field of the caller's type (all partial files), then VB bases nearest first\n+    declared type known and unique -> member of that type, INFERRED 0.85\n+    untyped / external / ambiguous -> no edge (still hides a same-named type)\n   type or Module named by the receiver\n\n walk(method body)\n+  With target stack: `.M()` -> call on the innermost target\n+    name / Me.name -> resolved like name.M()\n+    New T()        -> typed receiver T\n+    anything else  -> no edge\n```\n\n- Only `As T` and `As New T()` give a field a type. `Private x = New T()` is `Object` to the compiler, because Option Infer doesn't apply to fields.\n- The field's type is resolved with the declaring file's namespace and imports.\n- `Me.f`, `MyClass.f` and `OwnType.f` resolve like `f`.\n- A typed local or field of an interface type binds to the interface member, as the compiler does.\n- VB→C# edges keep the `_vbnet_resolved` marker from #4573.\n- `watch.py` forwards `declared_type` and `imports`. `_AST_CACHE_SCHEMA` 21 → 22.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nInvariant: a VB `calls` edge points only at the method the compiler would bind. When the receiver's type isn't known for sure, there's no edge, never a guess.\n\nI checked each case against the VB compiler (dotnet SDK 8.0, 30 cases). A local, a parameter or a `Shadows` field hides a field. A field hides a type of the same name. Nested `With` uses the innermost target. Lambdas see the `With` target. An untyped field is `Object` (BC30209 under Strict On).\n\nPersisted state: field and property nodes gain `metadata.owner`, `declared_type`, `namespace` and `imports`. The schema bump re-extracts cached VB files. The change is two-way: reverting it and bumping the schema again restores the old graph.\n\nKnown gap: a call whose receiver is a field declared in another partial file or a base class can still bind to a type with the same name in the calling file (same-file shortcut). #4573 behaves the same way, and it takes a field named exactly like a type.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n## How was this tested?\n\n```text\n# before the fix (tests only, 467f15ba)\npytest tests/test_vbnet_extractor.py      -> 29 failed, 58 passed, 2 xfailed\n\n# after (25d072bc)\npytest tests/test_vbnet_extractor.py      -> 87 passed, 2 xfailed (existing P5/P6)\npytest (full suite, PYTHONPATH=checkout)  -> 8550 passed, 14 skipped, 2 xfailed, 0 failed\nruff check graphify/extractors/vbnet.py graphify/watch.py graphify/cache.py tests/test_vbnet_extractor.py -> clean\n\n# reporter's repro, GRAPHIFY_BACKEND=none\nF1-F5, W1-W4, P1 -> 10/10 edges found (F4/W4 reach C# .Total())\n\n# compiler ground truth\npodman run mcr.microsoft.com/dotnet/sdk:8.0 (vbc, 30 cases)\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A, no skill sources touched)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4623/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4623/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4573",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -1836,9 +2012,9 @@
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-20T20:01:18Z",
-      "updated_at": "2026-10-20T20:01:27Z",
+      "updated_at": "2026-10-21T05:11:07Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",

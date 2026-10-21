@@ -133,6 +133,14 @@
       "prs": [
         4623
       ]
+    },
+    {
+      "id": "4619",
+      "title": "[Bug]: TS/JS: calls through a namespace import (import * as ns; ns.fn()) produce no calls edge (deferred half of #3346)",
+      "issue": 4619,
+      "prs": [
+        4636
+      ]
     }
   ],
   "prs": {
@@ -1031,6 +1039,77 @@
         "tests/test_vbnet_extractor.py",
         "H21-H37 (hard)",
         "P10-P16 (probes, incl. the issue repro and an incremental rebuild)"
+      ]
+    },
+    "4636": {
+      "summary": "In TypeScript and JavaScript, a call through a namespace import (import * as ops; ops.submit()) now makes a calls edge to the function the module exports.",
+      "why": "graphify dropped ops.submit(n) in both of its call paths. The cross-file pass never recorded import * as ops and kept only bare-name calls. The per-file pass looked submit up by name in the caller's own file, so when that file had its own submit, the edge went to the wrong function. explain and affected then said a function was called only by its tests.",
+      "what": "The per-file pass records which import binds each receiver. For import * as ops it skips the same-file name lookup and passes the call on with its module. The cross-file pass looks the name up in that module's exports, through barrels and export { a as b }. A name the module doesn't export makes no edge.",
+      "helps": "Anyone running explain or affected on a TS/JS codebase that uses import * as. Callers through the namespace now show up. On a 2876-file project, 7 calls that v8 bound to the class's own same-named method now point at the right module.",
+      "diagram": "flowchart LR\n  subgraph Before\n    A1[\"dispatch(): ops.submit()\"] -.->|\"dropped\"| X1[\"no edge\"]:::bad\n    M1[\"add(): ops.add()\"] -->|\"same-file name lookup\"| S1[\"own .add()\"]:::bad\n  end\n  subgraph After\n    A2[\"dispatch(): ops.submit()\"] -->|\"export table of ./ops\"| T2[\"ops.ts submit()\"]:::good\n    M2[\"add(): ops.add()\"] --> T3[\"ops.ts add()\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "calls dispatch() -> helper()",
+      "after": "calls dispatch() -> helper()\ncalls dispatch() -> submit()\ncalls dispatch() -> reveal()\ncalls direct()   -> submit()",
+      "limits": [
+        "A top-level ops.fn() statement, outside any function, still makes no edge, the same as a bare call.",
+        "ops.a.b() and const f = ops.submit; f() still make no edge. new ops.K() and const { submit } = ops; submit() now do. All four are xfail(strict=False) until their behaviour is decided.",
+        "Only relative imports resolve. tsconfig path aliases and Vue or Svelte callers are untested.",
+        "No cache schema bump: JS/TS files skip the per-file AST cache, so the next extract gives the new edges."
+      ],
+      "tests": [
+        "tests/test_js_exported_fn_call_resolution.py",
+        "test_issue_repro_namespace_member_calls_produce_calls_edges",
+        "test_namespace_member_call_from_each_caller_shape",
+        "test_namespace_member_call_through_a_barrel_reaches_the_real_function",
+        "test_namespace_call_through_a_renamed_reexport",
+        "test_namespace_member_call_that_must_not_bind",
+        "test_namespace_member_call_does_not_bind_to_a_same_named_local_function",
+        "test_namespace_call_to_an_unexported_function_makes_no_edge",
+        "test_named_import_call_still_resolves",
+        "test_aliased_import_call_still_resolves_to_the_original"
+      ],
+      "cases": [
+        {
+          "case": "ops.submit() in an exported function (the issue)",
+          "correct": "edge to ops.ts submit",
+          "before": "no edge",
+          "after": "edge",
+          "covered_by": "test_issue_repro_namespace_member_calls_produce_calls_edges"
+        },
+        {
+          "case": "ops.submit() in a class method, nested function, .tsx or .mjs",
+          "correct": "edge from the innermost caller",
+          "before": "no edge",
+          "after": "edge",
+          "covered_by": "test_namespace_member_call_from_each_caller_shape"
+        },
+        {
+          "case": "x.b() where the barrel has export { a as b }",
+          "correct": "edge to lib.ts a",
+          "before": "no edge",
+          "after": "edge",
+          "covered_by": "test_namespace_call_through_a_renamed_reexport"
+        },
+        {
+          "case": "the caller's file has its own submit",
+          "correct": "no edge to the local submit",
+          "before": "edge to the local submit",
+          "after": "edge to ops.ts submit only",
+          "covered_by": "test_namespace_member_call_does_not_bind_to_a_same_named_local_function"
+        },
+        {
+          "case": "l.hidden(), not exported",
+          "correct": "no edge",
+          "before": "no edge",
+          "after": "no edge",
+          "covered_by": "test_namespace_call_to_an_unexported_function_makes_no_edge"
+        },
+        {
+          "case": "ops shadowed by a local or parameter, react, import type",
+          "correct": "no edge",
+          "before": "no edge",
+          "after": "no edge",
+          "covered_by": "test_namespace_member_call_that_must_not_bind"
+        }
       ]
     }
   },
