@@ -96,14 +96,25 @@ async function loadSnapshot() {
   return res.json();
 }
 
+// GitHub search can time out and answer 200 with incomplete_results and no items.
+// Treat that as a failure so the page shows the snapshot instead of an empty list.
+function partialCheck(data) {
+  if (data.incomplete_results && !(data.items && data.items.length)) {
+    const err = new Error('GitHub search returned a partial result');
+    err.partial = true;
+    throw err;
+  }
+  return data;
+}
+
 // Live search first (cached for 10 minutes). On any failure, show the committed snapshot.
 async function loadPullRequests(force) {
   if (!force) {
     const hit = freshCache(SEARCH_CACHE_KEY);
-    if (hit) return { items: hit.data, source: 'live', at: hit.t };
+    if (hit && hit.data.length) return { items: hit.data, source: 'live', at: hit.t };
   }
   try {
-    const data = await github(SEARCH_PATH);
+    const data = partialCheck(await github(SEARCH_PATH));
     const at = Date.now();
     storage.write(SEARCH_CACHE_KEY, { t: at, data: data.items });
     return { items: data.items, source: 'live', at };
@@ -113,7 +124,7 @@ async function loadPullRequests(force) {
       items: snap.search.items,
       source: 'snapshot',
       at: Date.parse(snap.fetched_at),
-      reason: err.rateLimited ? 'GitHub rate limit' : 'GitHub unreachable',
+      reason: err.rateLimited ? 'GitHub rate limit' : err.partial ? 'GitHub search timed out' : 'GitHub unreachable',
     };
   }
 }
@@ -123,10 +134,10 @@ async function loadPullRequests(force) {
 async function loadIssues(force) {
   if (!force) {
     const hit = freshCache(ISSUE_CACHE_KEY);
-    if (hit) return { items: hit.data, source: 'live', at: hit.t };
+    if (hit && hit.data.length) return { items: hit.data, source: 'live', at: hit.t };
   }
   try {
-    const data = await github(ISSUE_SEARCH_PATH);
+    const data = partialCheck(await github(ISSUE_SEARCH_PATH));
     const at = Date.now();
     storage.write(ISSUE_CACHE_KEY, { t: at, data: data.items });
     return { items: data.items, source: 'live', at };
@@ -136,7 +147,7 @@ async function loadIssues(force) {
       items: (snap.issue_search && snap.issue_search.items) || [],
       source: 'snapshot',
       at: Date.parse(snap.fetched_at),
-      reason: err.rateLimited ? 'GitHub rate limit' : 'GitHub unreachable',
+      reason: err.rateLimited ? 'GitHub rate limit' : err.partial ? 'GitHub search timed out' : 'GitHub unreachable',
     };
   }
 }
