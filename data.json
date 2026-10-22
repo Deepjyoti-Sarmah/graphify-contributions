@@ -165,6 +165,14 @@
       "prs": [
         4654
       ]
+    },
+    {
+      "id": "4681",
+      "title": "`graphify extract` aborts with `ValueError: Invalid pattern` when pnpm-workspace.yaml has an inline comment after a glob",
+      "issue": 4681,
+      "prs": [
+        4687
+      ]
     }
   ],
   "prs": {
@@ -1358,6 +1366,65 @@
           "before": "two tables",
           "after": "two tables",
           "covered_by": "test_different_schemas_stay_different_tables"
+        }
+      ]
+    },
+    "4687": {
+      "summary": "An inline comment after a pnpm workspace glob no longer hides the package, and a glob pathlib rejects no longer fails the whole run.",
+      "why": "The hand-written pnpm-workspace.yaml reader kept a trailing # comment inside the glob, so the package under it was never found and its imports stayed unresolved. On Python 3.12 a ** glob with a comment made Path.glob raise, the error escaped extract(), and the run ended with exit 1 and no graph. An absolute glob raised NotImplementedError on every version.",
+      "what": "A quoted value now ends at its closing quote, and an unquoted one at the first # after whitespace, as in YAML. A glob that Path.glob rejects is skipped with a warning and the other globs still load.",
+      "helps": "Anyone graphing a pnpm or npm workspace whose manifest has comments or odd globs. On the issue's repro, 3.12 goes from exit 1 to 18 nodes and 16 edges, and 3.13 goes from 14 edges with @x/svc unresolved to 16 with it resolved.",
+      "diagram": "flowchart LR\n  subgraph Before\n    Y1[\"- #quot;stg/**#quot; #35; note\"] --> G1[\"glob: stg/**#quot; #35; note\"]:::bad\n    G1 -->|3.12| E1[\"ValueError, run fails\"]:::bad\n    G1 -->|3.13| N1[\"matches nothing, import unresolved\"]:::bad\n  end\n  subgraph After\n    Y2[\"- #quot;stg/**#quot; #35; note\"] --> G2[\"glob: stg/**\"]:::good\n    G2 --> R2[\"package found, import resolves\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "3.12: warning: skipped .../libs/consumer.ts (ValueError: Invalid pattern: '**' can only be an entire path component)\n      AST extraction failed, exit 1, no graph.json\n3.13: exit 0, 19 nodes, 14 edges, consumer.ts imports_from ref_x_svc",
+      "after": "3.12: exit 0, 18 nodes, 16 edges, consumer.ts imports_from svc/index.ts\n3.13: exit 0, 18 nodes, 16 edges, consumer.ts imports_from svc/index.ts",
+      "limits": [
+        "The warning prints once per bad glob in each worker process.",
+        "graphify extract in a folder built with v8 keeps the old result until the files change; graphify update . picks up the fix.",
+        "A flow list, packages: [\"a/*\"], still gives no globs, as on v8.",
+        "Absolute globs are skipped, not resolved."
+      ],
+      "tests": [
+        "tests/test_pnpm_workspace_globs.py",
+        "test_inline_comment_after_quoted_glob_still_resolves_the_package",
+        "test_workspace_glob_pathlib_rejects_does_not_drop_the_run",
+        "test_workspace_without_comment_resolves_the_package",
+        "test_hash_inside_quotes_is_part_of_the_glob"
+      ],
+      "cases": [
+        {
+          "case": "\"pk/**\" # note",
+          "correct": "package resolves",
+          "before": "3.12 run fails; 3.13 unresolved",
+          "after": "package resolves",
+          "covered_by": "test_inline_comment_after_quoted_glob_still_resolves_the_package"
+        },
+        {
+          "case": "'pk/*' # note",
+          "correct": "package resolves",
+          "before": "unresolved",
+          "after": "package resolves",
+          "covered_by": "test_inline_comment_after_quoted_glob_still_resolves_the_package"
+        },
+        {
+          "case": "package.json workspaces tools/**-cli",
+          "correct": "run completes",
+          "before": "3.12 run fails; 3.13 works",
+          "after": "run completes",
+          "covered_by": "test_workspace_glob_pathlib_rejects_does_not_drop_the_run"
+        },
+        {
+          "case": "absolute workspace glob",
+          "correct": "skipped, run completes",
+          "before": "run fails on 3.12 and 3.13",
+          "after": "skipped, run completes",
+          "covered_by": "test_workspace_glob_pathlib_rejects_does_not_drop_the_run"
+        },
+        {
+          "case": "\"a#b/*\"",
+          "correct": "glob a#b/*",
+          "before": "glob a#b/*",
+          "after": "glob a#b/*",
+          "covered_by": "test_hash_inside_quotes_is_part_of_the_glob"
         }
       ]
     }

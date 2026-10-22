@@ -1,7 +1,95 @@
-{"fetched_at":"2026-10-22T17:04:06Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 24,
+{"fetched_at":"2026-10-22T23:26:48Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 25,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4687",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4687/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4687/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4687/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4687",
+      "id": 5989084984,
+      "node_id": "PR_kwDOR4-pD88AAAABKJADSw",
+      "number": 4687,
+      "title": "fix: drop inline comments from pnpm workspace globs and skip globs pathlib rejects (#4681)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-22T23:25:56Z",
+      "updated_at": "2026-10-22T23:26:05Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4687",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4687",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4687.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4687.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4681. An inline YAML comment after a `pnpm-workspace.yaml` glob stayed in the glob, so the workspace package was never found and imports of it stayed unresolved. On Python 3.12 a `**` glob with a comment also made `Path.glob` raise, and the error escaped `extract()`, so the whole run failed with no graph.\n\n```yaml\npackages:\n  - \"services/runner/stg/**\" # staging runner infrastructure\n```\n\n`_pnpm_workspace_globs` read that line as `services/runner/stg/**\" # staging runner infrastructure`.\n\n- **3.12:** `ValueError: Invalid pattern: '**' can only be an entire path component`. Exit 1, and the Python files in the run are lost too.\n- **3.13:** no crash, but the glob matches nothing. A plain `pk/*` with a comment fails the same way on every version.\n- **Absolute globs:** `Path.glob` raises `NotImplementedError` on every version, from `pnpm-workspace.yaml` or from `package.json` `\"workspaces\"`.\n\nThis PR fixes both parts in `resolution.py`:\n\n```diff\n _pnpm_workspace_globs\n   for each \"- value\" line under packages:\n-    strip quotes from both ends\n+    if quoted: take the text up to the closing quote (skip the item if there is none)\n+    else: cut at the first `#` that follows whitespace\n     skip empty and `!` values\n\n _load_workspace_packages\n   for each glob\n-    root.glob(pattern)\n+    try root.glob(pattern)\n+    except ValueError, NotImplementedError: warn and skip this glob\n```\n\n`\"a#b/*\"` and unquoted `a#b/*` stay as written, because YAML only starts a comment at a `#` after whitespace.\n\n**Before** (v8, the issue's repro plus a package `@x/svc` under `services/runner/stg/`):\n\n```text\n3.12: warning: skipped .../libs/consumer.ts (ValueError: Invalid pattern: '**' can only be an entire path component)\n      [graphify extract] AST extraction failed: ...   exit 1, no graph.json\n3.13: exit 0, 19 nodes, 14 edges, consumer.ts imports_from ref_x_svc (unresolved)\n```\n\n**After:**\n\n```text\n3.12: exit 0, 18 nodes, 16 edges, consumer.ts imports_from svc/index.ts\n3.13: exit 0, 18 nodes, 16 edges, consumer.ts imports_from svc/index.ts\n```\n\nThese are the same counts v8 gives for the repro with the comment removed.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nA workspace glob means what pnpm reads from the YAML, and one glob that `Path.glob` can't use never stops the extraction of the rest of the repository.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. No ids or cache formats change. JS/TS files skip the AST cache (`_JS_CACHE_BYPASS_SUFFIXES`), so no schema bump is needed.\n\n**Blast Radius:** JS/TS workspace import resolution. Only lines under `packages:` that hold a comment, or a quote left open, read differently. A glob that used to crash the run is now skipped.\n\n**Limitations**\n\n- **Warning count:** the cache that holds the workspace packages is per process, so the warning prints once per bad glob in each worker. 60 TS files on 3.12 printed it 26 times.\n- **Existing graphs:** `graphify extract` in a folder already built with v8 keeps the old result, because the manifest skips unchanged files. `graphify update .` or a fresh folder picks up the fix. The same holds today for any edit of `pnpm-workspace.yaml`.\n- **Flow lists:** `packages: [\"a/*\"]` still gives no globs, as on v8.\n- **Absolute globs** are skipped, not resolved.\n\n## How was this tested?\n\nNew tests in `tests/test_pnpm_workspace_globs.py` build a small workspace with a package, a TS file that imports it by name, and a Python file. They run `extract()` and check that both files' nodes are present and that the import resolves to the package. None of them calls a private helper.\n\n| Test | v8 3.12 | v8 3.13 | This PR |\n|---|---|---|---|\n| comment after `\"pk/**\"` | fail (`ValueError`) | fail (unresolved) | pass |\n| comment after `'pk/**'` | fail (`ValueError`) | fail (unresolved) | pass |\n| comment after `\"pk/*\"` and `'pk/*'` | fail, fail (unresolved) | fail, fail (unresolved) | pass |\n| `package.json` workspaces `tools/**-cli` | fail (`ValueError`) | pass | pass |\n| `package.json` absolute workspace glob | fail (`NotImplementedError`) | fail (`NotImplementedError`) | pass |\n| guard: `\"pk/**\"` and `\"pk/*\"` without a comment | pass | pass | pass |\n| guard: `#` inside quotes (`\"a#b/*\"`) | pass | pass | pass |\n\n```text\npytest tests/test_pnpm_workspace_globs.py (tests on v8, 3.12)   -> 6 failed, 3 passed\npytest tests/test_pnpm_workspace_globs.py (tests on v8, 3.13)   -> 5 failed, 4 passed\npytest tests/test_pnpm_workspace_globs.py (this branch, both)   -> 9 passed\npytest on the 9 test files matching workspace|pnpm (3.12, 3.13) -> 653 passed each\npytest -q -p no:randomly (full suite, serial, 3.13)             -> 8579 passed, 14 skipped\nruff check (changed files)                                      -> All checks passed\n```\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4687/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4687/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4654",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
