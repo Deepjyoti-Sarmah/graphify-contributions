@@ -664,6 +664,12 @@
       }
     },
     "4520": {
+      "landed": {
+        "commits": [
+          "a31f6d83"
+        ],
+        "note": "Shipped in v0.9.93. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      },
       "summary": "explain and path now name the repo of each candidate when two merged files share a basename, instead of calling both one file.",
       "why": "In a merged graph, web/dup.py and ml/dup.py are both stored as dup.py. The same-file check compared that bare name, so both nodes looked like one file. explain and path then said \"matches 2 nodes in dup.py\", listed two bare L1 lines, and gave a hint that could not tell them apart.",
       "what": "A file is now its repo plus its source_file. When candidates span more than one repo, the refusal shows web/dup.py and ml/dup.py. When the same path exists in two repos, the hint says so and asks for the full node id.",
@@ -1137,6 +1143,13 @@
       ]
     },
     "4649": {
+      "landed": {
+        "commits": [
+          "60872220",
+          "518bd3f0"
+        ],
+        "note": "Shipped in v0.9.94. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      },
       "summary": "T-SQL bracket names now get clean labels (dbo.Orders), and stored procedures get reads_from and a new writes_to edge for the tables they touch.",
       "why": "On a T-SQL project the SQL graph was nearly empty. [dbo].[Country] came out as the label dbo].[Country, procedures had no edges at all, and INSERT, UPDATE, DELETE and MERGE made no edge. The grammar has no T-SQL bracket names and no create_procedure node, so every procedure only got a node from a regex fallback, in any dialect.",
       "what": "Labels and lookup keys drop the brackets from each name part, and ids don't change. Each recovered procedure's body, up to the next CREATE or ALTER, a GO line or the end of the file, is scanned as text with comments and strings blanked. FROM and JOIN give reads_from; INSERT, UPDATE, DELETE, MERGE and SELECT ... INTO give writes_to.",
@@ -1220,6 +1233,13 @@
       ]
     },
     "4652": {
+      "landed": {
+        "commits": [
+          "01715acc",
+          "9ce14047"
+        ],
+        "note": "Shipped in v0.9.94. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      },
       "summary": "A GO line in a T-SQL script now ends the statement, so the tables and views after it are no longer lost.",
       "why": "GO is a command for sqlcmd and SSMS, not SQL. The parser read it as a name, so without a ; the statement didn't end there and everything after the first GO landed in one ERROR node. A script that starts with SET NOCOUNT ON / GO could lose every table in it.",
       "what": "Before parsing, each GO [n] line found on the masked text (comments and strings blanked) is replaced with ; plus spaces, so byte offsets and line numbers don't move. A go line right after a comma, or right before a comma or ), is a column and stays.",
@@ -1274,6 +1294,13 @@
       ]
     },
     "4654": {
+      "landed": {
+        "commits": [
+          "8e8a7c38",
+          "b8d9f123"
+        ],
+        "note": "Shipped in v0.9.94. Applied to v8 by the maintainer with an authorship-preserving cherry-pick, so GitHub shows it closed, not merged."
+      },
       "summary": "A SQL table is now one node across the project, bound to its CREATE TABLE when one file defines it.",
       "why": "A table that no file defined got one stub node per file that read it, so no single node answered \"who reads dbo.Orders\". A schema-qualified read like dbo.Customers never bound to its definition in another file, because the cross-file pass skipped every label with a dot. A SQL read of Invoices also bound to a Python class Invoices.",
       "what": "The cross-file pass in extract() now accepts dotted labels from .sql files as definitions, and .sql joins the language families, so SQL no longer binds to another language. SQL stubs that share a normalized name and bind to nothing fold into one node, the one with the smallest id, so file order doesn't matter. The SQL extractor is unchanged.",
