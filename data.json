@@ -181,6 +181,14 @@
       "prs": [
         4712
       ]
+    },
+    {
+      "id": "4698",
+      "title": "affected <path> returns 'No unique node match' for a file with a shared basename and a module docstring",
+      "issue": 4698,
+      "prs": [
+        4713
+      ]
     }
   ],
   "prs": {
@@ -1460,6 +1468,30 @@
         "test_a_use_of_a_reexporting_crate_reaches_the_defining_crate",
         "test_a_crate_restricted_reexport_does_not_leak_out_of_its_crate",
         "test_a_crate_less_binding_is_flagged_inferred_not_extracted"
+      ]
+    },
+    "4713": {
+      "summary": "`graphify affected <path>` finds the file node for a file whose basename is shared, even when a module docstring puts a second node on line 1.",
+      "why": "On graphifyy 0.9.94, `graphify affected app/alpha/hooks.py` answered `No unique node match` for a file that was in the graph. The reporter counted 404 of 4,771 files, about 1 in 12, and every per-agent `callbacks/before_tool.py` style file with a docstring. Asking by node id worked, so only the path lookup missed.",
+      "what": "`_prefer_file_node` now accepts an `L1` node whose label names its own `source_file`, which covers the path suffix #2032 assigns to colliding basenames (`alpha/hooks.py`). The check runs before the \"only node on L1\" fallback, so a docstring rationale node or a one-line top-level definition no longer decides the result. It reuses `_is_file_node_label`, the predicate `build` and `analyze` already share.",
+      "helps": "Anyone who scripts `affected <path>` or seeds a tool from an editor path in a repo with same-named modules. The command lists the consumers instead of reporting the file as absent, and `path`, `./path`, an absolute path, the disambiguated label, and the node id all resolve the same node.",
+      "diagram": "flowchart LR\n  subgraph Before\n    Q1[\"affected app/alpha/hooks.py\"] --> P1[\"_prefer_file_node\"]\n    P1 --> D1[\"label == hooks.py? no\"]:::bad\n    P1 --> L1[\"only node on L1? no, docstring is also L1\"]:::bad\n    D1 --> N1[\"No unique node match\"]:::bad\n    L1 --> N1\n  end\n  subgraph After\n    Q2[\"affected app/alpha/hooks.py\"] --> P2[\"_prefer_file_node\"]\n    P2 --> S2[\"label names its own source_file? yes\"]:::good\n    S2 --> F2[\"alpha/hooks.py file node\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "graphify affected app/alpha/hooks.py\nNo unique node match for app/alpha/hooks.py",
+      "after": "graphify affected app/alpha/hooks.py\nAffected nodes for alpha/hooks.py\n- main.py [imports_from] app/main.py:L1\n- handle() [calls] app/main.py:L5",
+      "limits": [
+        "`affected` still prints the failure to stdout and exits 0 when nothing matches; that is a separate defect.",
+        "A docstring whose text is literally a path suffix of the file would compete with the file node; two candidates still return no match rather than guessing.",
+        "A graph built before #2032 keeps bare-basename labels and resolves through the existing pass, unchanged.",
+        "File nodes are still identified on read; this PR does not mark them at extraction time."
+      ],
+      "tests": [
+        "tests/test_affected_path_file_node.py",
+        "test_shared_basename_with_module_docstring_on_l1_resolves_file_node",
+        "test_shared_basename_with_one_line_definition_on_l1_resolves_file_node",
+        "test_shared_basename_resolves_from_absolute_path",
+        "test_ambiguous_file_shaped_labels_still_refuse_to_guess",
+        "test_affected_cli_resolves_shared_basename_with_docstring",
+        "test_affected_cli_resolves_shared_basename_without_docstring"
       ]
     }
   },

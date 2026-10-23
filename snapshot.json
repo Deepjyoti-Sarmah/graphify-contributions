@@ -1,7 +1,95 @@
-{"fetched_at":"2026-10-23T13:50:25Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 26,
+{"fetched_at":"2026-10-23T14:41:16Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 27,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4713",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4713/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4713/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4713/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4713",
+      "id": 5999786888,
+      "node_id": "PR_kwDOR4-pD88AAAABKRiWYw",
+      "number": 4713,
+      "title": "fix: resolve affected <path> for disambiguated file labels (#4698)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-23T14:37:04Z",
+      "updated_at": "2026-10-23T14:37:13Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4713",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4713",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4713.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4713.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4698. `graphify affected <path>` answered `No unique node match for <path>` for a file whose basename is shared with another file and that has a second node on `L1`, for example a module docstring.\n\nA path query matches every node in the file, so resolution ends in `_prefer_file_node`. Three of its passes pick the file node:\n\n1. the label equals the query basename and sits on `L1`\n2. the file node is the only node on `L1`\n3. the label equals the basename\n\n#2032 relabels colliding basenames to their shortest unique path suffix (`alpha/hooks.py`), which retires passes 1 and 3. The rationale pass creates one node per docstring at the docstring's own line, so a docstring on line 1 puts a second node on `L1` and retires pass 2. A one-line top-level definition does the same. Either precondition alone is harmless. Both together resolve to `None`.\n\nThe fact the resolver needs is already in the graph: a file node's label is a path form of its own `source_file`. `_is_file_node_label` encodes exactly that and `build`/`analyze` already use it.\n\n```diff\n graphify/affected.py\n   _prefer_file_node()\n     pass 1: label equals the basename and is on L1\n+    pass 2: label names this node's own source_file\n+            (_is_file_node_label, imported lazily from graphify.build)\n+            checked before the \"only node on L1\" fallback\n     pass 3: only node on L1\n     pass 4: label equals the basename\n```\n\nNo graph schema change and no re-extraction. The relabelled node is already in `graph.json`; only the lookup changes.\n\n**Before** (v8, the issue's repro):\n\n```text\n$ graphify affected app/alpha/hooks.py\nNo unique node match for app/alpha/hooks.py\n$ echo $?\n0\n```\n\n**After:**\n\n```text\n$ graphify affected app/alpha/hooks.py\nAffected nodes for alpha/hooks.py\nRelations: calls, indirect_call, references, imports, imports_from, dynamic_import, re_exports, inherits, extends, implements, uses, mixes_in, embeds, defines, requires\nDepth: 2\n- main.py [imports_from] app/main.py:L1\n- handle() [calls] app/main.py:L5\n```\n\nThe same graph resolves both files by path:\n\n```text\napp/alpha/hooks.py                  -> alpha/hooks.py\napp/beta/hooks.py                   -> beta/hooks.py\n./app/alpha/hooks.py                -> alpha/hooks.py\n/abs/path/app/alpha/hooks.py        -> alpha/hooks.py\nalpha/hooks.py   (the label)        -> alpha/hooks.py\napp_alpha_hooks  (the node id)      -> alpha/hooks.py\nhooks.py         (ambiguous)        -> still no unique match\n```\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nA path seed resolves to the node that names the file: the `L1` node whose label is the file's basename or a trailing path suffix of its own `source_file`. Extra `L1` nodes do not change the result. When two nodes both claim that shape, resolution still refuses to guess.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. No cache schema change, no extractor change. A revert restores the miss on the next run, and an existing `graph.json` works without a rebuild.\n\n**Blast Radius:** path seed resolution.\n\n`resolve_seed` is shared by the `affected` CLI and the `serve`/MCP lookup path, so both gain the fix. The new pass runs only when a path query already matched more than one node, and it compares the label to that node's own `source_file`, so it cannot bind to another file. Single-file graphs, unique basenames, and node-id seeds take the same path as before. The full-suite failure set is identical to v8.\n\n**Limitations**\n\n- **Exit code:** `affected` still prints the failure to stdout and exits 0 when nothing matches. That is a separate defect and is not fixed here.\n- **Docstring text:** a docstring whose text is literally a path suffix of the file (for example `alpha/hooks.py`) and lands on `L1` would compete with the file node. Two candidates still return no match rather than guessing.\n- **Graphs before #2032:** a label that is still the bare basename resolves through the existing pass, unchanged.\n- **Not attempted:** marking file nodes explicitly at extraction time, which would remove the heuristic entirely. This PR keeps the read-side predicate.\n\n## How was this tested?\n\nNew tests in `tests/test_affected_path_file_node.py` build the exact node shapes and run the issue's repro end to end through `python -m graphify update` and `graphify affected`. None of them calls a private helper.\n\n| Test | v8 | This PR |\n|---|---|---|\n| disambiguated label plus a docstring rationale on L1 | fail | pass |\n| disambiguated label plus a one-line definition on L1 | fail | pass |\n| absolute-path seed with `root=` resolves the same node | fail | pass |\n| two nodes claiming the same path form still return no match | pass | pass |\n| end to end: shared basename with a docstring lists `main.py` | fail | pass |\n| control: comment instead of a docstring, definition below L1 | pass | pass |\n\n```text\npytest tests/test_affected_path_file_node.py (v8)          -> 4 failed, 2 passed\npytest tests/test_affected_path_file_node.py (this branch) -> 6 passed\npytest test_affected_cli.py test_affected_defines.py test_affected_member_seed.py \\\n       test_affected_overrides.py test_explain_cli.py test_explain_same_file_tie.py \\\n       test_js_dynamic_import_affected.py test_lookup_exit_codes.py \\\n       test_query_seed_order.py test_query_seeds.py        -> 111 passed\npytest test_serve.py test_analyze.py                       -> 232 passed, 1 skipped\npytest test_build.py                                       -> 97 passed\npytest -q -p no:randomly (full suite, serial)              -> v8:      39 failed, 7988 passed, 361 skipped\n                                                              this PR:  39 failed, 7994 passed, 361 skipped\n                                                              (failure sets identical)\n```\n\nThe pass-count difference is the six new tests. The 39 failures are the same environment failures on v8 and on this branch.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4713/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4713/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4712",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
