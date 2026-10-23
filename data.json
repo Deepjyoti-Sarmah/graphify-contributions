@@ -173,6 +173,14 @@
       "prs": [
         4687
       ]
+    },
+    {
+      "id": "4699",
+      "title": "Rust: `use` of an external crate item resolves to an unrelated same-named local symbol (false `imports_from` edges, phantom import cycles)",
+      "issue": 4699,
+      "prs": [
+        4712
+      ]
     }
   ],
   "prs": {
@@ -1426,6 +1434,32 @@
           "after": "glob a#b/*",
           "covered_by": "test_hash_inside_quotes_is_part_of_the_glob"
         }
+      ]
+    },
+    "4712": {
+      "summary": "A Rust `use` from another crate no longer binds to a same-named local definition, and a binding made on the name alone is marked `INFERRED`.",
+      "why": "The cross-file pass bound a sourceless stub to the only node with that label anywhere in the scan. The `use` path was never part of that decision, so `use serde_json::Value` could land on a local `Value`. The issue's 30-crate workspace reported 6 import cycles; checking the edges against the source showed 5 were not real.",
+      "what": "The extractor records the first segment of each `use` (`_rust_use_roots`) on the stub. `_rewire_unique_stub_nodes` resolves each `.rs` file to its crate from the nearest `Cargo.toml` and only binds inside a crate the `use` names, plus any crate it re-exports with a bare `pub use`. A binding with no resolving `use` is `INFERRED`.",
+      "helps": "Anyone graphing a Rust workspace with external crates, or with several crates that define the same type name. On `tokio-rs/axum`, the reported `Value` edges from `examples/customize-extractor-error` into `axum-core` disappears, and the re-export edges for `cached.rs` and `connect_info.rs` stay.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"custom_extractor.rs: use serde_json::Value\"] -->|imports_from| V1[\"Value @ axum-core/into_response_parts.rs\"]:::bad\n    B2[\"handler(): &Value\"] -->|references| V1\n  end\n  subgraph After\n    A1[\"custom_extractor.rs: use serde_json::Value\"] -->|imports_from| V2[\"Value (a local stub)\"]:::good\n    A2[\"handler(): &Value\"] -->|references| V2\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "imports_from  custom_extractor.rs  ->  Value @ axum-core/.../into_response_parts.rs\nreferences    handler()            ->  Value @ axum-core/.../into_response_parts.rs",
+      "after": "imports_from  custom_extractor.rs  ->  Value  (a local sourceless stub)\nreferences    handler()            ->  Value  (a local sourceless stub)",
+      "limits": [
+        "A file with no `Cargo.toml` above it still binds by label; the edge is marked `INFERRED`.",
+        "Glob re-exports (`pub use core::*;`) are not followed.",
+        "A dependency renamed with `package = \"...\"` is not mapped, so `use foo::..` stays unbound.",
+        "A re-export produced by a macro is not seen.",
+        "Cached `.rs` extractions re-run once because the cache schema moved from 22 to 24."
+      ],
+      "tests": [
+        "tests/test_rust_crate_use_scope.py",
+        "test_external_crate_use_and_annotation_do_not_reach_a_local_crate",
+        "test_grouped_external_use_does_not_reach_a_local_crate",
+        "test_annotation_without_any_use_does_not_reach_a_local_crate",
+        "test_workspace_crate_use_does_not_reach_another_crates_namesake",
+        "test_a_use_of_a_reexporting_crate_reaches_the_defining_crate",
+        "test_a_crate_restricted_reexport_does_not_leak_out_of_its_crate",
+        "test_a_crate_less_binding_is_flagged_inferred_not_extracted"
       ]
     }
   },

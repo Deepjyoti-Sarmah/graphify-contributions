@@ -1,7 +1,95 @@
-{"fetched_at":"2026-10-22T23:26:48Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 25,
+{"fetched_at":"2026-10-23T13:50:25Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 26,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4712",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4712/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4712/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4712/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4712",
+      "id": 5998824158,
+      "node_id": "PR_kwDOR4-pD88AAAABKQwdPQ",
+      "number": 4712,
+      "title": "fix(rust): scope a `use` to the crate it names (#4699)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-23T13:38:55Z",
+      "updated_at": "2026-10-23T13:47:46Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4712",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4712",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4712.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4712.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\r\n\r\nFixes #4699. A Rust `use` could bind to a same-named definition in another crate. On `tokio-rs/axum` @ `86aa615`, `examples/customize-extractor-error/src/custom_extractor.rs` says `use serde_json::Value`, and both its import and a `Value` reference bound to a variant in `axum-core/src/response/into_response_parts.rs`. The graph showed a cross-crate dependency the source never had.\r\n\r\nThree causes, all in the Rust extractor and the corpus rewire:\r\n\r\n1. `_rewire_unique_stub_nodes` bound a sourceless stub to the only node with that label anywhere in the corpus. The crate the `use` names was not part of the decision.\r\n2. The extractor recorded the imported name (`_rust_use_name`) only for paths rooted in this crate, so an external `use` carried no scope.\r\n3. A scoped binding and a label-only guess both reported `EXTRACTED`.\r\n\r\n```diff\r\n extractors/rust.py\r\n   use binding\r\n+    record the first path segment on the stub (`_rust_use_roots`)\r\n+    record a bare `pub use` as a re-export (`_rust_pub_use`)\r\n\r\n extract.py\r\n-  _rewire_unique_stub_nodes(nodes, edges)\r\n+  _rewire_unique_stub_nodes(nodes, edges, root)\r\n+    resolve each .rs file's crate from the nearest Cargo.toml\r\n     bind a stub to a unique same-label definition\r\n+    consider only candidates in a crate the `use` names\r\n+    follow `pub use` re-exports across crates\r\n+    leave the stub unbound when the named crate is outside the scan\r\n+    mark a rewire with no resolving `use` as INFERRED\r\n\r\n cargo_introspect.py\r\n+  package_name(manifest)   # reuses the module's TOML loader\r\n```\r\n\r\n**Before** (v8, the reported file):\r\n\r\n```text\r\nimports_from  custom_extractor.rs  ->  Value @ axum-core/.../into_response_parts.rs\r\nreferences    handler()            ->  Value @ axum-core/.../into_response_parts.rs\r\n```\r\n\r\n**After:**\r\n\r\n```text\r\nimports_from  custom_extractor.rs  ->  Value  (a local sourceless stub)\r\nreferences    handler()            ->  Value  (a local sourceless stub)\r\n```\r\n\r\nThe re-export handling keeps edges the scoping would otherwise drop. `axum-extra/src/extract/cached.rs` (`use axum::extract::FromRequestParts`) and `axum/src/extract/connect_info.rs` (`use super::{.., FromRequestParts}`) still reach `axum-core/src/extract/mod.rs`, and a `use axum_core::..` edge stays `EXTRACTED`.\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [ ] Security fix\r\n\r\n## Verification & Invariants\r\n\r\nA Rust name binds only inside a crate its `use` names. A crate outside the scan binds to nothing. A cross-crate re-export counts as the named crate. A binding made by label alone is `INFERRED`.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n\r\n**Merge Danger**\r\n\r\n**Door:** two-way. The per-file AST payload gained two markers, so the cache schema moves from 22 to 24 and cached `.rs` extractions re-run on the next build. A revert brings back the label-only binding on the next build. No migration, no config change.\r\n\r\n**Blast Radius:** Rust cross-file resolution.\r\n\r\nOn `tokio-rs/axum` @ `86aa615` (302 `.rs` files):\r\n\r\n| | v8 | this PR |\r\n|---|---|---|\r\n| nodes | 4036 | 4141 |\r\n| edges | 10326 | 10326 |\r\n| cross-crate `imports_from` | 125 | 163 |\r\n| cross-crate `references` | 122 | 168 |\r\n| bug-signature edges (target label is an external `use` of the source file) | 22 | 13 |\r\n| confidence | 10195 EXTRACTED / 131 INFERRED | 9828 EXTRACTED / 498 INFERRED |\r\n| import cycles | 20 | 20 |\r\n| time (median of 3) | 2.05 s | 1.97 s |\r\n\r\nThe node count rises because a scoped stub that binds to nothing stays as a sourceless node instead of being dropped. Cross-crate edges rise because a name with several same-named definitions can now resolve to the one in the crate it names instead of staying ambiguous. Bug-signature edges drop from 22 to 13. The 20 cycles do not change; the reported `Value` edge was not part of one.\r\n\r\n- **Other languages:** scoping only applies when `origin_file` ends in `.rs`, so no other extractor changes. The full-suite failure set is identical to v8.\r\n- **Saved graphs:** the cache bump forces a re-extraction, so an existing `graph.json` keeps its old Rust edges until the next build. A rebuild produces the scoped result.\r\n- **Determinism:** crate resolution reads only paths and `Cargo.toml` files, with no environment or ordering input.\r\n\r\n**Limitations**\r\n\r\n- **No manifest:** a file with no `Cargo.toml` above it keeps v8's label-only binding and is marked `INFERRED`. Scoping needs a crate.\r\n- **Glob re-exports:** `pub use core::*;` is not followed; only a named `pub use` is.\r\n- **Renamed dependencies:** `foo = { package = \"bar\" }` in `Cargo.toml` is not mapped, so `use foo::..` stays unbound.\r\n- **Macros:** a re-export produced by a macro is invisible to the extractor.\r\n\r\n## How was this tested?\r\n\r\nNew tests in `tests/test_rust_crate_use_scope.py` run `extract()` on small Cargo projects and compare node ids, edge targets, and confidence. None of them calls a private helper.\r\n\r\n| Test | v8 | This PR |\r\n|---|---|---|\r\n| an external `use` plus an annotation does not reach a local crate (enum variant) | fail | pass |\r\n| an external `use` plus an annotation does not reach a local crate (struct) | fail | pass |\r\n| a grouped external `use` does not reach a local crate | fail | pass |\r\n| an annotation with no `use` does not reach a local crate | fail | pass |\r\n| `use a::Value` reaches `a`, not a namesake in `c` | fail | pass |\r\n| `use osiris_types::Config` does not reach `server`'s `Config` | fail | pass |\r\n| `use osiris_types::Config` reaches `osiris-types` when both define it | fail | pass |\r\n| a `use` of a re-exporting crate reaches the defining crate, not an unrelated namesake | fail | pass |\r\n| `pub(crate) use` does not leak out of its crate | fail | pass |\r\n| a manifest-less binding is `INFERRED`, not `EXTRACTED` | fail | pass |\r\n| guard: external `use` with no reference, `std`, `crate::`, same-name types without a `use` | pass | pass |\r\n| guard: `use super::Item` through a re-export reaches the defining crate | pass | pass |\r\n| guard: a scanned-crate `use` keeps `EXTRACTED` | pass | pass |\r\n\r\n```text\r\npytest tests/test_rust_crate_use_scope.py (v8)             -> 10 failed, 9 passed\r\npytest tests/test_rust_crate_use_scope.py (this branch)    -> 19 passed\r\npytest test_rust_* test_extract.py test_cache.py test_grammar_cache_key.py test_cargo_* \\\r\n                                                           -> 576 passed, 4 skipped\r\npytest -q -p no:randomly (full suite, serial)              -> v8:      39 failed, 7988 passed, 361 skipped\r\n                                                              this PR:  39 failed, 8007 passed, 361 skipped\r\n                                                              (failure sets identical)\r\n```\r\n\r\n## Graphify-specific checklist\r\n\r\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4712/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4712/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4687",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -55,7 +143,7 @@
       "milestone": null,
       "comments": 1,
       "created_at": "2026-10-22T23:25:56Z",
-      "updated_at": "2026-10-22T23:26:05Z",
+      "updated_at": "2026-10-22T23:34:39Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
