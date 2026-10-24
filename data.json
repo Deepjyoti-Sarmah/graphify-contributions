@@ -205,6 +205,15 @@
       "prs": [
         4729
       ]
+    },
+    {
+      "id": "4740",
+      "title": "graphify update on a cloned checkout re-extracts every file and rebuilds the whole graph (3 to 7 min, ~6 GB) even with zero changes",
+      "issue": 4740,
+      "prs": [
+        4746,
+        4748
+      ]
     }
   ],
   "prs": {
@@ -1552,6 +1561,46 @@
         "No test covers the pin. It was checked with `uv lock --check`, `uv sync --all-extras --frozen` on 3.12, a dependency audit and the full suite."
       ],
       "tests": []
+    },
+    "4746": {
+      "summary": "The AST cache summary now reports the hit rate over the whole file list, not over the files that were left to extract.",
+      "why": "extract() printed its progress against uncached_work, so the last line always read N/N uncached files (100%). A reader took that for a cache-hit rate. It is progress through the work the run has to do, so its denominator is the work, not the corpus. On the copied checkout in #4740 that made a near-total cache miss look like a perfect hit.",
+      "what": "extract() gains a second line, AST cache: H/TOTAL files served from cache (P%); M to extract, plus a '; N without an extractor' suffix when some files have no extractor. cache_hits and no_extractor are counted in the existing Phase 1 cache loop. The uncached files progress lines are left as they are, because tests/test_extract.py:5660 pins their format.",
+      "helps": "Anyone judging whether the cache is working by reading the line. On a 100 .py + 20 .ts corpus a warm run now reads 100/120 files served from cache (83%); 20 to extract, where before it only showed 20/20 uncached files (100%). Files with no extractor were invisible in every printed total before and now show up in the suffix.",
+      "diagram": "flowchart LR\n  subgraph Before\n    E1[\"extract()\"] --> P1[\"prints done_count / len(uncached_work)\"]:::bad\n    P1 --> R1[\"warm: 20/20 uncached files (100%)\"]:::bad\n  end\n  subgraph After\n    E2[\"extract()\"] --> P2[\"prints cache_hits / total\"]:::good\n    P2 --> R2[\"warm: 100/120 files served from cache (83%)\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant X as extract()\n  participant C as AST cache\n  U->>X: extract(paths)\n  X->>C: load_cached() for each cacheable file\n  C-->>X: 100 hits, 20 misses (JS/TS bypass the cache)\n  X->>X: print \"AST cache: 100/120 ... (83%); 20 to extract\"\n  X->>X: parse the 20 misses\n  X->>X: print \"AST extraction: 20/20 uncached files (100%)\"\n  X-->>U: nodes + edges",
+      "before": "cold:  AST extraction: 20/20 uncached files (100%) [12 workers]\nwarm:  AST extraction: 20/20 uncached files (100%) [12 workers]",
+      "after": "cold:  AST cache: 0/120 files served from cache (0%); 120 to extract\nwarm:  AST cache: 100/120 files served from cache (83%); 20 to extract\n       AST extraction: 20/20 uncached files (100%) [12 workers]",
+      "limits": [
+        "The uncached files progress lines are unchanged; the new line is what supplies the correct denominator.",
+        "On a TS-heavy repo the rate reads low or zero, because the JS/TS suffixes bypass the AST cache. That is the other half of #4740 and this PR does not touch it.",
+        "The '; N without an extractor' suffix has no test pinning its exact text.",
+        "Nothing prints when the path list is empty."
+      ],
+      "tests": [
+        "tests/test_extract.py",
+        "test_extract_reports_ast_cache_hit_rate_over_file_total"
+      ]
+    },
+    "4748": {
+      "summary": "graphify update returns before extraction when nothing that reaches the graph has changed.",
+      "why": "update had exactly one no-change exit and it sat at the far end of the pipeline: detect, extract, build, cluster, then compare topology. A run where nothing changed still paid for all of it. On this repo that is 36 s and 1.0 GB of RSS for zero changes. The cheaper the check, the earlier it has to run.",
+      "what": "The no-change decision moves to the front, before extract(). A skip happens only when a key covering every input that reaches the graph is unchanged: scanned file contents compared by hash (ast_hash, not mtime), the in-scope path set, the JS/TS resolution inputs (tsconfig/jsconfig/package.json and lock files, which detect() now records separately), the extractor epoch, build config, output-shape env knobs, and the outputs themselves. State is written to graphify-out/.graphify_build_state.json. detect_incremental's per-file comparison was factored into classify_manifest_files so the gate and the incremental path share one loop. A missing, unreadable or mismatched stamp falls back to the full path.",
+      "helps": "Repeated updates on an unchanged tree, including the writer and the hooks. On this repo a no-change run drops from 36.1 s and 1,007,716 KB peak RSS to 1.4-2.1 s and 53,112 KB. --force still does the full 37.7 s rebuild.",
+      "diagram": "flowchart TD\n  A[\"graphify update .\"] --> D[\"detect(root)\"]\n  D --> G{\"skip key unchanged?\"}\n  G -->|\"yes\"| S[\"print no relevant changes; return True\"]:::good\n  G -->|\"no\"| E[\"extract(targets)\"]:::bad\n  E --> B[\"build_from_json()\"]\n  B --> C[\"cluster() + report\"]\n  C --> T[\"compare topology\"]\n  classDef good fill:#efe,stroke:#383\n  classDef bad fill:#fee,stroke:#c33",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant W as _rebuild_code\n  participant N as detect()\n  participant M as manifest + build_state\n  participant X as extract()\n  U->>W: _rebuild_code(root)\n  W->>N: detect(root)\n  N-->>W: files + resolution_inputs\n  W->>M: load manifest + .graphify_build_state.json\n  M-->>W: prior hashes, epoch, build config\n  alt key unchanged\n    W-->>U: \"No relevant changes; graphify-out left untouched.\"\n  else key changed\n    W->>X: extract(targets)\n    X-->>W: nodes + edges\n    W->>W: build, cluster, report, write stamp\n    W-->>U: graph.json updated\n  end",
+      "before": "graphify update . (no change)\n36.1 s, peak RSS 1,007,716 KB, full rebuild",
+      "after": "graphify update . (no change)\n1.4-2.1 s, peak RSS 53,112 KB\nNo relevant changes; graphify-out left untouched.",
+      "limits": [
+        "A copied graphify-out does not skip. The stamp is a new file, so a checkout that copies graph.json, manifest.json and cache/ has no stamp and takes the full path. That is the issue's runs 1-3, so this only partly fixes #4740.",
+        "A source whose extraction failed, and whose content is then fixed with no other change, is picked up on the next rebuild rather than by the gate. Its manifest row is blanked by design (#2543).",
+        "A new input that affects the output means extending _current_build_state(). Nothing enforces that.",
+        "Hooks and the watcher go through the same gate.",
+        "The gate reads two env knobs that already changed the output before this PR; reading them only makes the gate more conservative."
+      ],
+      "tests": [
+        "tests/test_update_no_change_gate.py"
+      ]
     }
   },
   "issues": [
@@ -1630,6 +1679,15 @@
         4654
       ],
       "title": "one SQL table becomes one node per file that reads it, and a schema-qualified read never binds to its definition"
+    },
+    {
+      "number": 4740,
+      "summary": "On a copied checkout, graphify update re-extracts all 19,397 files and rewrites the graph even when nothing changed, because TS/JS files never hit the AST cache and update has no exit before extraction.",
+      "fixed_by": [
+        4746,
+        4748
+      ],
+      "title": "graphify update on a cloned checkout re-extracts every file and rebuilds the whole graph (3 to 7 min, ~6 GB) even with zero changes"
     }
   ],
   "proposals": [

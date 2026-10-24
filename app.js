@@ -609,6 +609,7 @@ function Detail({ row, title, group, onOpenPr }) {
           <${Section} label="What changed"><${Paragraph} text=${entry.what} /></${Section}>
           <${Section} label="Who it helps"><${Paragraph} text=${entry.helps} /></${Section}>
           ${entry.diagram ? html`<${Wide} label="How it flows"><${Diagram} source=${entry.diagram} caption=${`How the flow changes in #${pr.number}`} /></${Wide}>` : null}
+          ${entry.sequence ? html`<${Wide} label="How it sequences"><${Diagram} source=${entry.sequence} caption=${`How it sequences in #${pr.number}`} /></${Wide}>` : null}
           ${entry.cases && entry.cases.length ? html`<${Wide} label="Cases"><${CasesTable} cases=${entry.cases} /></${Wide}>` : null}
           ${entry.limits && entry.limits.length ? html`
             <${Section} label="Limits">
