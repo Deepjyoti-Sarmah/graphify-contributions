@@ -189,6 +189,22 @@
       "prs": [
         4713
       ]
+    },
+    {
+      "id": "4711",
+      "title": "TS: parenthesized decorator `@(fn().method())` with a line break before `.method` is flagged a syntax error, dropping later symbols",
+      "issue": 4711,
+      "prs": [
+        4715
+      ]
+    },
+    {
+      "id": "4693",
+      "title": "pillow 12.x has no patched release for Python 3.10, so the svg, all and leiden extras stay vulnerable there",
+      "issue": 4693,
+      "prs": [
+        4729
+      ]
     }
   ],
   "prs": {
@@ -1493,6 +1509,49 @@
         "test_affected_cli_resolves_shared_basename_with_docstring",
         "test_affected_cli_resolves_shared_basename_without_docstring"
       ]
+    },
+    "4715": {
+      "summary": "A TypeScript decorator written as a call chain, `@(Link().toMany())`, now adds a `references` edge, and the partial-parse warning names the multiline region that lost symbols.",
+      "why": "tree-sitter-typescript 0.23.2 cannot parse a member access on a call when the dot starts a new line inside decorator position: `@(Link()\\n    .toMany())` becomes an ERROR plus a recovered `toMany()` call. The one-line form parses cleanly. In both shapes `_ts_decorator_name` returned `None` for a `parenthesized_expression`, so the decorator added no edge. In the issue's 43-line file the warning also pointed at line 14, a single-line recovery that kept every symbol, while the multiline chain at line 33 was the one losing edges.",
+      "what": "`_ts_decorator_target_name` unwraps a parenthesized decorator and returns the name of its outermost call, taking the last named call child rather than the call inside the ERROR. `_first_multiline_error_line` returns the earliest ERROR that spans more than one line, `extract()` reports it through `lossy_error_line`, and the warning reads `error region at line N`.",
+      "helps": "Anyone graphing NestJS, TypeORM or another decorator-heavy TypeScript codebase where Prettier breaks a chained decorator factory. On `continent.entity.ts` the warning moves from line 14 to line 33, the kept symbols go from 6 to 8, and the decorator edges gain `tomany` and `toone`.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"decorator @(Link().toMany())\"] --> B2[\"parenthesized_expression: no name\"]:::bad\n    B2 --> B3[\"no references edge\"]:::bad\n    W1[\"warning: first error at line 14\"] --> W2[\"line 14 keeps every symbol\"]:::bad\n  end\n  subgraph After\n    A1[\"decorator @(Link().toMany())\"] --> A2[\"outermost call: toMany\"]:::good\n    A2 --> A3[\"C -> toMany, references, decorator\"]:::good\n    W3[\"warning: error region at line 33\"] --> W4[\"line 33 is the lossy region\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "warning: ... continent.entity.ts (first error at line 14, 6 symbol(s) extracted)\ndecorator edges: column, entity, primarykey",
+      "after": "warning: ... continent.entity.ts (error region at line 33, 8 symbol(s) extracted)\ndecorator edges: column, tomany, toone, entity, primarykey",
+      "limits": [
+        "The parse error is in tree-sitter-typescript 0.23.2, the newest release, so the extractor recovers from it rather than parsing cleanly.",
+        "`@(A, B)` is not a valid decorator expression and gets no edge; the recovered identifier is not named.",
+        "The line is the start of the multiline ERROR, not the exact token that went missing.",
+        "The warning text changed from `first error at line` to `error region at line`; anything matching the old string stops matching."
+      ],
+      "tests": [
+        "tests/test_ts_decorator_chains.py",
+        "test_parenthesized_chain_with_newline_before_dot",
+        "test_parenthesized_chain_on_one_line",
+        "test_parenthesized_identifier_receiver_parses_clean",
+        "test_recovered_non_call_parenthesized_expression_gets_no_edge",
+        "test_warning_names_the_multiline_region_not_an_earlier_recovery",
+        "tests/test_partial_extraction_warning.py",
+        "tests/test_ts_parse_warning.py",
+        "tests/test_kotlin_grammar.py"
+      ]
+    },
+    "4729": {
+      "summary": "The committed lock now covers Python 3.11 and newer, so lock-driven installs get pillow 13.0.0 instead of the 12.3.0 that pip-audit flags 37 times.",
+      "why": "Every open pillow 12.3.0 advisory is first fixed in 13.0.0, and pillow 13.0.0 requires Python 3.11. The lock carried a 3.10 branch pinned to 12.3.0, so a scan of `uv.lock` reported the advisories and a Python 3.10 user of the `svg`, `all` or `leiden` extras could not get a patched pillow through uv. The lock had also drifted from the project: it read version 0.9.84 while `pyproject.toml` said 0.9.95.",
+      "what": "`[tool.uv] environments = [\"python_full_version >= '3.11'\"]` drops the 3.10 branch from the lock, and `uv lock --upgrade-package pillow` moves pillow to 13.0.0. The 3.10 entry leaves the CI test matrix because `uv sync --all-extras --frozen` installs straight from that lock. `requires-python` stays `>=3.10`.",
+      "helps": "uv users on 3.11 or newer get pillow 13.0.0; before this the lock kept them on 12.3.0 even though 13.0.0 was available. A Python 3.10 `uv sync` now stops with the lockfile's supported-environments error instead of installing an unpatched pillow. `pip install` on 3.10 does not read the lock and is unchanged.",
+      "diagram": "flowchart LR\n  subgraph Before\n    L1[\"uv.lock: 3.10 branch\"] --> P1[\"pillow 12.3.0\"]:::bad\n    P1 --> A1[\"37 advisories, first fixed 13.0.0\"]:::bad\n    P1 --> U1[\"3.10 uv install gets unpatched pillow\"]:::bad\n  end\n  subgraph After\n    L2[\"uv.lock: python >= 3.11\"] --> P2[\"pillow 13.0.0\"]:::good\n    P2 --> A2[\"0 advisories\"]:::good\n    L2 --> U2[\"3.10 uv sync stops with an environment error\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "before": "pillow==12.3.0\npip-audit -r <lock export>: 37 advisories, first fixed 13.0.0",
+      "after": "pillow==13.0.0 ; python_full_version >= '3.11'\npip-audit -r <lock export>: 0 pillow advisories",
+      "limits": [
+        "A Python 3.10 `pip install` of `svg`, `all` or `leiden` still gets pillow 12.3.0. Raising `requires-python` to 3.11 is the issue's other option and would close it.",
+        "uv commands on 3.10 now fail against this lock instead of installing.",
+        "CI no longer runs the lock path on 3.10, so a 3.10 regression in the lock is not caught there.",
+        "The relock also resolved unrelated packages to single versions (pandas, scikit-learn, scipy, networkx, contourpy) and dropped `exceptiongroup`, `importlib-metadata` and `zipp` with the 3.10 branch.",
+        "No test covers the pin. It was checked with `uv lock --check`, `uv sync --all-extras --frozen` on 3.12, a dependency audit and the full suite."
+      ],
+      "tests": []
     }
   },
   "issues": [
