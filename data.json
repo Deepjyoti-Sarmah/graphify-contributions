@@ -212,7 +212,8 @@
       "issue": 4740,
       "prs": [
         4746,
-        4748
+        4748,
+        4769
       ]
     }
   ],
@@ -1601,6 +1602,33 @@
       "tests": [
         "tests/test_update_no_change_gate.py"
       ]
+    },
+    "4769": {
+      "summary": "graphify update now re-extracts only the files whose content changed, instead of the whole corpus.",
+      "why": "The command's cost had nothing to do with what changed. Seven stages run, and only the first two read source text: scan, extract, then build, cluster, analyze, report, export. Everything after extract works on the graph, so a run with two edited files paid for all seven stages. On a 1,046-file corpus that is 54.7 s and 1.08 GB with two files edited, and 34.0 s of it even with nothing edited. The engine for a partial rebuild already existed: _rebuild_code has taken changed_paths since the hook work, and post-commit forwards the touched paths from git. graphify update called it with the argument unset, which the function documents as \"the full code corpus\". The missing piece was a change set that does not depend on git.",
+      "what": "_rebuild_code gains an incremental flag. When set, it derives changed_paths from the manifest: the files whose ast_hash moved, plus rows whose file is gone from disk. It extracts only those, preserves every other file's nodes, and hands the unchanged corpus's AST nodes to extract() as resolution context so cross-file edges survive. The flag defaults off, so the watcher and the post-checkout hook keep the full path. --force and an explicit changed_paths still win. The manifest stores paths relative to the scan root, so it survives being copied, which is what makes the reporter's copied-checkout workflow answerable.",
+      "helps": "Repeated graphify update on a warm tree. On 1,046 scanned files (570 code), an unchanged copied checkout drops from 34.0 s and 991 MB to 1.7 s and 125 MB; two edited files drop from 54.7 s and 1.08 GB to 35.9 s and 540 MB. That covers the reporter's runs 1-4: the copy case and the small-edit case.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"scan\"] --> B2[\"extract the whole corpus\"]:::bad\n    B2 --> B3[\"build, cluster, analyze, report, export\"]:::bad\n  end\n  subgraph After\n    A1[\"scan\"] --> A2[\"manifest diff\"]:::good\n    A2 --> A3[\"extract only changed files\"]:::good\n    A3 --> A4[\"build, cluster, analyze, report, export\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant W as _rebuild_code\n  participant D as detect()\n  participant M as manifest.json\n  participant X as extract()\n  U->>W: _rebuild_code(root, incremental=True)\n  W->>D: detect(root)\n  D-->>W: scanned files\n  W->>M: load manifest (root-relative keys)\n  M-->>W: per-file ast_hash\n  W->>W: changed = rows whose hash moved + files gone\n  alt manifest missing, unreadable, or --force\n    W->>X: extract(all files)\n  else manifest usable\n    W->>X: extract(changed) + unchanged nodes as context\n  end\n  X-->>W: nodes + edges\n  W->>W: build, cluster, analyze, report, export\n  W-->>U: graph.json updated",
+      "before": "graphify update, two files edited (v8)\n54.7 s, peak RSS 1,080,020 KB, whole corpus re-extracted",
+      "after": "graphify update, two files edited\n35.9 s, peak RSS 539,940 KB, only the two files re-extracted\nunchanged copied checkout: 34.0 s -> 1.7 s",
+      "limits": [
+        "An incremental rebuild is not byte-identical to a full one on a large corpus. On 1,046 files it keeps one sourceless any node and seven edges a full rebuild drops. v8 with an explicit changed_paths does the same, so this predates the PR and deserves its own issue.",
+        "The pipeline after extraction is still whole-graph. Extraction was about a third of the cost, so the two-file case lands at 35.9 s rather than seconds. That is the rest of #4740.",
+        "A source that never extracts re-queues on every run (#2543), so a corpus containing one can never reach the pure-skip case. This repo has one (worked/rsl-siege-manager/graph.json).",
+        "On a copied checkout, deletions and renames are not evicted, because graphify-out/.graphify_root still names the original tree. The full path behaves identically, so this predates the PR.",
+        "No incremental rebuild for the semantic path; this covers graphify update (AST) only.",
+        "The change set is not persisted, so it is recomputed each run: one manifest read against a scan that already happened.",
+        "Overlaps #4748. Both add classify_manifest_files, and a clean auto-merge would leave two definitions with Python silently keeping one. The resolution is to keep #4748's superset plus this branch's classify_manifest_deletions, gate first, then the change set.",
+        "Open review findings before merge: a non-blocking rebuild drops changes when the build lock is held (watch.py:1727), relative manifest rows checked against cwd instead of root (detect.py:3017), and absolute_identity called before the falsy source_file guard (watch.py:2116)."
+      ],
+      "tests": [
+        "tests/test_update_incremental.py",
+        "test_unchanged_copied_checkout_re_extracts_nothing",
+        "test_only_changed_files_are_re_extracted",
+        "test_added_file_is_re_extracted_and_deleted_file_drops_its_nodes",
+        "test_default_is_the_full_path"
+      ]
     }
   },
   "issues": [
@@ -1682,10 +1710,11 @@
     },
     {
       "number": 4740,
-      "summary": "On a copied checkout, graphify update re-extracts all 19,397 files and rewrites the graph even when nothing changed, because TS/JS files never hit the AST cache and update has no exit before extraction.",
+      "summary": "On a copied checkout, graphify update re-extracts every file and rewrites the whole graph even when nothing changed. Three PRs fix it: an honest cache-hit log, a no-change skip before extraction, and a change set derived from the manifest so only edited files are re-extracted.",
       "fixed_by": [
         4746,
-        4748
+        4748,
+        4769
       ],
       "title": "graphify update on a cloned checkout re-extracts every file and rebuilds the whole graph (3 to 7 min, ~6 GB) even with zero changes"
     }
