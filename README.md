@@ -17,6 +17,7 @@ There is no build step and no npm. The files are served as they are.
 | `data.json` | Hand-written write-ups, the PR groups and the proposals. |
 | `snapshot.json` | Fallback copies of the GitHub PR and issue search results, used when GitHub is rate-limited or unreachable. |
 | `scripts/snapshot.sh` | Refreshes `snapshot.json` with `curl`. |
+| `scripts/check-diagrams.sh` | Renders every Mermaid source in `data.json` in headless Chrome and fails on the ones that do not render, using the Mermaid build `index.html` loads. |
 | `.nojekyll` | Stops GitHub Pages from running Jekyll. |
 
 ## Editing data.json
@@ -94,6 +95,25 @@ load the page, then remove the line:
 ```
 
 The page will then show the banner "Showing snapshot from <date> (GitHub unreachable)".
+
+## Checking the diagrams
+
+```bash
+./scripts/check-diagrams.sh
+```
+
+It serves the folder, renders every `diagram` and `sequence` in `data.json` with the
+Mermaid build `index.html` names, and prints one line per source. One that does not
+render fails the run, so a card never ships with "Diagram could not be rendered" above
+its raw source.
+
+Two things break a sequence diagram quietly: a semicolon inside a message ends the
+statement, and so does an unbalanced `alt` block. Use a comma instead of a semicolon.
+
+The script needs `python3` and a headless Chrome (`chromium`, `google-chrome`, or a
+puppeteer download). Set `CHROME=/path/to/chrome` when it is somewhere else. Mermaid
+itself comes from the CDN, so the check needs network access; it exits 2 when the
+browser cannot reach it.
 
 ## Caching
 
