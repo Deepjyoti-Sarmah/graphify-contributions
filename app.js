@@ -953,6 +953,7 @@ function GroupSection({ section, children }) {
         ${group
           ? html`
             <a href=${ISSUE_URL(group.issue)} target="_blank" rel="noopener noreferrer" class="font-mono text-[13.5px] text-muted hover:text-ink">Issue #${group.issue}</a>
+            ${group.reported_by ? html`<a href=${`https://github.com/${group.reported_by}`} target="_blank" rel="noopener noreferrer" class="ml-2 font-mono text-[13.5px] text-muted hover:text-ink">raised by @${group.reported_by}</a>` : null}
             <h3 id=${headingId} class="mt-1 font-serif text-xl font-medium leading-snug tracking-[-0.01em]">${group.title}</h3>`
           : html`<h3 id=${headingId} class="font-serif text-xl font-medium">Other pull requests</h3>`}
       </div>
@@ -1137,7 +1138,7 @@ function App() {
         <section aria-labelledby="issues-heading" class="pt-24">
           <h2 id="issues-heading" class="font-serif text-[2rem] font-medium leading-tight tracking-[-0.02em]">Issues I raised</h2>
           <p class="mb-8 mt-3 max-w-[60ch] text-[16.5px] leading-[1.7] text-muted">
-            Bugs I found while using Graphify. Each one says what goes wrong and which of my pull requests fixes it. State comes live from GitHub.
+            Bugs I found while using Graphify. Each one says what goes wrong and which of my pull requests fixes it. State comes live from GitHub. An issue someone else raised that my pull requests fix is listed under the pull requests, with its reporter named.
           </p>
           ${content ? html`<${Issues} items=${issueRows} prByNumber=${prByNumber} onOpenPr=${openPr} />` : null}
         </section>

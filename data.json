@@ -11,7 +11,8 @@
         4362,
         4371,
         4410
-      ]
+      ],
+      "reported_by": "gmos"
     },
     {
       "id": "4309",
@@ -20,7 +21,8 @@
       "prs": [
         4344,
         4353
-      ]
+      ],
+      "reported_by": "stubbam"
     },
     {
       "id": "4432",
@@ -28,7 +30,8 @@
       "issue": 4432,
       "prs": [
         4434
-      ]
+      ],
+      "reported_by": "Stashub"
     },
     {
       "id": "4449",
@@ -36,7 +39,8 @@
       "issue": 4449,
       "prs": [
         4452
-      ]
+      ],
+      "reported_by": "brogollack"
     },
     {
       "id": "4447",
@@ -44,7 +48,8 @@
       "issue": 4447,
       "prs": [
         4456
-      ]
+      ],
+      "reported_by": "artosalminen"
     },
     {
       "id": "4461",
@@ -60,7 +65,8 @@
       "issue": 4463,
       "prs": [
         4476
-      ]
+      ],
+      "reported_by": "Smartoder"
     },
     {
       "id": "4490",
@@ -76,7 +82,8 @@
       "issue": 4512,
       "prs": [
         4520
-      ]
+      ],
+      "reported_by": "kaka-in-home"
     },
     {
       "id": "4508",
@@ -84,7 +91,8 @@
       "issue": 4508,
       "prs": [
         4521
-      ]
+      ],
+      "reported_by": "nzabate"
     },
     {
       "id": "4547",
@@ -92,7 +100,8 @@
       "issue": 4547,
       "prs": [
         4565
-      ]
+      ],
+      "reported_by": "tobimax"
     },
     {
       "id": "4564",
@@ -100,7 +109,8 @@
       "issue": 4564,
       "prs": [
         4567
-      ]
+      ],
+      "reported_by": "almothafar-maf"
     },
     {
       "id": "4569",
@@ -108,7 +118,8 @@
       "issue": 4569,
       "prs": [
         4572
-      ]
+      ],
+      "reported_by": "BiSide"
     },
     {
       "id": "4570",
@@ -116,7 +127,8 @@
       "issue": 4570,
       "prs": [
         4573
-      ]
+      ],
+      "reported_by": "TerraVenil"
     },
     {
       "id": "4563",
@@ -124,7 +136,8 @@
       "issue": 4563,
       "prs": [
         4568
-      ]
+      ],
+      "reported_by": "leonjeng"
     },
     {
       "id": "4588",
@@ -132,7 +145,8 @@
       "issue": 4588,
       "prs": [
         4623
-      ]
+      ],
+      "reported_by": "TerraVenil"
     },
     {
       "id": "4619",
@@ -140,7 +154,8 @@
       "issue": 4619,
       "prs": [
         4636
-      ]
+      ],
+      "reported_by": "kanc741"
     },
     {
       "id": "4635",
@@ -148,7 +163,8 @@
       "issue": 4635,
       "prs": [
         4649
-      ]
+      ],
+      "reported_by": "RuVl"
     },
     {
       "id": "4651",
@@ -172,7 +188,8 @@
       "issue": 4681,
       "prs": [
         4687
-      ]
+      ],
+      "reported_by": "kawache"
     },
     {
       "id": "4699",
@@ -180,7 +197,8 @@
       "issue": 4699,
       "prs": [
         4712
-      ]
+      ],
+      "reported_by": "efe-clk"
     },
     {
       "id": "4698",
@@ -188,7 +206,8 @@
       "issue": 4698,
       "prs": [
         4713
-      ]
+      ],
+      "reported_by": "karsan8119"
     },
     {
       "id": "4711",
@@ -196,7 +215,8 @@
       "issue": 4711,
       "prs": [
         4715
-      ]
+      ],
+      "reported_by": "erayhanoglu"
     },
     {
       "id": "4693",
@@ -204,7 +224,8 @@
       "issue": 4693,
       "prs": [
         4729
-      ]
+      ],
+      "reported_by": "yotamleo"
     },
     {
       "id": "4740",
@@ -212,8 +233,17 @@
       "issue": 4740,
       "prs": [
         4746,
-        4748,
-        4769
+        4748
+      ],
+      "reported_by": "lavaxun"
+    },
+    {
+      "id": "4800",
+      "title": "one edited file still costs a full rebuild, so a warm graphify update goes from 2 s back to 68 s",
+      "issue": 4800,
+      "prs": [
+        4801,
+        4802
       ]
     }
   ],
@@ -1494,7 +1524,13 @@
         "test_a_use_of_a_reexporting_crate_reaches_the_defining_crate",
         "test_a_crate_restricted_reexport_does_not_leak_out_of_its_crate",
         "test_a_crate_less_binding_is_flagged_inferred_not_extracted"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "3e1a423f"
+        ],
+        "note": "Applied to v8 by the maintainer in 3e1a423f, authorship kept."
+      }
     },
     "4713": {
       "summary": "`graphify affected <path>` finds the file node for a file whose basename is shared, even when a module docstring puts a second node on line 1.",
@@ -1518,7 +1554,14 @@
         "test_ambiguous_file_shaped_labels_still_refuse_to_guess",
         "test_affected_cli_resolves_shared_basename_with_docstring",
         "test_affected_cli_resolves_shared_basename_without_docstring"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "7aae85ec",
+          "fb900653"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept: the fix and its test."
+      }
     },
     "4715": {
       "summary": "A TypeScript decorator written as a call chain, `@(Link().toMany())`, now adds a `references` edge, and the partial-parse warning names the multiline region that lost symbols.",
@@ -1544,7 +1587,14 @@
         "tests/test_partial_extraction_warning.py",
         "tests/test_ts_parse_warning.py",
         "tests/test_kotlin_grammar.py"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "6533f57e",
+          "08725465"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept: the fix and its test."
+      }
     },
     "4729": {
       "summary": "The committed lock now covers Python 3.11 and newer, so lock-driven installs get pillow 13.0.0 instead of the 12.3.0 that pip-audit flags 37 times.",
@@ -1569,7 +1619,7 @@
       "what": "extract() gains a second line, AST cache: H/TOTAL files served from cache (P%); M to extract, plus a '; N without an extractor' suffix when some files have no extractor. cache_hits and no_extractor are counted in the existing Phase 1 cache loop. The uncached files progress lines are left as they are, because tests/test_extract.py:5660 pins their format.",
       "helps": "Anyone judging whether the cache is working by reading the line. On a 100 .py + 20 .ts corpus a warm run now reads 100/120 files served from cache (83%); 20 to extract, where before it only showed 20/20 uncached files (100%). Files with no extractor were invisible in every printed total before and now show up in the suffix.",
       "diagram": "flowchart LR\n  subgraph Before\n    E1[\"extract()\"] --> P1[\"prints done_count / len(uncached_work)\"]:::bad\n    P1 --> R1[\"warm: 20/20 uncached files (100%)\"]:::bad\n  end\n  subgraph After\n    E2[\"extract()\"] --> P2[\"prints cache_hits / total\"]:::good\n    P2 --> R2[\"warm: 100/120 files served from cache (83%)\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
-      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant X as extract()\n  participant C as AST cache\n  U->>X: extract(paths)\n  X->>C: load_cached() for each cacheable file\n  C-->>X: 100 hits, 20 misses (JS/TS bypass the cache)\n  X->>X: print \"AST cache: 100/120 ... (83%); 20 to extract\"\n  X->>X: parse the 20 misses\n  X->>X: print \"AST extraction: 20/20 uncached files (100%)\"\n  X-->>U: nodes + edges",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant X as extract()\n  participant C as AST cache\n  U->>X: extract(paths)\n  X->>C: load_cached() for each cacheable file\n  C-->>X: 100 hits, 20 misses (JS/TS bypass the cache)\n  X->>X: print \"AST cache: 100/120 served from cache (83%), 20 to extract\"\n  X->>X: parse the 20 misses\n  X->>X: print \"AST extraction: 20/20 uncached files (100%)\"\n  X-->>U: nodes + edges",
       "before": "cold:  AST extraction: 20/20 uncached files (100%) [12 workers]\nwarm:  AST extraction: 20/20 uncached files (100%) [12 workers]",
       "after": "cold:  AST cache: 0/120 files served from cache (0%); 120 to extract\nwarm:  AST cache: 100/120 files served from cache (83%); 20 to extract\n       AST extraction: 20/20 uncached files (100%) [12 workers]",
       "limits": [
@@ -1581,7 +1631,13 @@
       "tests": [
         "tests/test_extract.py",
         "test_extract_reports_ast_cache_hit_rate_over_file_total"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "5cd4edcc"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      }
     },
     "4748": {
       "summary": "graphify update returns before extraction when nothing that reaches the graph has changed.",
@@ -1589,7 +1645,7 @@
       "what": "The no-change decision moves to the front, before extract(). A skip happens only when a key covering every input that reaches the graph is unchanged: scanned file contents compared by hash (ast_hash, not mtime), the in-scope path set, the JS/TS resolution inputs (tsconfig/jsconfig/package.json and lock files, which detect() now records separately), the extractor epoch, build config, output-shape env knobs, and the outputs themselves. State is written to graphify-out/.graphify_build_state.json. detect_incremental's per-file comparison was factored into classify_manifest_files so the gate and the incremental path share one loop. A missing, unreadable or mismatched stamp falls back to the full path.",
       "helps": "Repeated updates on an unchanged tree, including the writer and the hooks. On this repo a no-change run drops from 36.1 s and 1,007,716 KB peak RSS to 1.4-2.1 s and 53,112 KB. --force still does the full 37.7 s rebuild.",
       "diagram": "flowchart TD\n  A[\"graphify update .\"] --> D[\"detect(root)\"]\n  D --> G{\"skip key unchanged?\"}\n  G -->|\"yes\"| S[\"print no relevant changes; return True\"]:::good\n  G -->|\"no\"| E[\"extract(targets)\"]:::bad\n  E --> B[\"build_from_json()\"]\n  B --> C[\"cluster() + report\"]\n  C --> T[\"compare topology\"]\n  classDef good fill:#efe,stroke:#383\n  classDef bad fill:#fee,stroke:#c33",
-      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant W as _rebuild_code\n  participant N as detect()\n  participant M as manifest + build_state\n  participant X as extract()\n  U->>W: _rebuild_code(root)\n  W->>N: detect(root)\n  N-->>W: files + resolution_inputs\n  W->>M: load manifest + .graphify_build_state.json\n  M-->>W: prior hashes, epoch, build config\n  alt key unchanged\n    W-->>U: \"No relevant changes; graphify-out left untouched.\"\n  else key changed\n    W->>X: extract(targets)\n    X-->>W: nodes + edges\n    W->>W: build, cluster, report, write stamp\n    W-->>U: graph.json updated\n  end",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant W as _rebuild_code\n  participant N as detect()\n  participant M as manifest + build_state\n  participant X as extract()\n  U->>W: _rebuild_code(root)\n  W->>N: detect(root)\n  N-->>W: files + resolution_inputs\n  W->>M: load manifest + .graphify_build_state.json\n  M-->>W: prior hashes, epoch, build config\n  alt key unchanged\n    W-->>U: \"No relevant changes, graphify-out left untouched.\"\n  else key changed\n    W->>X: extract(targets)\n    X-->>W: nodes + edges\n    W->>W: build, cluster, report, write stamp\n    W-->>U: graph.json updated\n  end",
       "before": "graphify update . (no change)\n36.1 s, peak RSS 1,007,716 KB, full rebuild",
       "after": "graphify update . (no change)\n1.4-2.1 s, peak RSS 53,112 KB\nNo relevant changes; graphify-out left untouched.",
       "limits": [
@@ -1601,10 +1657,16 @@
       ],
       "tests": [
         "tests/test_update_no_change_gate.py"
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "a8455773"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept; the gate shipped in 0.9.96."
+      }
     },
     "4769": {
-      "summary": "graphify update now re-extracts only the files whose content changed, instead of the whole corpus.",
+      "summary": "Superseded by #4748 and #4801. graphify update re-extracts only the files whose content changed, instead of the whole corpus.",
       "why": "The command's cost had nothing to do with what changed. Seven stages run, and only the first two read source text: scan, extract, then build, cluster, analyze, report, export. Everything after extract works on the graph, so a run with two edited files paid for all seven stages. On a 1,046-file corpus that is 54.7 s and 1.08 GB with two files edited, and 34.0 s of it even with nothing edited. The engine for a partial rebuild already existed: _rebuild_code has taken changed_paths since the hook work, and post-commit forwards the touched paths from git. graphify update called it with the argument unset, which the function documents as \"the full code corpus\". The missing piece was a change set that does not depend on git.",
       "what": "_rebuild_code gains an incremental flag. When set, it derives changed_paths from the manifest: the files whose ast_hash moved, plus rows whose file is gone from disk. It extracts only those, preserves every other file's nodes, and hands the unchanged corpus's AST nodes to extract() as resolution context so cross-file edges survive. The flag defaults off, so the watcher and the post-checkout hook keep the full path. --force and an explicit changed_paths still win. The manifest stores paths relative to the scan root, so it survives being copied, which is what makes the reporter's copied-checkout workflow answerable.",
       "helps": "Repeated graphify update on a warm tree. On 1,046 scanned files (570 code), an unchanged copied checkout drops from 34.0 s and 991 MB to 1.7 s and 125 MB; two edited files drop from 54.7 s and 1.08 GB to 35.9 s and 540 MB. That covers the reporter's runs 1-4: the copy case and the small-edit case.",
@@ -1620,7 +1682,8 @@
         "No incremental rebuild for the semantic path; this covers graphify update (AST) only.",
         "The change set is not persisted, so it is recomputed each run: one manifest read against a scan that already happened.",
         "Overlaps #4748. Both add classify_manifest_files, and a clean auto-merge would leave two definitions with Python silently keeping one. The resolution is to keep #4748's superset plus this branch's classify_manifest_deletions, gate first, then the change set.",
-        "Open review findings before merge: a non-blocking rebuild drops changes when the build lock is held (watch.py:1727), relative manifest rows checked against cwd instead of root (detect.py:3017), and absolute_identity called before the falsy source_file guard (watch.py:2116)."
+        "Open review findings before merge: a non-blocking rebuild drops changes when the build lock is held (watch.py:1727), relative manifest rows checked against cwd instead of root (detect.py:3017), and absolute_identity called before the falsy source_file guard (watch.py:2116).",
+        "Closed by the maintainer as covered by #4748, which shipped the zero-change half in 0.9.96. These commits were rebased onto v8 as the five commits of #4801, which is open."
       ],
       "tests": [
         "tests/test_update_incremental.py",
@@ -1628,6 +1691,64 @@
         "test_only_changed_files_are_re_extracted",
         "test_added_file_is_re_extracted_and_deleted_file_drops_its_nodes",
         "test_default_is_the_full_path"
+      ]
+    },
+    "4801": {
+      "summary": "graphify update re-extracts only the files whose content changed, instead of the whole corpus.",
+      "why": "The gate that shipped in 0.9.96 answers one question: is every scanned file unchanged? Edit a file and the answer is no, so the run takes the full path over the whole corpus. Two edited files on 1,059 scanned files cost 68.15 s and 1,071 MB. Nothing worked out which files differ, although the manifest already stores an ast_hash per file and _rebuild_code already accepted a changed_paths list. The only caller that passed one was the post-commit hook, from git diff.",
+      "what": "update derives its own change set inside _rebuild_code: manifest rows whose ast_hash moved, plus rows whose file is gone from disk. Only those files are parsed. Every other file's nodes are kept, and the unchanged corpus's AST nodes go to extract() as resolution context, so a call from a changed file into an unchanged one keeps its edge. The flag defaults off, so the watcher and the post-checkout hook keep the full path. --force and an explicit changed_paths still win.",
+      "helps": "Repeated update runs on a warm tree. Two edited files drop from 68.15 s and 1,071 MB to 48.72 s and 537 MB. A tree with no changes is unaffected, because the gate answers it first: 1.96 s and 46 MB.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"scan the tree\"] --> B2[\"extract every file\"]:::bad\n    B2 --> B3[\"build, cluster, analyze, report, export\"]:::bad\n  end\n  subgraph After\n    A1[\"scan the tree\"] --> A2[\"diff the manifest: ast_hash per file\"]:::good\n    A2 --> A3[\"extract only the changed files\"]:::good\n    A3 --> A4[\"build, cluster, analyze, report, export\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant W as _rebuild_code\n  participant D as detect()\n  participant M as manifest.json\n  participant X as extract()\n  U->>W: _rebuild_code(root, incremental=True)\n  W->>D: detect(root)\n  D-->>W: scanned files\n  W->>M: load the manifest\n  M-->>W: per-file ast_hash, keyed by scan-relative path\n  W->>W: changed = hashes that moved, plus files gone from disk\n  alt manifest missing, unreadable or anchored elsewhere\n    W->>X: extract the whole corpus\n  else manifest usable\n    W->>X: extract the changed files, pass the rest as resolution context\n  end\n  X-->>W: nodes and edges\n  W->>W: build, cluster, analyze, report, export",
+      "before": "graphify update .   (two files edited, current v8)\n68.15 s, peak RSS 1,071 MB, the whole corpus extracted",
+      "after": "graphify update .   (two files edited)\n[graphify watch] Incremental: re-extracting 2 of 1059 scanned files that changed since the last build.\n48.72 s, peak RSS 537 MB",
+      "limits": [
+        "Extraction is only part of the run. Build, cluster, analyze, report and export still work over every node, so 68 s becomes 49 s rather than seconds. That remaining half is the rest of #4800.",
+        "An incremental rebuild is not byte-identical to a full one on a large corpus: on 1,059 files it keeps one sourceless any node and seven edges that a full rebuild drops. v8 with an explicit changed_paths produces the same node and edges, so this predates the PR.",
+        "A source that never extracts re-queues on every run (#2543), so a corpus holding one can never reach the pure-skip case. This repository has one (worked/rsl-siege-manager/graph.json).",
+        "On a copied checkout, deletions and renames are not evicted, because graphify-out/.graphify_root still names the original tree. The full path behaves the same way.",
+        "No incremental rebuild for the semantic path. This covers graphify update (AST) only.",
+        "The change set is not persisted, so it is recomputed each run: one manifest read against a scan that already happened.",
+        "The commit subjects say #4740, the umbrella issue this work started under. The PR fixes #4800."
+      ],
+      "tests": [
+        "tests/test_update_incremental.py",
+        "test_only_changed_files_are_re_extracted",
+        "test_unchanged_copied_checkout_re_extracts_nothing",
+        "test_mtime_bump_with_identical_content_is_not_re_extracted",
+        "test_added_file_is_re_extracted_and_deleted_file_drops_its_nodes",
+        "test_missing_manifest_keeps_the_full_path",
+        "test_manifest_anchored_elsewhere_keeps_the_full_path",
+        "test_incremental_second_run_matches_a_full_rebuild",
+        "test_cross_file_call_edge_survives_an_incremental_update",
+        "test_cross_file_call_edge_survives_a_copied_checkout",
+        "test_cli_update_re_extracts_only_changed_files"
+      ]
+    },
+    "4802": {
+      "summary": "An incremental rebuild request that loses the build lock is recorded instead of dropped.",
+      "why": "Two request kinds already record what they could not do: .pending_full and .pending_changes. A request whose change set comes from the manifest names no paths, so it wrote nothing, printed that there was nothing to queue, and returned False. False is also what a caller gets when its request was recorded, so the change set was lost with no way to tell the two apart. The review on #4801 rates this high.",
+      "what": "A third record, graphify-out/.pending_incremental, is written before the lock attempt. Whichever process holds the lock drains it and runs the derived pass, and the late-arrival loop treats it like the other two. .pending_full still wins over everything, and an explicit changed_paths list still wins over the derived set.",
+      "helps": "A non-blocking caller that asks for a derived change set. None exists today: graphify update blocks on the lock, and the watcher and the hooks pass explicit paths. The gap is closed before something relies on it.",
+      "diagram": "flowchart TD\n  subgraph Before\n    B1[\"incremental request\"] --> B2{\"lock free?\"}\n    B2 -->|\"yes\"| B3[\"run the derived pass\"]:::good\n    B2 -->|\"no\"| B4[\"write no record, return False\"]:::bad\n    B4 --> B5[\"the caller reads that as queued\"]:::bad\n  end\n  subgraph After\n    A1[\"incremental request\"] --> A2{\"lock free?\"}\n    A2 -->|\"yes\"| A3[\"run the derived pass\"]:::good\n    A2 -->|\"no\"| A4[\"write .pending_incremental\"]:::good\n    A4 --> A5[\"the lock holder drains it\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant C as caller\n  participant W as _rebuild_code\n  participant Q as queue files in graphify-out\n  participant H as the process holding the lock\n  C->>W: _rebuild_code(root, incremental=True, block_on_lock=False)\n  W->>Q: write .pending_incremental, before the lock attempt\n  W->>W: try the lock\n  alt the lock is taken\n    H->>Q: drain the queue after its own pass\n    Q-->>H: .pending_incremental is present\n    H->>H: run the derived pass\n  else the lock is free\n    W->>W: run the pass it asked for\n  end",
+      "before": "caller: _rebuild_code(root, incremental=True, block_on_lock=False)\nlock held: writes nothing, prints \"nothing to queue\", returns False\ncaller reads that False the same as a recorded request, so the change set is lost",
+      "after": "caller: _rebuild_code(root, incremental=True, block_on_lock=False)\nlock held: writes graphify-out/.pending_incremental\nthe holder drains it and runs the derived pass",
+      "limits": [
+        "Design completion, not an incident fix: no non-blocking incremental caller exists today.",
+        "The winner's pass becomes incremental when a marker is queued, even if the winner's own request was a full one. A queued request has to be honoured, and one test pins that.",
+        "An older graphify ignores the marker, so the request is dropped exactly as it is today.",
+        "A stale marker left by a crash asks for one extra derived pass. That pass is a content diff, so it is cheap.",
+        "The branch is built on #4801's commits while the PR targets v8, so it currently shows both sets of changes. Review #4801 first."
+      ],
+      "tests": [
+        "tests/test_update_lock_contention.py",
+        "test_i1_contended_incremental_request_is_not_silently_dropped",
+        "test_i1_the_marker_is_written_on_contention_and_drained_exactly_once",
+        "test_i2_incremental_caller_that_wins_the_lock_does_not_upgrade_itself",
+        "test_i3_a_queued_incremental_request_makes_the_next_winner_run_incrementally",
+        "test_i4_pending_full_and_pending_changes_keep_their_semantics",
+        "test_i4_a_queued_full_marker_still_upgrades_a_blocking_incremental_caller"
       ]
     }
   },
@@ -1665,22 +1786,6 @@
       "title": "hooks never rebuild after a clean cherry-pick, a rebase, or git pull --rebase"
     },
     {
-      "number": 4512,
-      "summary": "In a merged graph, explain and path say two same-named files are one file, and list bare line numbers.",
-      "fixed_by": [
-        4520
-      ],
-      "title": "[Bug]:merged graph — ambiguity refusal reports cross-repo same-basename nodes as being in one file"
-    },
-    {
-      "number": 4508,
-      "summary": "On macOS and Windows, a community relabelled only by case loses its wiki page, and index.md links to the missing file.",
-      "fixed_by": [
-        4521
-      ],
-      "title": "export wiki: a community relabelled only by case loses its article on case-insensitive filesystems (orphan sweep compares names case-sensitively)"
-    },
-    {
       "number": 4602,
       "summary": "One language-overrides test leaves the in-flight scan root set, so 9 later tests fail when the suite runs in a different order.",
       "fixed_by": [],
@@ -1709,14 +1814,12 @@
       "title": "one SQL table becomes one node per file that reads it, and a schema-qualified read never binds to its definition"
     },
     {
-      "number": 4740,
-      "summary": "On a copied checkout, graphify update re-extracts every file and rewrites the whole graph even when nothing changed. Three PRs fix it: an honest cache-hit log, a no-change skip before extraction, and a change set derived from the manifest so only edited files are re-extracted.",
+      "number": 4800,
+      "summary": "Editing one file sends graphify update through the whole pipeline again, so a warm tree costs a cold build; the 0.9.96 gate only covers the case where nothing changed at all.",
       "fixed_by": [
-        4746,
-        4748,
-        4769
-      ],
-      "title": "graphify update on a cloned checkout re-extracts every file and rebuilds the whole graph (3 to 7 min, ~6 GB) even with zero changes"
+        4801,
+        4802
+      ]
     }
   ],
   "proposals": [

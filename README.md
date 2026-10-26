@@ -21,7 +21,7 @@ There is no build step and no npm. The files are served as they are.
 
 ## Editing data.json
 
-- `groups`: each group has `id`, `title` (the issue title), `issue` (the issue number) and `prs` (PR numbers, in display order).
+- `groups`: each group has `id`, `title` (the issue title), `issue` (the issue number) and `prs` (PR numbers, in display order). `reported_by` (optional) is the GitHub login of the person who raised the issue, shown next to the issue number. Set it for every group whose issue the author did not raise. A group without it means the author raised the issue, so the two lists agree.
 - `prs`: keyed by PR number as a string. Only PRs with an entry get a write-up. Every other PR shows its GitHub description and a "No write-up yet" badge.
   - `summary`: one plain sentence, shown on the card.
   - `why`, `what`, `helps`: short paragraphs.
@@ -31,7 +31,7 @@ There is no build step and no npm. The files are served as they are.
   - `sequence` (optional): a second Mermaid source string for a sequence diagram (for example `sequenceDiagram\n  A->>B: call`). Shown under the flow diagram, same box and same failure behaviour. Mermaid renders it with `sequence` layout options, so it reads as a numbered call flow.
   - `cases` (optional): rows with `case`, `correct`, `before` (v8), `pr_first_version` (the first version of the PR, shown as "PR before"), `after` (this PR, shown as "PR now") and `covered_by`. Below `sm` (640px) each case is a stacked card; at `sm` and wider it is a table.
 - `prs[n].landed` (optional): see "Landed PRs" below.
-- `issues`: an array in display order. Each entry has `number`, one plain sentence `summary` on what goes wrong, and `fixed_by` (PR numbers, shown with the live state the page already knows). `title` is optional and is used only when the issue is missing from both the live search and the snapshot, so the card never shows a bare number. The issue title and its open or closed state always come from GitHub when available.
+- `issues`: an array in display order. Each entry has `number`, one plain sentence `summary` on what goes wrong, and `fixed_by` (PR numbers, shown with the live state the page already knows). `title` is optional and is used only when the issue is missing from both the live search and the snapshot, so the card never shows a bare number. The issue title and its open or closed state always come from GitHub when available. Only issues the author raised belong here, because the heading claims authorship. The list is `curl -fsSL 'https://api.github.com/search/issues?q=repo:Graphify-Labs/graphify+author:Deepjyoti-Sarmah+is:issue&per_page=100'`. An issue someone else raised stays in its `groups` entry with `reported_by` set.
 - `proposals`: an array (empty for now; the page shows "No proposals yet").
   - `id`, `title`, `problem`, `evidence` (text), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers), `diagram` (optional, same Mermaid source string as for PRs; shown first in the card, same failure behaviour).
 
