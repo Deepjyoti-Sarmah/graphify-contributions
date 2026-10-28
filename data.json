@@ -34,15 +34,6 @@
       "reported_by": "Stashub"
     },
     {
-      "id": "4449",
-      "title": "File node takes the label of a module-level variable when a same-stem sibling file exists (x.mjs + x.sql, const sql)",
-      "issue": 4449,
-      "prs": [
-        4452
-      ],
-      "reported_by": "brogollack"
-    },
-    {
       "id": "4447",
       "title": "update.md: code-only --update never writes .graphify_extract.json (FileNotFoundError or silently dropped AST)",
       "issue": 4447,
@@ -50,6 +41,15 @@
         4456
       ],
       "reported_by": "artosalminen"
+    },
+    {
+      "id": "4449",
+      "title": "File node takes the label of a module-level variable when a same-stem sibling file exists (x.mjs + x.sql, const sql)",
+      "issue": 4449,
+      "prs": [
+        4452
+      ],
+      "reported_by": "brogollack"
     },
     {
       "id": "4461",
@@ -77,15 +77,6 @@
       ]
     },
     {
-      "id": "4512",
-      "title": "merged graph: ambiguity refusal reports cross-repo same-basename nodes as being in one file",
-      "issue": 4512,
-      "prs": [
-        4520
-      ],
-      "reported_by": "kaka-in-home"
-    },
-    {
       "id": "4508",
       "title": "wiki export deletes a page when its community label changes only in letter case (macOS, Windows)",
       "issue": 4508,
@@ -95,6 +86,15 @@
       "reported_by": "nzabate"
     },
     {
+      "id": "4512",
+      "title": "merged graph: ambiguity refusal reports cross-repo same-basename nodes as being in one file",
+      "issue": 4512,
+      "prs": [
+        4520
+      ],
+      "reported_by": "kaka-in-home"
+    },
+    {
       "id": "4547",
       "title": "Semantic extraction cannot tell a file with no entities from an omitted file, so empty files arm the shrink guard",
       "issue": 4547,
@@ -102,6 +102,15 @@
         4565
       ],
       "reported_by": "tobimax"
+    },
+    {
+      "id": "4563",
+      "title": "hooks: last-resort `python3` probe launches the Microsoft Store redirector on Windows (visible console flash, exit 9009)",
+      "issue": 4563,
+      "prs": [
+        4568
+      ],
+      "reported_by": "leonjeng"
     },
     {
       "id": "4564",
@@ -129,15 +138,6 @@
         4573
       ],
       "reported_by": "TerraVenil"
-    },
-    {
-      "id": "4563",
-      "title": "hooks: last-resort `python3` probe launches the Microsoft Store redirector on Windows (visible console flash, exit 9009)",
-      "issue": 4563,
-      "prs": [
-        4568
-      ],
-      "reported_by": "leonjeng"
     },
     {
       "id": "4588",
@@ -192,13 +192,13 @@
       "reported_by": "kawache"
     },
     {
-      "id": "4699",
-      "title": "Rust: `use` of an external crate item resolves to an unrelated same-named local symbol (false `imports_from` edges, phantom import cycles)",
-      "issue": 4699,
+      "id": "4693",
+      "title": "pillow 12.x has no patched release for Python 3.10, so the svg, all and leiden extras stay vulnerable there",
+      "issue": 4693,
       "prs": [
-        4712
+        4729
       ],
-      "reported_by": "efe-clk"
+      "reported_by": "yotamleo"
     },
     {
       "id": "4698",
@@ -210,6 +210,15 @@
       "reported_by": "karsan8119"
     },
     {
+      "id": "4699",
+      "title": "Rust: `use` of an external crate item resolves to an unrelated same-named local symbol (false `imports_from` edges, phantom import cycles)",
+      "issue": 4699,
+      "prs": [
+        4712
+      ],
+      "reported_by": "efe-clk"
+    },
+    {
       "id": "4711",
       "title": "TS: parenthesized decorator `@(fn().method())` with a line break before `.method` is flagged a syntax error, dropping later symbols",
       "issue": 4711,
@@ -217,15 +226,6 @@
         4715
       ],
       "reported_by": "erayhanoglu"
-    },
-    {
-      "id": "4693",
-      "title": "pillow 12.x has no patched release for Python 3.10, so the svg, all and leiden extras stay vulnerable there",
-      "issue": 4693,
-      "prs": [
-        4729
-      ],
-      "reported_by": "yotamleo"
     },
     {
       "id": "4740",
@@ -245,6 +245,34 @@
         4801,
         4802
       ]
+    },
+    {
+      "id": "4807",
+      "title": "[Bug]: --update stamps a partly-read doc as done, so it is not retried (update.md omits partial_source_files)",
+      "issue": 4807,
+      "prs": [
+        4832
+      ],
+      "reported_by": "gitmotion"
+    },
+    {
+      "id": "4811",
+      "title": "[Bug]: --update merge block overwrites .graphify_extract.json, so re-running it or Step 9 stamps a doc whose chunk failed",
+      "issue": 4811,
+      "prs": [
+        4838,
+        4837
+      ],
+      "reported_by": "gitmotion"
+    },
+    {
+      "id": "4814",
+      "title": "[Bug]: a .graphify_partial.txt left by an --update can hold a cached doc back in a later full build",
+      "issue": 4814,
+      "prs": [
+        4832
+      ],
+      "reported_by": "gitmotion"
     }
   ],
   "prs": {
@@ -1749,6 +1777,85 @@
         "test_i3_a_queued_incremental_request_makes_the_next_winner_run_incrementally",
         "test_i4_pending_full_and_pending_changes_keep_their_semantics",
         "test_i4_a_queued_full_marker_still_upgrades_a_blocking_incremental_caller"
+      ]
+    },
+    "4832": {
+      "summary": "Both halves of the partial-list bug: a list from an old run can no longer hold a doc back, and a doc read only partway on an --update is no longer marked done.",
+      "why": "Think of the partial list as a sticky note saying which books were only skimmed. The note was never thrown away, so a later build thought a book it had read in full was still only skimmed. Step B3.5 writes `graphify-out/.graphify_partial.txt`, naming the docs a subagent read only partway. Step 9 reads it so those docs stay unmarked, then deletes it. An `--update` stops before Step 9, so its list outlived the run. A later full build served the same doc from the semantic cache, never ran B3.5, and never wrote a new list. Step 9 then read the old entry and left a doc it had served in full unmarked, so the next update queued it again. The other half: the update's only manifest save passed no partial set, so a doc B3.5 had just flagged as partly read was marked done and never retried.",
+      "what": "Two start hooks delete the list before any writer runs: B0 at the top of a full build, and the first line of the update runbook. The update's merge save reads the list, passes it as `partial_source_files`, then deletes it, because an update has no Step 9. Any list a reader sees was therefore written by this run.",
+      "helps": "A doc is left unmarked only when a subagent read it partway in this run. Cached docs stop re-queueing, and a half-read doc on the update path is retried instead of being lost.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"update writes .graphify_partial.txt\"] --> B2[\"update stops before Step 9\"]:::bad\n    B2 --> B3[\"the list stays on disk\"]:::bad\n    B3 --> B4[\"a later full build never runs B3.5\"]:::bad\n    B4 --> B5[\"Step 9 reads the old entry\"]:::bad\n    B5 --> B6[\"a fully read doc stays unmarked\"]:::bad\n  end\n  subgraph After\n    A1[\"B0 and the update start delete the list\"]:::good --> A2[\"B3.5 writes this run's list\"]:::good\n    A2 --> A3[\"Step 9 or the merge save reads it\"]:::good\n    A3 --> A4[\"only this run's partly read docs stay unmarked\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant B as Step B3.5\n  participant M as merge block\n  participant S as Step 9\n  participant D as detect_incremental\n  U->>U: rm -f .graphify_partial.txt\n  U->>B: read the changed docs\n  B-->>U: notes.md was read partway\n  U->>B: write .graphify_partial.txt\n  U->>M: merge and save the manifest\n  M->>M: read the list\n  M->>M: _stamped_manifest_files with partial_source_files\n  M->>M: delete the list\n  Note over S: a later full build serves the doc from cache\n  S->>S: no list, so nothing stays unmarked\n  S->>D: ask what to queue next\n  D-->>S: []",
+      "before": "stale list left by an update, then a full build from cache\nnext update queues: [\"long.md\"]",
+      "after": "same run with the list deleted at the start of each run\nnext update queues: []",
+      "limits": [
+        "Concurrent builds on one `graphify-out/` remain unsafe. Step 9's cleanup is one global `rm`, so a second run can remove a live run's list. `test_another_runs_step9_destroys_the_list_for_every_candidate` pins it.",
+        "The `runid` and `fresh` policies in the test matrix are harness models, not shipped code.",
+        "Delete-at-start was picked over a run id and an mtime check by running all three against the real rendered blocks: delete and run-id score 7/7, mtime scores 6/7 because a stale list can share a timestamp with this run's detect file.",
+        "Skill text and generated artifacts only. No graph, cache or manifest format changes."
+      ],
+      "tests": [
+        "test_the_shipped_runbook_drops_a_stale_list_before_step9",
+        "test_a_half_read_doc_on_the_update_path_is_not_stamped",
+        "test_the_shipped_update_merge_block_runs_with_a_partial_list",
+        "test_another_runs_step9_destroys_the_list_for_every_candidate",
+        "test_policy_scenario_outcome",
+        "test_edit_site_and_state_budget",
+        "test_scoreboard"
+      ]
+    },
+    "4837": {
+      "summary": "The first attempt at #4811: stamp the update's manifest from `.graphify_semantic.json` instead of the extract file the merge overwrites. Closed when #4838 replaced it.",
+      "why": "A smaller fix that reused a different scratch file. It worked, but it had to undo the previous fix to do it. The update merge overwrites `.graphify_extract.json` with the full merged graph, so anything that re-reads the file treats old nodes as this run's output. `.graphify_semantic.json` still holds this run's semantic output and the merge does not touch it, so stamping from it fixes both readers. It also has to undo #4832's list deletion, because a merge re-run and Step 9 still need the partial set.",
+      "what": "Three commits on top of #4832: a test, keeping the partial list until the run ends, and stamping from the semantic file with a fail-closed read when the file is missing.",
+      "helps": "It showed the same 12/12 score as the design that shipped. It lost on two costs: it edits the line #4832 just added, and it depends on a file the deletion-only update path never writes.",
+      "diagram": "flowchart TD\n  A[\"update merge reads .graphify_extract.json\"] --> B[\"stamp the manifest from it\"]\n  B --> C[\"overwrite .graphify_extract.json with the merged graph\"]\n  C --> D[\"a re-run reads mostly old nodes\"]:::bad\n  D --> E[\"a failed chunk is marked done\"]:::bad\n  C --> F[\"stamp from .graphify_semantic.json instead\"]:::good\n  F --> G[\"this run's semantic output, cache hits included\"]:::good\n  G --> H[\"but the partial list must outlive the merge\"]:::warn\n  H --> I[\"edits the delete line #4832 added\"]:::bad\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383\n  classDef warn fill:#ffd,stroke:#a80",
+      "before": "PR #4837: stamp from .graphify_semantic.json, keep the list until Step 9\n12/12 on the matrix, but it edits #4832's delete line",
+      "after": "PR #4838: write a self-contained snapshot before the merge\n12/12, and #4832's cleanup stays as it is",
+      "limits": [
+        "Closed, not merged. #4838 carries the fix.",
+        "It relies on `.graphify_semantic.json`, which a deletion-only update never writes.",
+        "It removes the delete-at-end hook #4832 added, so the two PRs conflict on the same lines."
+      ],
+      "tests": [
+        "test_rerunning_the_update_merge_keeps_a_failed_doc_queued",
+        "test_step9_after_an_update_keeps_a_failed_doc_queued",
+        "test_step9_without_a_semantic_file_fails_closed",
+        "test_a_partly_read_doc_survives_a_merge_rerun",
+        "test_a_partly_read_doc_survives_step9_after_an_update",
+        "test_the_next_run_cleans_up_the_partial_list",
+        "test_step9_after_a_full_build_still_stamps_a_cached_doc",
+        "test_the_shipped_blocks_stamp_from_the_semantic_file"
+      ]
+    },
+    "4838": {
+      "summary": "An --update no longer marks a changed doc as done when its chunk failed, so the next run retries it and the graph gets the edit.",
+      "why": "The update overwrote its own scratch file, so on a second pass old answers looked like this run's answers. The fix keeps a copy of this run's answers before the overwrite. The update merge reads this run's extraction from `.graphify_extract.json`, marks files done from it, then overwrites the same file with the whole merged graph so Steps 4 to 8 can read it. From that point the file means the merged graph, not what this run produced. A second run of the merge block, or Step 9 after an update, reads it as fresh output, so every old node from `graph.json` looks new and a doc whose chunk failed is marked done. Nothing queues it again.",
+      "what": "Before the overwrite, the merge writes `.graphify_extract_run.json`: this run's extraction plus the partial set B3.5 wrote. Both readers stamp from that snapshot. The partial set travels inside it, so #4832's exclusion still works after the merge deletes the list. The snapshot is deleted at the start of the next update or full build, and by Step 9. Three commits: the test, the writer and merge save, and the Step 9 reader.",
+      "helps": "A failed chunk stays queued through a merge re-run and through Step 9. A successful update and a successful full build still mark their docs done, so nothing starts re-billing. Code-only and deletion-only updates are unchanged.",
+      "diagram": "flowchart TD\n  A[\"update merge reads .graphify_extract.json\"] --> B[\"write .graphify_extract_run.json: this run's extraction and partial set\"]:::good\n  B --> C[\"stamp the manifest from the snapshot\"]:::good\n  C --> D[\"overwrite .graphify_extract.json with the merged graph\"]\n  D --> E[\"merge re-run reads the snapshot\"]:::good\n  D --> F[\"Step 9 reads the snapshot\"]:::good\n  E --> G[\"a failed chunk stays queued\"]:::good\n  F --> G\n  D -.-> H[\"read the merged file as this run's output\"]:::bad\n  H -.-> I[\"old nodes look new, doc marked done\"]:::bad\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant U as graphify update\n  participant E as .graphify_extract.json\n  participant R as .graphify_extract_run.json\n  participant M as manifest.json\n  participant S as Step 9\n  U->>E: read this run's extraction\n  U->>R: write extraction plus partial set\n  U->>M: stamp from R\n  U->>E: overwrite with the merged graph\n  alt a later step fails and the merge runs again\n    U->>R: read this run's extraction\n    U->>M: stamp from R\n  else an agent runs Step 9 after the update\n    S->>R: read this run's extraction\n    S->>M: stamp from R\n  end\n  S->>R: delete the snapshot",
+      "before": "changed doc notes.md, its chunk fails, then the update runs again\nnext update queues: []",
+      "after": "same failure, with the snapshot written before the merge\nnext update queues: [\"notes.md\"]",
+      "limits": [
+        "Stacked on #4832. Until that merges, this diff includes its commits.",
+        "Concurrent builds on one `graphify-out/` are still unsafe, as in #4832.",
+        "After a failed update the snapshot stays on disk until the next run's start hook or Step 9 cleanup removes it.",
+        "Aider and devin ship frozen cores and no shared `references/update.md`, so they are out of scope, same as #4807 and #4814.",
+        "The eight-policy matrix lives in the test harness. Only the chosen design ships."
+      ],
+      "tests": [
+        "test_a_failed_chunk_stays_queued",
+        "test_a_partly_read_doc_stays_queued",
+        "test_a_successful_update_is_not_re_queued",
+        "test_a_later_full_build_is_not_poisoned_by_the_snapshot",
+        "test_a_second_update_after_a_failure_stamps",
+        "test_only_the_failed_doc_is_re_queued",
+        "test_code_only_update_keeps_docs_stamped",
+        "test_deletion_only_update_keeps_docs_stamped",
+        "test_a_failed_full_build_still_queues_the_doc",
+        "test_rerunning_the_merge_block_is_idempotent",
+        "test_every_shared_core_host_ships_the_snapshot_lifecycle"
       ]
     }
   },

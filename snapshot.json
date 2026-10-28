@@ -1,7 +1,282 @@
-{"fetched_at":"2026-10-26T20:58:17Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 34,
+{"fetched_at":"2026-10-28T12:37:44Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 37,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4838",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4838/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4838/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4838/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4838",
+      "id": 6070200173,
+      "node_id": "PR_kwDOR4-pD88AAAABLJlC9Q",
+      "number": 4838,
+      "title": " fix(skill): stop an --update re-read from stamping a doc whose chunk failed (#4811)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        },
+        {
+          "id": 12626523901,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2_Q",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/needs:title",
+          "name": "needs:title",
+          "color": "fbca04",
+          "default": false,
+          "description": "PR title should follow the conventional-commit format",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-10-28T00:29:20Z",
+      "updated_at": "2026-10-28T00:39:44Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4838",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4838",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4838.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4838.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4811. An `--update` marks a changed doc as done when its chunk failed, so the doc is never re-queued and the graph keeps its pre-edit nodes.\n\nThe sequence: the merge block reads this run's extraction from `graphify-out/.graphify_extract.json`, stamps the manifest from it (#2015/#1948), then overwrites the same file with the whole merged graph so Steps 4-8 can read it. From that moment the file no longer means \"what this run produced\" — it is mostly old nodes from `graph.json`, with nothing on disk saying which is which. Anything that re-reads it as this run's output stamps the doc:\n\n- a second run of the merge block in the same update (e.g. after a later step fails);\n- core Step 9, which agents run after an update (#837).\n\nThe fix writes a snapshot of this run's extraction, plus the partial set B3.5 wrote, before the merge overwrites the working file. The merge block's manifest save and Step 9 both stamp from that snapshot. The partial set travels with the payload, so the #4807/#4814 exclusion still holds after the merge block deletes `.graphify_partial.txt`.\n\nThree commits, each independently revertable:\n\n1. `test(skill): pin the #4811 stamped-failed-doc gap` — 12 scenarios over the real rendered blocks, red on the current runbook.\n2. `fix(skill): snapshot this run's extraction before the update merge` — the writer, the lifecycle, and the merge-block save. Turns the merge-rerun scenarios green.\n3. `fix(skill): stamp Step 9 from this run's extraction snapshot` — the second reader.\n\n**Stacked on #4832** (`fix/4814-partial-list-lifecycle`, currently open). That PR adds the run-start delete hooks this change extends, and its list-consumption line is the reason the partial set has to travel inside the snapshot. Until #4832 merges, this PR's diff includes its three commits.\n\n**Design choice.** I measured eight candidate designs against the same 12-scenario matrix (each driven through the real rendered blocks and scored with the real `detect_incremental`):\n\n```text\npolicy                     S1   S2   S3   S4   S5   S6   S7   S8   S9  S10  S11  S12   score\nbaseline                    X    X    X    X   ok   ok   ok   ok   ok   ok   ok    X   7/12\nsnapshot at merge, raw, list kept\n                           ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok  12/12\nsnapshot at merge, self-contained  <- chosen\n                           ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok  12/12\nsnapshot at merge, no start delete\n                           ok   ok   ok   ok   ok   ok    X   ok   ok   ok    X   ok  10/12\nstamp from .graphify_semantic.json, list kept\n                           ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok  12/12\nstamp from .graphify_semantic.json, shipped list lifecycle\n                           ok   ok    X    X   ok   ok   ok   ok   ok   ok   ok   ok  10/12\nsnapshot gated by a per-run id\n                           ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok  12/12\nsnapshot at the producer (Part C)\n                           ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok   ok  12/12\n```\n\nS1/S2 = failed chunk then merge re-run / Step 9. S3/S4 = partly read doc. S5/S6 = success controls. S7 = failed update then a clean full build. S8 code-only. S9 deletion-only. S10 full-build failed-chunk control. S11 second update after a failure. S12 precision.\n\nWhy the chosen design over the others:\n\n- The two smallest fixes (semantic-only, and raw snapshot + keep the list) both require reverting #4832's \"consume and remove the list\" line. The self-contained snapshot leaves that PR's list lifecycle untouched, so the two changes do not conflict.\n- S7 and S11 are why the snapshot needs delete-at-start: without it, a snapshot from a failed update poisons a later successful full build and a later successful update.\n- The run-id design scores the same but adds a persistent file plus a filter every reader must apply — the cost #4832 measured and rejected for the partial list.\n- The producer design scores the same but edits the shared core Part C block (all 13 hosts, full builds included) and still needs a merge-side writer for the deletion-only path.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nThe invariant: a file is stamped only when a value that describes **this run** says it produced output, and that value cannot be rewritten before every reader has read it. Step 9 and the merge block now read the same immutable snapshot; the snapshot is written once per run, before the merge, and cleared at every run start.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\nThe issue's reproduction, before and after:\n\n```text\nbefore (at 2af27a8e)\n  $ python merge_rerun_repro.py rerun\n  after a second merge, next --update queues: []\n  $ python merge_rerun_repro.py step9\n  after Step 9, next --update queues: []\n\nafter\n  $ python merge_rerun_repro.py rerun\n  after a second merge, next --update queues: ['notes.md']\n  $ python merge_rerun_repro.py step9\n  after Step 9, next --update queues: ['notes.md']\n```\n\nGenerated state: all 134 skill artifacts are regenerated from the fragments and `--check` passes. No graph, cache, or manifest format changes, so nothing to migrate.\n\n**Merge Danger**\n\n**Door:** two-way. Runbook text, regenerated artifacts, one new test file, and one existing test helper. Reverting `972f14a5` restores Step 9's old reader; reverting `1fd842b9` also removes the snapshot writer and lifecycle, returning the runbook to today's behaviour. `bc036568` is test-only (its own matrix is red by design, so it lands with the fixes).\n\n**Blast Radius:** skill-only, across the 14 hosts that render the shared core runbook.\n\nLimitations:\n\n- Aider and Devin ship their own frozen core fragments and render no shared `references/update.md`, so the snapshot is never written for them. They are out of scope, exactly as the #4807/#4814 hooks already are.\n- Concurrent builds on one `graphify-out/` remain unsafe; this change does not make the snapshot run-scoped beyond a fixed filename.\n- An `--update` leaves its snapshot on disk until the next run's start hook or Step 9 cleanup, the same way the partial list already outlives an update.\n- Not tested on Windows in a real shell. The change adds no shell syntax to the Windows variant beyond a literal path in an existing `rm`/`Remove-Item` and Python lines that use single quotes only; the per-host rendered-artifact test covers every shared-core host.\n\n## How was this tested?\n\n```text\n$ .venv/bin/python -m pytest tests/test_extract_snapshot_4811.py -q -p no:cacheprovider\n27 passed\n\n$ .venv/bin/python -m pytest -q -p no:cacheprovider\n9027 passed, 17 skipped, 1 xfailed in 589.95s (0:09:49)\n\n$ .venv/bin/python -m tools.skillgen --check\ncheck OK: 134 artifact(s) match committed output and expected/\n$ .venv/bin/python -m tools.skillgen --audit-coverage\naudit-coverage OK: ...\n$ .venv/bin/python -m tools.skillgen --monolith-roundtrip\nmonolith-roundtrip OK: ...\n$ .venv/bin/python -m tools.skillgen --always-on-roundtrip\nalways-on-roundtrip OK: ...\n\n$ .venv/bin/ruff check tests/test_extract_snapshot_4811.py tests/test_partial_list_lifecycle.py tools/skillgen\nAll checks passed!\n$ .venv/bin/pyright tests/test_extract_snapshot_4811.py tests/test_partial_list_lifecycle.py\n0 errors, 0 warnings, 0 informations\n```\n\nThe new test module drives the real rendered blocks through bash (shell wrapper included) and reads each verdict from the real `detect_incremental`, so it fails on behaviour rather than on the presence of a line. It covers both readers, both failure modes, the success controls that must not start re-billing, the two stale-state traps, code-only and deletion-only updates, precision across two changed docs, merge idempotency, and a per-host check that every shared-core render carries the write/clean/read hooks. The full suite caught two issues during development, both fixed rather than worked around: a backtick in a comment inside a `python -c \"...\"` payload, and the lean-core 800-line guard (the Step 9 change is net-zero lines, so the guard is unchanged).\n\n## Graphify-specific checklist\n\n- [x] I updated generated skill artifacts (`python -m tools.skillgen --bless`) when changing their source fragments.\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). No extraction code is touched.\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python). The new path is a literal string; the inserted Python uses single quotes only, so it cannot close the shell's double-quoted payload. A `test_skill_no_backtick_substitution` guard covers the backtick case.\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages. (Commits do not carry an AI-authorship trailer; add one before merge if the repository requires it.)\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4838/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4838/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4837",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4837/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4837/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4837/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4837",
+      "id": 6067839840,
+      "node_id": "PR_kwDOR4-pD88AAAABLHs0rQ",
+      "number": 4837,
+      "title": "fix(skill): stop a stale .graphify_partial.txt from poisoning the next build (#4814)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-27T21:15:28Z",
+      "updated_at": "2026-10-27T21:25:24Z",
+      "closed_at": "2026-10-27T21:23:11Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4837",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4837",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4837.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4837.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4814 and #4807. Both are the same missing lifecycle on `graphify-out/.graphify_partial.txt`.\n\nStep B3.5 writes the file, listing sources a subagent read only partway. Step 9 reads it so those sources stay unstamped, then deletes it. `--update` stops at Step 8, so its list outlived the run. A later full build that served the doc from the semantic cache never ran B3.5 and never rewrote the list. Step 9 read the stale entry and left a doc it served in full unstamped, so the next `--update` re-queued it.\n\nBefore, on the reproduction from the issue:\n\n```text\n$ python stale_list_repro.py\nafter the full build, next --update queues: [\"long.md\"]\n```\n\nAfter:\n\n```text\n$ python stale_list_repro.py\nafter the full build, next --update queues: []\n```\n\nThe same script with the list removed also printed `[]`, which is how the list became the suspect.\n\nThe second half is #4807. An `--update` has one manifest save, in its merge block. It passed no partial set, so a doc B3.5 had just flagged as partly read was stamped as done and never retried.\n\n```diff\n tools/skillgen/fragments/core/core.md\n   Step B0\n+    Path('graphify-out/.graphify_partial.txt').unlink(missing_ok=True)\n\n tools/skillgen/fragments/references/shared/update.md\n   run start\n+    rm -f graphify-out/.graphify_partial.txt\n   merge, manifest save\n+    _partial = <read the list>\n+    _stamped_manifest_files(..., partial_source_files=_partial)\n+    _pf.unlink(missing_ok=True)\n```\n\nBoth hooks delete before any writer runs, so any list a reader sees was written by this run. The update path has no Step 9, so its manifest save both consumes the list and removes it.\n\nDelete-at-start was picked over a run id or an mtime check by measuring all three against the real rendered blocks. Delete-at-start and run-id both score 7/7 on the supported scenarios. Run-id adds a persistent id file and a header every reader has to filter. Mtime freshness scores 6/7 and fails when a stale list carries the same timestamp as this run's `.graphify_detect.json`.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nThe invariant is that a doc is left unstamped only when a subagent read it partway **in this run**. Step 9's partial set is a subset of what this run's B3.5 wrote.\n\nThe start hooks run before B3.5, so any list a reader sees was written after them. The update path reads the list at its only manifest save and deletes it there. This PR deletes at the end of that save. The follow-up #4811 keeps the list longer, because a merge re-run and Step 9 after an update also need it. That is a separate change with its own tests.\n\nGenerated state: all 134 skill artifacts are regenerated from the fragments and `--check` passes. No graph, cache, or manifest format changes, so nothing to migrate.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. Runbook text, regenerated artifacts, and one test file. Reverting `0f70bd86` or `b5d4a62d` restores the previous behavior; `2af27a8e` is test-only. A stale list already on disk heals at the next run's start.\n\n**Blast Radius:** skill-only, across all 13 hosts.\n\n- Concurrent builds on one `graphify-out/` remain unsafe. Step 9's cleanup is a single global `rm`, so a second run can remove a live run's list. `test_another_runs_step9_destroys_the_list_for_every_candidate` pins it. This change does not try to make the list run-scoped.\n- The `runid` and `fresh` policies are harness models, not shipped code. They exist to justify the choice and are exercised only there.\n- Not tested on Windows. The change is `unlink` on a fixed relative path and `rm -f` on a fixed path.\n\n## How was this tested?\n\nCommands run, with output:\n\n```text\n$ .venv/bin/python -m pytest tests/test_partial_list_lifecycle.py -q\n34 passed\n\n$ .venv/bin/python -m pytest -q -p no:cacheprovider\n9000 passed, 17 skipped, 1 xfailed in 559.91s (0:09:19)\n\n$ .venv/bin/python -m tools.skillgen --check\ncheck OK: 134 artifact(s) match committed output and expected/\n$ .venv/bin/python -m tools.skillgen --audit-coverage\naudit-coverage OK: every per-host v8 heading single-homes in that host's render.\n$ .venv/bin/python -m tools.skillgen --schema-singleton\nschema-singleton OK: the file_type enum is the six-value superset everywhere.\n$ .venv/bin/python -m tools.skillgen --monolith-roundtrip\nmonolith-roundtrip OK: each monolith matches v8 modulo the enum unification.\n$ .venv/bin/python -m tools.skillgen --always-on-roundtrip\nalways-on-roundtrip OK: each always_on/*.md reproduces its former constant byte for byte.\n\n$ .venv/bin/ruff check tests/test_partial_list_lifecycle.py tools/skillgen\nAll checks passed!\n$ .venv/bin/pyright tests/test_partial_list_lifecycle.py\n0 errors, 0 warnings, 0 informations\n```\n\nThe new test file runs each lifecycle through the real B0, B3.5, B3 cache-save, and Step 9 blocks, and reads the outcome from the real `detect_incremental` and `check_semantic_cache`:\n\n```text\npolicy   cluster_only  coarse_clock  code_only_update  control  genuine_partial  interrupted_run  reported_bug\nbaseline FAIL          FAIL          FAIL              PASS     PASS             FAIL             FAIL\ndelete   PASS          PASS          PASS              PASS     PASS             PASS             PASS\nrunid    PASS          PASS          PASS              PASS     PASS             PASS             PASS\nfresh    PASS          FAIL          PASS              PASS     PASS             PASS             PASS\n```\n\nThree end-to-end tests use the shipped fragments with no policy injected:\n\n- `test_the_shipped_runbook_drops_a_stale_list_before_step9` runs the issue's reproduction.\n- `test_a_half_read_doc_on_the_update_path_is_not_stamped` runs the real manifest-save tail from `references/update.md` and asserts the doc is re-queued and the list is removed.\n- `test_the_shipped_update_merge_block_runs_with_a_partial_list` runs the whole merge block through bash with the list on disk. This is the path that evaluates the list read, so a quoting error in the `python -c` wrapper fails the test instead of shipping.\n\nEnvironment note: the suite ran with the repo's `.venv` because the system Python has no numpy. `graphify update .` was run after the change; `graphify-out/` is gitignored.\n\n## Graphify-specific checklist\n\n- [x] I updated generated skill artifacts (`python -m tools.skillgen --bless`) when changing their source fragments.\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). No extraction code is touched.\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python). The new `rm` and `unlink` targets are fixed literal paths.\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages. (The commits do not carry an AI-authorship trailer; add one before merge if the repository requires it.)\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4837/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4837/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4832",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4832/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4832/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4832/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4832",
+      "id": 6062563740,
+      "node_id": "PR_kwDOR4-pD88AAAABLDcN6g",
+      "number": 4832,
+      "title": "fix(skill): stop a stale .graphify_partial.txt from poisoning the next build (#4814)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-27T15:41:30Z",
+      "updated_at": "2026-10-27T21:29:26Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4832",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4832",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4832.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4832.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\r\n\r\nFixes #4814 and #4807. Both are the same missing lifecycle on `graphify-out/.graphify_partial.txt`.\r\n\r\nStep B3.5 writes the file, listing sources a subagent read only partway. Step 9 reads it so those sources stay unstamped, then deletes it. `--update` stops at Step 8, so its list outlived the run. A later full build that served the doc from the semantic cache never ran B3.5 and never rewrote the list. Step 9 read the stale entry and left a doc it served in full unstamped, so the next `--update` re-queued it.\r\n\r\nBefore, on the reproduction from the issue:\r\n\r\n```text\r\n$ python stale_list_repro.py\r\nafter the full build, next --update queues: [\"long.md\"]\r\n```\r\n\r\nAfter:\r\n\r\n```text\r\n$ python stale_list_repro.py\r\nafter the full build, next --update queues: []\r\n```\r\n\r\nThe same script with the list removed also printed `[]`, which is how the list became the suspect.\r\n\r\nThe second half is #4807. An `--update` has one manifest save, in its merge block. It passed no partial set, so a doc B3.5 had just flagged as partly read was stamped as done and never retried.\r\n\r\n```diff\r\n tools/skillgen/fragments/core/core.md\r\n   Step B0\r\n+    Path('graphify-out/.graphify_partial.txt').unlink(missing_ok=True)\r\n\r\n tools/skillgen/fragments/references/shared/update.md\r\n   run start\r\n+    rm -f graphify-out/.graphify_partial.txt\r\n   merge, manifest save\r\n+    _partial = <read the list>\r\n+    _stamped_manifest_files(..., partial_source_files=_partial)\r\n+    _pf.unlink(missing_ok=True)\r\n```\r\n\r\nBoth hooks delete before any writer runs, so any list a reader sees was written by this run. The update path has no Step 9, so its manifest save both consumes the list and removes it.\r\n\r\nDelete-at-start was picked over a run id or an mtime check by measuring all three against the real rendered blocks. Delete-at-start and run-id both score 7/7 on the supported scenarios. Run-id adds a persistent id file and a header every reader has to filter. Mtime freshness scores 6/7 and fails when a stale list carries the same timestamp as this run's `.graphify_detect.json`.\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [ ] Security fix\r\n\r\n## Verification & Invariants\r\n\r\nThe invariant is that a doc is left unstamped only when a subagent read it partway **in this run**. Step 9's partial set is a subset of what this run's B3.5 wrote.\r\n\r\nThe start hooks run before B3.5, so any list a reader sees was written after them. The update path reads the list at its only manifest save and deletes it there. This PR deletes at the end of that save. The follow-up #4811 keeps the list longer, because a merge re-run and Step 9 after an update also need it. That is a separate change with its own tests.\r\n\r\nGenerated state: all 134 skill artifacts are regenerated from the fragments and `--check` passes. No graph, cache, or manifest format changes, so nothing to migrate.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n\r\n**Merge Danger**\r\n\r\n**Door:** two-way. Runbook text, regenerated artifacts, and one test file. Reverting `0f70bd86` or `b5d4a62d` restores the previous behavior; `2af27a8e` is test-only. A stale list already on disk heals at the next run's start.\r\n\r\n**Blast Radius:** skill-only, across all 13 hosts.\r\n\r\n- Concurrent builds on one `graphify-out/` remain unsafe. Step 9's cleanup is a single global `rm`, so a second run can remove a live run's list. `test_another_runs_step9_destroys_the_list_for_every_candidate` pins it. This change does not try to make the list run-scoped.\r\n- The `runid` and `fresh` policies are harness models, not shipped code. They exist to justify the choice and are exercised only there.\r\n- Not tested on Windows. The change is `unlink` on a fixed relative path and `rm -f` on a fixed path.\r\n\r\n## How was this tested?\r\n\r\nCommands run, with output:\r\n\r\n```text\r\n$ .venv/bin/python -m pytest tests/test_partial_list_lifecycle.py -q\r\n34 passed\r\n\r\n$ .venv/bin/python -m pytest -q -p no:cacheprovider\r\n9000 passed, 17 skipped, 1 xfailed in 559.91s (0:09:19)\r\n\r\n$ .venv/bin/python -m tools.skillgen --check\r\ncheck OK: 134 artifact(s) match committed output and expected/\r\n$ .venv/bin/python -m tools.skillgen --audit-coverage\r\naudit-coverage OK: every per-host v8 heading single-homes in that host's render.\r\n$ .venv/bin/python -m tools.skillgen --schema-singleton\r\nschema-singleton OK: the file_type enum is the six-value superset everywhere.\r\n$ .venv/bin/python -m tools.skillgen --monolith-roundtrip\r\nmonolith-roundtrip OK: each monolith matches v8 modulo the enum unification.\r\n$ .venv/bin/python -m tools.skillgen --always-on-roundtrip\r\nalways-on-roundtrip OK: each always_on/*.md reproduces its former constant byte for byte.\r\n\r\n$ .venv/bin/ruff check tests/test_partial_list_lifecycle.py tools/skillgen\r\nAll checks passed!\r\n$ .venv/bin/pyright tests/test_partial_list_lifecycle.py\r\n0 errors, 0 warnings, 0 informations\r\n```\r\n\r\nThe new test file runs each lifecycle through the real B0, B3.5, B3 cache-save, and Step 9 blocks, and reads the outcome from the real `detect_incremental` and `check_semantic_cache`:\r\n\r\n```text\r\npolicy   cluster_only  coarse_clock  code_only_update  control  genuine_partial  interrupted_run  reported_bug\r\nbaseline FAIL          FAIL          FAIL              PASS     PASS             FAIL             FAIL\r\ndelete   PASS          PASS          PASS              PASS     PASS             PASS             PASS\r\nrunid    PASS          PASS          PASS              PASS     PASS             PASS             PASS\r\nfresh    PASS          FAIL          PASS              PASS     PASS             PASS             PASS\r\n```\r\n\r\nThree end-to-end tests use the shipped fragments with no policy injected:\r\n\r\n- `test_the_shipped_runbook_drops_a_stale_list_before_step9` runs the issue's reproduction.\r\n- `test_a_half_read_doc_on_the_update_path_is_not_stamped` runs the real manifest-save tail from `references/update.md` and asserts the doc is re-queued and the list is removed.\r\n- `test_the_shipped_update_merge_block_runs_with_a_partial_list` runs the whole merge block through bash with the list on disk. This is the path that evaluates the list read, so a quoting error in the `python -c` wrapper fails the test instead of shipping.\r\n\r\nEnvironment note: the suite ran with the repo's `.venv` because the system Python has no numpy. `graphify update .` was run after the change; `graphify-out/` is gitignored.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [x] I updated generated skill artifacts (`python -m tools.skillgen --bless`) when changing their source fragments.\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). No extraction code is touched.\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python). The new `rm` and `unlink` targets are fixed literal paths.\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [ ] (If applicable) I disclosed AI authorship in my commit messages. (The commits do not carry an AI-authorship trailer; add one before merge if the repository requires it.)\r\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4832/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4832/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4802",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -861,16 +1136,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-22T23:25:56Z",
-      "updated_at": "2026-10-22T23:34:39Z",
-      "closed_at": null,
+      "updated_at": "2026-10-27T18:19:03Z",
+      "closed_at": "2026-10-27T18:19:03Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -1318,9 +1593,9 @@
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-21T10:28:19Z",
-      "updated_at": "2026-10-23T21:57:11Z",
+      "updated_at": "2026-10-27T14:19:51Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
