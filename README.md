@@ -23,6 +23,8 @@ There is no build step and no npm. The files are served as they are.
 ## Editing data.json
 
 - `groups`: each group has `id`, `title` (the issue title), `issue` (the issue number) and `prs` (PR numbers, in display order). `reported_by` (optional) is the GitHub login of the person who raised the issue, shown next to the issue number. Set it for every group whose issue the author did not raise. A group without it means the author raised the issue, so the two lists agree.
+  - `fixed_by` (optional): PR numbers whose card is shown under another group, because one PR fixed two issues. They render as a compact "Fixed by #..." line under the title, so the same card is not shown twice. A group with no `prs` but a `fixed_by` still appears.
+  - A write-up whose PR is in no group appears under a final "Other pull requests" heading, so give every PR a group when one exists.
 - `prs`: keyed by PR number as a string. Only PRs with an entry get a write-up. Every other PR shows its GitHub description and a "No write-up yet" badge.
   - `summary`: one plain sentence, shown on the card.
   - `why`, `what`, `helps`: short paragraphs.

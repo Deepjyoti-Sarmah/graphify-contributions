@@ -233,7 +233,8 @@
       "issue": 4740,
       "prs": [
         4746,
-        4748
+        4748,
+        4769
       ],
       "reported_by": "lavaxun"
     },
@@ -248,16 +249,17 @@
     },
     {
       "id": "4807",
-      "title": "[Bug]: --update stamps a partly-read doc as done, so it is not retried (update.md omits partial_source_files)",
+      "title": "--update stamps a partly-read doc as done, so it is not retried (update.md omits partial_source_files)",
       "issue": 4807,
-      "prs": [
+      "prs": [],
+      "reported_by": "gitmotion",
+      "fixed_by": [
         4832
-      ],
-      "reported_by": "gitmotion"
+      ]
     },
     {
       "id": "4811",
-      "title": "[Bug]: --update merge block overwrites .graphify_extract.json, so re-running it or Step 9 stamps a doc whose chunk failed",
+      "title": "--update merge block overwrites .graphify_extract.json, so re-running it or Step 9 stamps a doc whose chunk failed",
       "issue": 4811,
       "prs": [
         4838,
@@ -267,7 +269,7 @@
     },
     {
       "id": "4814",
-      "title": "[Bug]: a .graphify_partial.txt left by an --update can hold a cached doc back in a later full build",
+      "title": "a .graphify_partial.txt left by an --update can hold a cached doc back in a later full build",
       "issue": 4814,
       "prs": [
         4832

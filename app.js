@@ -944,7 +944,7 @@ function Toolbar({ filters, update, groups }) {
     </div>`;
 }
 
-function GroupSection({ section, children }) {
+function GroupSection({ section, children, fixRows, onOpenPr }) {
   const { group } = section;
   const headingId = `group-${section.key}`;
   return html`
@@ -954,10 +954,16 @@ function GroupSection({ section, children }) {
           ? html`
             <a href=${ISSUE_URL(group.issue)} target="_blank" rel="noopener noreferrer" class="font-mono text-[13.5px] text-muted hover:text-ink">Issue #${group.issue}</a>
             ${group.reported_by ? html`<a href=${`https://github.com/${group.reported_by}`} target="_blank" rel="noopener noreferrer" class="ml-2 font-mono text-[13.5px] text-muted hover:text-ink">raised by @${group.reported_by}</a>` : null}
-            <h3 id=${headingId} class="mt-1 font-serif text-xl font-medium leading-snug tracking-[-0.01em]">${group.title}</h3>`
+            <h3 id=${headingId} class="mt-1 font-serif text-xl font-medium leading-snug tracking-[-0.01em]">${group.title}</h3>
+            ${fixRows && fixRows.length ? html`
+              <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-muted">Fixed by
+                ${fixRows.map((r, i) => html`<${Fragment} key=${r.n}>${i ? ', ' : ''}<a class="link font-mono" href=${`#pr=${r.n}`} onClick=${(e) => { e.preventDefault(); onOpenPr(r.n); }}>#${r.n}</a>${r.status
+                  ? html` <${Tag} tag=${STATUS_META[r.status].tag} label=${STATUS_META[r.status].label} />`
+                  : null}</${Fragment}>`)}
+              </p>` : null}`
           : html`<h3 id=${headingId} class="font-serif text-xl font-medium">Other pull requests</h3>`}
       </div>
-      ${children}
+      ${section.rows.length ? children : null}
     </section>`;
 }
 
@@ -1064,7 +1070,12 @@ function App() {
     const list = rows.filter((r) => {
       if (!matchesFilter(r.status, filters.status)) return false;
       if (filters.g === 'none' && r.group) return false;
-      if (filters.g !== 'all' && filters.g !== 'none' && (!r.group || r.group.id !== filters.g)) return false;
+      if (filters.g !== 'all' && filters.g !== 'none') {
+        const g = content ? content.groups.find((x) => x.id === filters.g) : null;
+        const direct = r.group && r.group.id === filters.g;
+        const fixed = g && (g.fixed_by || []).includes(r.pr.number);
+        if (!direct && !fixed) return false;
+      }
       if (!q) return true;
       const haystack = `#${r.pr.number} ${r.pr.title} ${(r.entry && r.entry.summary) || ''}`.toLowerCase();
       return haystack.includes(q);
@@ -1082,7 +1093,7 @@ function App() {
     if (!content) return [];
     const out = content.groups
       .map((g) => ({ key: g.id, group: g, rows: g.prs.map((n) => visible.find((r) => r.pr.number === n)).filter(Boolean) }))
-      .filter((s) => s.rows.length);
+      .filter((s) => s.rows.length || (s.group && (s.group.fixed_by || []).length));
     const loose = visible.filter((r) => !r.group);
     if (loose.length) out.push({ key: 'ungrouped', group: null, rows: loose });
     return out;
@@ -1109,7 +1120,9 @@ function App() {
         <button type="button" class="link mt-2" onClick=${() => setFilters({ ...DEFAULT_FILTERS })}>Clear filters</button>
       </div>`;
   } else if (filters.view === 'grouped') {
-    body = html`<div>${sections.map((s) => html`<${GroupSection} key=${s.key} section=${s}><${PRList} rows=${s.rows} ...${listProps} /></${GroupSection}>`)}</div>`;
+    body = html`<div>${sections.map((s) => html`<${GroupSection} key=${s.key} section=${s}
+      fixRows=${(((s.group && s.group.fixed_by) || []).map((n) => ({ n, status: prByNumber[n] || null })))}
+      onOpenPr=${openPr}><${PRList} rows=${s.rows} ...${listProps} /></${GroupSection}>`)}</div>`;
   } else {
     body = html`<${PRList} rows=${visible} ...${listProps} />`;
   }
