@@ -56,7 +56,12 @@ cat > "$harness" <<'HTML'
     if (e.diagram) jobs.push([`prs[${n}].diagram`, e.diagram]);
     if (e.sequence) jobs.push([`prs[${n}].sequence`, e.sequence]);
   }
-  for (const p of (d.proposals || [])) if (p.diagram) jobs.push([`proposal[${p.id}].diagram`, p.diagram]);
+  for (const p of (d.proposals || [])) {
+    if (p.diagram) jobs.push([`proposal[${p.id}].diagram`, p.diagram]);
+    (p.parts || []).forEach((part, i) => {
+      if (part.diagram) jobs.push([`proposal[${p.id}].parts[${i}].diagram`, part.diagram]);
+    });
+  }
   let failed = 0;
   let i = 0;
   for (const [name, src] of jobs) {
