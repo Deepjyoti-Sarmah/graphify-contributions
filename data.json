@@ -2076,6 +2076,252 @@
         4449,
         4432
       ]
+    },
+    {
+      "id": "retrieval-eval",
+      "title": "Measure the answer, then make it smaller",
+      "status": "Proposed, needs your call",
+      "problem": "The query answer is the part of graphify an agent actually reads, and nothing measures whether it contains the file the question is about. Changes to seeding, ranking and rendering are judged by answer size, so a smaller wrong answer looks like a win.",
+      "evidence": "Measured in the issue threads on the 0.9.85 to 0.9.92 line: the fixed file is printed first for 78 of 285 SWE-bench Lite questions (#4480); 25% of 177 answers lead with the right file against 32% for BM25 (#4341); 36% of answer characters are repeated file paths, and a compact form is 1.74x smaller with the same files in the same order (#4469); the default budget keeps 35 of 240 and 41 of 400 nodes on a 167k-node graph (#3810). I also ran the current renderer over a fresh code-only graph of graphify/extractors (1,206 nodes, 3,058 edges): 93.5% of the answer's characters are NODE lines, 12.8% are source paths and 10.0% are repeated paths.",
+      "parts": [
+        {
+          "label": "1. The number that is missing",
+          "md": "`graphify benchmark` reports how many tokens an answer costs against reading the corpus. It never asks whether the answer contains the file the question was about. #4341 built that number for 177 SWE-bench Lite issues across nine repos, each repo at the commit its issues were filed against, the issue title as the question, the files the real fix changed as the right answer. The run used the MCP defaults (BFS, depth 3, about 2,000 tokens) on 0.9.85.\n\n| | first file | first 3 | first 5 | anywhere |\n|---|---|---|---|---|\n| `query_graph` | 25% | 34% | 38% | 62% |\n| BM25 over the repo's `.py` files | 32% | 56% | 64% | 92% in the top 50 |\n\nOn the same set, 55 of 177 full-issue questions produced a \"Complete answer over budget\" notice. The answer was smaller than the corpus and still did not contain the file. That is the gap every query PR is arguing about with no shared ruler."
+        },
+        {
+          "label": "2. What a miss looks like",
+          "md": "#4480 measured 285 issues in 12 repos on `graphify update` graphs, BFS depth 2, 2,000-token budget, with the files the fix changed as the key.\n\n| | count |\n|---|---|\n| fixed file printed first | 78 of 285 |\n| in the first 3 files | 115 of 285 |\n| in the first 5 files | 131 of 285 |\n\nOf the 207 misses, the first file was a test 58 times, a file in the same folder 41 times, and a file elsewhere 108 times. The fixed file was already among the 50 best-scored nodes in 113 of those 207. The ranking usually holds the right file. The renderer leads with a node that is not in it, so the agent starts in the wrong place."
+        },
+        {
+          "label": "3. Where the tokens go",
+          "md": "#4469 measured the answer shape on 600 answers: 300 SWE-bench Lite issues with two queries each, AST-only graphs, default BFS and 2,000-token budget.\n\n| part of an answer | share of its characters |\n|---|---|\n| NODE lines | 87% |\n| repeated `src=` paths | 36% |\n| empty `community=` | 12% |\n| EDGE lines | 3% |\n\nA file with five nodes in the answer pays for its path five times. The compact form writes each file once, puts its nodes below it, and leaves out empty fields. It returned the same files in the same order in 600 of 600 answers at 1.74x fewer tokens.\n\nMy run on a smaller graph shows the same shape:\n\n| | |\n|---|---|\n| graph | 1,206 nodes, 3,058 edges, code only |\n| answer | 92 NODE lines, about 2,126 tokens |\n| NODE lines | 93.5% of characters |\n| source paths | 12.8%, of which 10.0% repeated |\n| compact form | 20% fewer characters |\n\nPaths in graphify are short (`dm.py`, `base.py`), so repetition costs less here than the 36% measured on Django-sized paths. The shape is the same."
+        },
+        {
+          "label": "4. Seeding by one word or one node",
+          "md": "#3810 ran MCP queries on a 167k-node graph of mixed books. `query_graph(\"incidence algebra derivations poset\")` seeded on `Poset`, `Incidence`, `Derivations` and `Algebra`. `Incidence` matched a biostatistics book, so the walk crossed domains. At the default budget the two queries showed 35 of 240 and 41 of 400 nodes.\n\n#4480 proposes a fix that needs no new index: for a question of three or more terms, sum the scores of the 50 best candidates per file, lead with the best node of the best file, and let a test file lead only when the question names tests. Measured on the same 285 issues:\n\n| | by title | by title + 400 characters |\n|---|---|---|\n| 0.9.85 | 78 / 115 / 131 | 67 / 99 / 122 |\n| proposed | 88 / 121 / 136 | 80 / 117 / 140 |\n\nThat is a small change with a measured gain. It is also impossible to judge without the gold set."
+        },
+        {
+          "label": "5. The order I would do it",
+          "md": "1. Build the harness outside graphify and publish the baseline on the 285 issues. It runs `query_graph` on stored graphs, needs no LLM calls, and can live in a branch or a script.\n2. Land `graphify benchmark --questions FILE` from #4341, so a reviewer can reproduce the number without the external script. Without `--questions` the command is unchanged.\n3. Land phrase-first seeding and per-file aggregation (#3810, #4480). Score it on the same set, by title and by title plus body.\n4. Land the compact renderer behind `--compact` (#4469). Check three things: same files in the same order, tokens, and gold-file rank. Only then decide the default.\n\nThe harness is the only piece that has to exist before the other two can be judged. It is also the piece that keeps working after this proposal is done."
+        },
+        {
+          "label": "6. How this improves the project",
+          "md": "- About twenty open query PRs (#2403, #3284, #3417, #3636 and others) get one number to compare against. A change that makes answers smaller and worse stops looking like a win.\n- An agent reading a 1.7x smaller answer with the same files saves context on every query, not once.\n- Leading with the right file helps the first thing the agent reads, before any reasoning.\n- The harness uses stored graphs and the real `query_graph` path, so it does not drift from the tool agents call.\n- Regressions in ranking show up as a score drop instead of a user report."
+        },
+        {
+          "label": "7. Questions for you",
+          "md": "1. Is SWE-bench Lite the right public set, or would you rather the first `--questions` file be a project's own issue history?\n2. Should the compact form be opt-in for one release, or would you take it as the default once the file order is unchanged?\n3. Which matters more for your users: first file, first 5, or whether the file appears at all? I would score all three, but the order sets the target.\n4. Do you want the harness inside `graphify benchmark` from the start, or an external script first and no library change until the numbers are in?"
+        }
+      ],
+      "plan": [
+        "Stage 0: external harness on 285 stored graphs; publish first-file, first-3, first-5 and anywhere, with answer tokens.",
+        "Stage 1: `graphify benchmark --questions FILE` from #4341. CLI and docs only, no change without the flag.",
+        "Stage 1: a small test that the harness finds a known file in a fixture graph, so the score cannot pass vacuously.",
+        "Stage 2: phrase-first seeding and per-file score aggregation, measured on the same set. Easy to revert, one scoring function.",
+        "Stage 2: a regression test for a title-only question whose fix file is not a test, matching the 285-issue shape.",
+        "Stage 3: compact rendering behind `--compact`, with a same-files-same-order test and a token count.",
+        "Stage 3: flip the compact default only if the gold-file score does not drop.",
+        "Stage 4, optional: reuse an answer for a rephrased question keyed by graph version and question, once the harness can measure whether reuse helps (#4477)."
+      ],
+      "size": "medium",
+      "risk": "medium",
+      "related": [
+        4341,
+        4480,
+        4469,
+        3810,
+        4477,
+        2403,
+        3284,
+        3417
+      ]
+    },
+    {
+      "id": "corpus-limits",
+      "title": "Bound what a corpus can make graphify build",
+      "status": "Reproduced, nothing built yet",
+      "problem": "A 5.3 MB source tree with 401 files makes graphify build 805,600 edges and a 163.6 MB graph.json, at 2.16 GB of resident memory. Nothing caps the graph a corpus can produce, and watch and the post-commit hook rebuild it without asking.",
+      "evidence": "Measured on 0.9.97 (972f14a5) with a generated corpus: one module with 2,000 classes, 400 files that import all 2,000 names and define 8 local classes each, 5.28 MB in total. `graphify extract --code-only` produced 5,601 nodes and 805,600 edges (800,000 imports), a 163.6 MB graph.json, peak RSS 2.16 GB, 2 min 53 s wall time and 192.6 s user time. One source node has 2,009 outgoing edges. #3868 reported 6,405,600 edges on the same shape at 0.9.92; #2652 cut the per-class fan-out, but no budget was added. `_MAX_CROSS_FILE_EDGES` does not exist in the code.",
+      "parts": [
+        {
+          "label": "1. The measurement",
+          "md": "I generated the corpus from #3868 and ran the current CLI. The recipe is short enough to repeat:\n\n| item | value |\n|---|---|\n| module | `big.py` with 2,000 classes |\n| generated files | 400 files, each imports `C0` to `C1999` and defines 8 local classes |\n| input | 5.28 MB, 401 files |\n| command | `graphify extract /tmp/blow --code-only --out /tmp/blow-out` |\n\n| measure | value |\n|---|---|\n| wall time | 2 min 53 s |\n| user CPU | 192.6 s (114% of wall) |\n| peak resident memory | 2.16 GB |\n| nodes | 5,601 |\n| edges | 805,600 |\n| `imports` edges | 800,000 |\n| `contains` edges | 5,200 |\n| `imports_from` edges | 400 |\n| graph.json | 163.6 MB |\n| graph.json / input | 31x |\n| edges per node | 143.8 |\n| largest out-degree | 2,009 |\n| exit code | 0 |\n\nThere was no warning about size and no flag that would have stopped it."
+        },
+        {
+          "label": "2. Why one import line becomes 2,000 edges",
+          "md": "`_resolve_cross_file_imports` (`graphify/extractors/resolution.py:2926`) builds a map from each file's stem to the entities it defines, then walks every import in every file. For each imported name it finds a target id and writes an edge. In this corpus each of the 400 files imports 2,000 names, so the file-level import stage alone writes 400 x 2,000 = 800,000 edges.\n\n#3868 found a worse version: the old code wrote one edge from every local class to every imported name, a cartesian product of files, names and classes (6.4M edges on the same corpus). #2652 changed `uses` edges to attach only to the symbol that references the name, which is the right fix for that relation. The file-level `imports` fan-out is still one edge per imported name, and nothing bounds it. The total node count is small (5,601); the edge count is what grows."
+        },
+        {
+          "label": "3. What it costs downstream",
+          "md": "The 2.16 GB peak is mostly the in-memory graph plus the edge list. The same structure is then written as a 163.6 MB JSON file. #3868 notes that the watch rebuild and `to_json`/`to_cypher` materialize it again, so a commit that adds the crafted files can trigger the work from a git hook without anyone running a command.\n\nThe run also took almost three minutes on one core. That is not the LLM path: it is AST parsing plus resolution plus serialization. A repository with many generated files can pay this on every watch event."
+        },
+        {
+          "label": "4. A cap is a contract",
+          "md": "There are four ways to bound it, and they are not equivalent:\n\n| lever | what it protects | what it costs |\n|---|---|---|\n| total edge cap | memory, disk, export time | a legitimate large graph is rejected |\n| per-node degree cap | hub nodes and JSON bloat | a real god node is truncated |\n| input-scaled budget | adapts to corpus size | needs a defensible ratio |\n| lazy import expansion | removes most of the edges | changes what the graph stores |\n\nA silent truncation is worse than a failure, because the graph then claims to be complete. My preference is a preflight estimate that names the top ten fan-out nodes, a default input-scaled cap, and an explicit `--allow-large` override. `--max-edges` gives the operator the final say.\n\nThe harder question is the ratio. I would not guess it. Measure the distribution on public repos first (AST-only, no LLM), then pick a default that no real repo in the sample hits. A cap that trips on Kubernetes is not a cap, it is a bug report."
+        },
+        {
+          "label": "5. The cheaper graph: do not store the product",
+          "md": "The 800,000 `imports` edges answer a file-level question: does this file depend on that module? One edge per (file, module) pair does that in about 400 edges instead of 800,000. Symbol-level resolution can stay in the resolver and run when a query needs it, against the module's node index.\n\nThat is a graph semantics change, so it cannot be the first step. But it is the step that makes the cap less painful: a smaller graph, the same answers, and less to serialize. I would measure it on the query harness from the retrieval proposal before touching the default."
+        },
+        {
+          "label": "6. The order I would do it",
+          "md": "1. Commit the generator as a fixture and assert today's numbers: 401 files, 5,601 nodes, 805,600 edges, exit 0. That is the regression test for the fix.\n2. Add a report-only estimate before extraction: input files, AST nodes, projected import edges, top ten fan-out files. No output change, easy to review.\n3. Add `--max-edges` with no default. Compare it on public repos and on the generated corpus.\n4. Turn on a default cap that the measured repos do not hit, with `--allow-large` to override. One release.\n5. Only after the numbers: collapse import edges to one per module pair, measured on the query set."
+        },
+        {
+          "label": "7. How this improves the project",
+          "md": "- A single commit cannot make a watch loop or a git hook exhaust memory and disk.\n- CI for large repos gets a predictable ceiling and a clear error instead of an OOM kill.\n- The operator learns which files cause the blow-up while the run is still cheap to stop.\n- Export time and graph.json size become a product decision, not a side effect of one import line.\n- It complements the indexing proposal: that one makes the LLM work smaller, this one makes the deterministic stage smaller."
+        },
+        {
+          "label": "8. Questions for you",
+          "md": "1. Would you take a default cap at all, or only an opt-in `--max-edges` plus a warning?\n2. If a cap trips, should the run fail or write a graph with a recorded truncation? I lean fail, because a truncated graph is indistinguishable from a complete one later.\n3. Is collapsing import edges to one per module pair acceptable for the queries you care about, or does the graph need per-symbol import edges?\n4. Which public repos should set the default? I would use three sizes (about 500, 5,000 and 30,000 files) and no LLM."
+        }
+      ],
+      "plan": [
+        "Stage 0: commit the generated 401-file corpus as a fixture and assert the current 805,600 edges and 2.16 GB peak.",
+        "Stage 1: a report-only preflight estimate (files, AST nodes, projected edges, top fan-out) with no output change.",
+        "Stage 1: a test that the estimate ranks the crafted module first.",
+        "Stage 2: `--max-edges` with no default, compared on the fixture and on public repos.",
+        "Stage 2: fail before writing when the cap trips; print the top ten fan-out files and the two levers.",
+        "Stage 3: a measured default cap plus `--allow-large`. One release, documented.",
+        "Stage 3: streaming or chunked graph.json writing, measured on the fixture.",
+        "Stage 4: collapse import edges to one per (file, module), measured on the query gold set before the default changes."
+      ],
+      "size": "large",
+      "risk": "medium",
+      "related": [
+        3868,
+        2652,
+        3982,
+        4124,
+        4603
+      ]
+    },
+    {
+      "id": "cross-chunk-linking",
+      "title": "Link the edges no chunk can see",
+      "status": "Proposed, needs your call",
+      "problem": "Semantic extraction runs one chunk at a time, and a chunk cannot see another chunk. A relationship whose two ends land in different chunks cannot be emitted at all, so parallelism buys speed by making the semantic layer sparser. The same fact can sit in the graph twice, in two files and two communities, with no edge between them.",
+      "evidence": "The prompt says \"if two concepts in this chunk solve the same problem\", and `extract_files` packs files by directory and dispatches chunks to a pool (`graphify/llm.py`, default concurrency 4). #3948 documents a pair of data files in different directories that state one design rule: both became rationale nodes, each has one edge to its own file, and they ended in different communities. Its experiment: word-shingle Jaccard found 5 pairs and missed the known one; TF-IDF cosine found 32 and missed it at 0.371 against a 0.42 threshold; rare-term overlap with a moderate cosine caught it and added 12 more true pairs with no false positives on manual review. #3947 describes the same wall for references to nodes outside the chunk, and #65 left a global pass \"on the table\".",
+      "parts": [
+        {
+          "label": "1. Each chunk is an island",
+          "md": "`_pack_chunks_by_tokens` (`graphify/llm.py:2321`) groups units by parent directory and closes a chunk when the next unit would exceed the token budget. Oversized documents are split into slices first. `extract_files` then runs the chunks through a thread pool, four by default. Each subagent sees its chunk and the fixed prompt, and nothing else.\n\nThe design is correct for cost and speed. Cross-file edges are more likely within a chunk than across chunks, and parallelism is why a large docs corpus finishes. The cost is structural: a relation between two chunks is not something the model forgot, it is something no model was asked."
+        },
+        {
+          "label": "2. The rule that got stored twice",
+          "md": "#3948's case is a project design rule written in two data files in two directories. Both files were extracted correctly as rationale nodes. Each node has one edge, to its own file. They are not connected to each other, and they landed in different communities.\n\nThe graph holds the same fact twice and does not know it. An agent asking why the project does X can get one of the two answers and never see the other. The failure is quiet: both nodes are valid, both files are present, and no warning says a relation is missing."
+        },
+        {
+          "label": "3. What was tried, and what found the pair",
+          "md": "#3948 implemented a controller-side pass and checked it against a known pair chosen before the metric.\n\n| method | pairs found | known pair | false positives |\n|---|---|---|---|\n| word-shingle Jaccard | 5 | missed | not reported |\n| TF-IDF cosine | 32 | missed (0.371 against 0.42) | not reported |\n| rare terms in common, plus a moderate cosine | known pair + 12 more | found | none on manual review |\n\nThe two texts state one rule in different words. Shingles measure near-verbatim copying; long texts dilute the cosine with their own material. Shared low-frequency vocabulary is what carries the paraphrase. The second result is the one to keep: it is cheap, deterministic, needs no model, and it produced true pairs a human could check."
+        },
+        {
+          "label": "4. What is impossible today",
+          "md": "| relationship | same chunk | different chunks |\n|---|---|---|\n| `semantically_similar_to` | emitted | impossible |\n| reference to a named node | emitted | the model copies an id fragment or mints a stub (#3947) |\n| two rationale nodes stating one rule | may merge or link | two nodes, two communities |\n| imports and calls | AST stage, global | handled globally, not affected |\n| community assignment | global | duplicate nodes split the topic |\n\nThe top three rows are the semantic layer. The AST rows are fine because code extraction runs over the whole corpus before the graph is built."
+        },
+        {
+          "label": "5. The pass",
+          "md": "After all chunks are collected, before Part C:\n\n1. Take the `rationale` and `concept` nodes with text and their source files.\n2. Block candidates by shared rare terms, so the pass does not compare every pair with every other pair. An inverted index over low-frequency terms is enough.\n3. Score each candidate pair with rare-term overlap plus cosine. Accept on either a strong cosine or a high rare-term overlap with a moderate cosine, following #3948.\n4. Emit `semantically_similar_to` edges marked `INFERRED`, with the score and the two source locations. Cap the number of pairs per node and per run.\n5. Write the accepted pairs to the report as well as the graph, so a human can see what was inferred from content graphify did not author.\n\nNo LLM call. Deterministic on the same input, sorted output. The pass is a controller step, not a prompt change, so it can be added and removed without touching the extraction spec."
+        },
+        {
+          "label": "6. Why not let one chunk see everything",
+          "md": "A single global extraction would make the relation visible, but it would also remove the parallelism and pay for the whole corpus in one context window. On a large docs corpus that is slower and more expensive, and the context limit still forces a split. The controller sees all the output without holding all the text, which is the right place for a global pass."
+        },
+        {
+          "label": "7. How this improves the project",
+          "md": "- Cross-document rules become edges, so a query can walk from one statement of a rule to the other.\n- Duplicate rationale and concept nodes can be linked or merged instead of splitting a topic across communities.\n- Fewer stub nodes from out-of-chunk references (#3947).\n- No new LLM spend: the pass reads text the run already produced.\n- The result is inspectable. A score and two source locations are better than a silent inference."
+        },
+        {
+          "label": "8. Questions for you",
+          "md": "1. Should accepted pairs be written to the graph by default, or reported first and written only with a flag?\n2. Is a lexical pass enough to start, or do you want embeddings (#7) in the first version? I would ship lexical first and keep the interface open.\n3. What cap is acceptable per run: 50 pairs, 500, or a fraction of the concept nodes?\n4. Would you rather this run in the Python CLI (controller) or in the runbook as a Step B3.5 block? The CLI keeps it testable and host-independent."
+        }
+      ],
+      "plan": [
+        "Stage 0: turn #3948's known pair into a fixture with the two rationale nodes and an expected edge. No production change.",
+        "Stage 1: a CLI/controller pass behind `--semantic-link=lexical` that writes candidates to the report only. No graph change.",
+        "Stage 1: a test that the known pair is found and that a near-duplicate negative pair is not.",
+        "Stage 2: write accepted `semantically_similar_to` edges with score and locations; cap per node and per run.",
+        "Stage 2: measure precision on a hand-labelled sample of 50 pairs from a real docs corpus.",
+        "Stage 3: dedupe or merge identical rationale nodes only after the link pass shows the pairs are trustworthy.",
+        "Stage 3: optional embeddings behind the same flag, compared on the same fixture.",
+        "Stage 4: amend the extraction spec so agents know cross-chunk similarity is handled by the controller, not by them."
+      ],
+      "size": "medium",
+      "risk": "medium",
+      "related": [
+        3948,
+        3947,
+        65,
+        7,
+        537,
+        4547
+      ]
+    },
+    {
+      "id": "host-conformance",
+      "title": "Run every host's runbook instead of diffing its text",
+      "status": "Measured, nothing built yet",
+      "problem": "Sixteen host skills are rendered from 36 fragments into 134 files. The tests compare text, run golden files and execute isolated snippets, but only four host renders appear in tests that execute a documented route. A sequencing bug like #4811 can pass every check because the strings are present and the order is wrong.",
+      "evidence": "`tools/skillgen/platforms.toml` declares 16 platforms: 14 split and 2 monolith. They share 36 fragments and 134 expected artifacts, across 8 dispatch variants, 2 extraction modes, 2 shells and 2 hook variants. `tests/test_code_only_update_all_hosts.py` defines 14 `SHARED_HOSTS` but runs only aider and devin; the shared list is commented out until #4313 lands. `tests/test_extract_snapshot_4811.py` executes the claude render for update merge and Step 9, and it checks the other shared hosts by string, not by running them. 25 of the 115 open issues on 2026-10-28 name the skill, installer or hooks, including #4812, #4811, #4807, #4777, #4539, #4447, #4431 and #3820.",
+      "parts": [
+        {
+          "label": "1. One runbook, sixteen deliveries",
+          "md": "The generator is a good design: one lean core, shared references, and per-platform slots. The slots are where hosts differ.\n\n| dimension | values | exercised in an executed route |\n|---|---|---|\n| bucket | 14 split, 2 monolith | split yes (claude, codex), monolith only for code-only update |\n| shell | 15 POSIX or default, 1 PowerShell | POSIX yes, PowerShell no |\n| extraction spec | 10 verbose, 4 compact | both yes (claude verbose, codex compact) |\n| dispatch | 8 variants | 2 of 8 (agent-tool-disk, codex-agenttask) |\n| hooks | 13 claude-md, 3 agents-md | no executed route, string checks only |\n| always-on block | 2 hosts (claude, windows) | installer tests, not the runbook route |\n\nA split host is more than the shared core. Windows runs PowerShell, four hosts use the compact extraction spec, three wire AGENTS.md hooks, and eight dispatch forms tell the agent how to call a subagent. Those are exactly the parts a text diff cannot verify."
+        },
+        {
+          "label": "2. What the tests execute today",
+          "md": "| documented route | host render executed |\n|---|---|\n| build path: detect, B0, Part C, Step 9 (no build or cluster step) | claude |\n| `--update` merge | claude |\n| code-only `--update` | aider, devin |\n| semantic chunk merge (B2/B3) | codex |\n| install and hooks | Python installer tests, not the rendered host blocks |\n\nThat is four of sixteen host renders with any executed route, and each of those four covers one or two pieces of a route. None of them runs the eight-step build. The other 12 hosts are covered by the shared text, golden files and 31 executed scan snippets. Those snippets are useful, but they test a step, not the order of steps.\n\nThis is not a criticism of the existing tests. The 31-snippet test is what caught scan-option drift across every artifact. The gap is the route: start, order, merge, stamp, cleanup."
+        },
+        {
+          "label": "3. Why string checks miss order",
+          "md": "#4811 is the example to keep. The update merge block read `.graphify_extract.json`, built a merged extraction, and wrote it back to the same path. Step 9 then read that path to decide which changed docs to stamp. Every string was present in every render. The order was wrong: after the merge, the file described the old graph, not this run.\n\nA test that checks \"the merge block contains `build_merge`\" passes. A test that runs start, merge, then Step 9 on a project whose chunk failed does not. That is the difference between a text check and a route check.\n\n#4812 is the same shape on the monoliths: aider and devin never saved the manifest on `--update`. #4807 is the same shape inside one file: the partial set was omitted, so a partly read doc was stamped as done. None of these is a missing string."
+        },
+        {
+          "label": "4. The harness",
+          "md": "A fixture project is enough: two code files, one doc, one chunk that fails, one stale `.graphify_partial.txt`, and a manifest from an earlier build. The harness runs the rendered blocks in order, not a reimplementation of them.\n\nFor each host and route, assert on disk and on the next run:\n\n- the graph has the expected nodes and edges;\n- the manifest lists what was read;\n- a failed doc is still queued;\n- a successful doc is not queued;\n- the exit code is 0 on success and non-zero on a refused shrink;\n- no temp file is left behind.\n\nThe matrix is per host bundle, not per file. The 14 split hosts can share one run when their rendered blocks are byte-identical, and run separately when a slot differs. Aider and devin always run their own. Windows needs a PowerShell lane, or a documented skip with the reason.\n\nA `tools/skillgen --routes` report can print the covered cells from the test names, so the matrix cannot silently shrink."
+        },
+        {
+          "label": "5. Paths as well as bodies",
+          "md": "The route tests also need to check where files land. #4812 is about a missing manifest write, but the manifest path depends on the host: aider and devin use a cwd-relative `graphify-out/`, the split hosts use `graphify-out/` too, and Windows has its own shell. #4447 was a code-only update that never wrote the extract file, and #4539 was an instruction in the wrong order.\n\nA route test that runs in a scratch project and looks at the actual files catches all three. A route test that only greps the body does not."
+        },
+        {
+          "label": "6. Cost and CI",
+          "md": "The fixture is small and the blocks are local Python, so a route is seconds, not minutes. The expensive part is the install and hook tests, which already exist separately. Start with the five routes for claude, codex, aider and devin (the four executed today), then add the 12 missing hosts one variant at a time: PowerShell first, then compact extraction, then agents-md hooks.\n\nThe suite can run in the normal test job. If the full 16-host matrix is too slow, split it: shared routes on every PR, monolith and variant lanes on a schedule or a label."
+        },
+        {
+          "label": "7. How this improves the project",
+          "md": "- The next #4811 fails in CI before a review, not after a user report.\n- A platform author can see which routes are guaranteed for their host instead of inferring it from prose.\n- Regressions in one slot (PowerShell, compact spec, hooks) stop hiding behind a shared body.\n- The 25 open skill and installer issues get a test shape that can close them, rather than one more patch.\n- No engine change and no new dependency."
+        },
+        {
+          "label": "8. Questions for you",
+          "md": "1. Would you rather have all 16 hosts for one route first (update merge), or four hosts for all five routes first?\n2. Is a PowerShell lane on Linux acceptable through `pwsh`, or should windows stay a documented skip in CI?\n3. Should the route matrix live in `tools/skillgen --routes`, in the test names, or in a generated Markdown table checked by a test?\n4. Do you want the harness to run the rendered bash blocks exactly as shipped (slower, higher fidelity) or call the Python blocks directly (faster, misses quoting)? I lean exact, with a separate quoted-block test where needed."
+        }
+      ],
+      "plan": [
+        "Stage 0: write the route table for 16 hosts and 5 routes, with the current executed cells marked. Post it in the issue.",
+        "Stage 0: build the fixture project (two code files, one doc, one failed chunk, one stale partial, an old manifest).",
+        "Stage 1: run the claude build path (detect, B0, Part C, Step 9) and the update merge from the rendered blocks. These exist in part today; make them a named suite.",
+        "Stage 1: add aider and devin full build and update routes. They run their own monolith body.",
+        "Stage 2: add windows PowerShell, the four compact-extraction hosts and the three agents-md hook hosts, one lane at a time.",
+        "Stage 2: add the code-only route for the 14 shared hosts once #4313 lands; until then record the skip with a reason.",
+        "Stage 3: `tools/skillgen --routes` prints covered and missing cells; CI fails if a covered cell disappears.",
+        "Stage 3: document the matrix in CONTRIBUTING so a new platform declares which routes it supports."
+      ],
+      "size": "medium",
+      "risk": "low",
+      "related": [
+        4811,
+        4807,
+        4812,
+        4313,
+        4777,
+        4539,
+        4447,
+        4431,
+        3820,
+        4781,
+        4786
+      ]
     }
   ]
 }

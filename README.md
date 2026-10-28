@@ -35,8 +35,9 @@ There is no build step and no npm. The files are served as they are.
   - `cases` (optional): rows with `case`, `correct`, `before` (v8), `pr_first_version` (the first version of the PR, shown as "PR before"), `after` (this PR, shown as "PR now") and `covered_by`. Below `sm` (640px) each case is a stacked card; at `sm` and wider it is a table.
 - `prs[n].landed` (optional): see "Landed PRs" below.
 - `issues`: an array in display order. Each entry has `number`, one plain sentence `summary` on what goes wrong, and `fixed_by` (PR numbers, shown with the live state the page already knows). `title` is optional and is used only when the issue is missing from both the live search and the snapshot, so the card never shows a bare number. The issue title and its open or closed state always come from GitHub when available. Only issues the author raised belong here, because the heading claims authorship. The list is `curl -fsSL 'https://api.github.com/search/issues?q=repo:Graphify-Labs/graphify+author:Deepjyoti-Sarmah+is:issue&per_page=100'`. An issue someone else raised stays in its `groups` entry with `reported_by` set.
-- `proposals`: an array (empty for now; the page shows "No proposals yet").
-  - `id`, `title`, `problem`, `evidence` (text), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers), `diagram` (optional, same Mermaid source string as for PRs; shown first in the card, same failure behaviour).
+- `proposals`: an array. The page shows "No proposals yet" when it is empty.
+  - `id`, `title`, `problem`, `evidence` (text), `status` (shown as a tag), `plan` (list of steps), `size` (text), `risk` (`low`, `medium` or `high`), `related` (issue or PR numbers), `diagram` (optional, same Mermaid source string as for PRs; shown after the parts, same failure behaviour).
+  - `parts` (optional): ordered sections rendered above the plan. Each has `label`, `md` (GitHub-flavoured Markdown, including tables), and optional `diagram` and `caption`.
 
 Write only facts you can point to. The page shows the text as given.
 
