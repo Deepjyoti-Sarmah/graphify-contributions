@@ -1936,20 +1936,26 @@
       "id": "node-identity",
       "title": "Let code make node ids, not the LLM",
       "status": "Found, working on it",
-      "problem": "graphify can drop a real file from the graph without an error. When two nodes get the same id, dedup keeps one. For docs the LLM types the id, gets it wrong in repeatable ways, and nothing checks it.",
-      "evidence": "On 0.9.89, a/x.md and a/x.html with the same id x lose a/x.html. In #4432 the model invents a different stem in each chunk for Cyrillic paths. The same cause is behind #4281, #3947, #3407 and #1829. Numbers from a real repo are coming in stage 0.",
+      "problem": "graphify can drop a real file from the graph without an error. When two nodes get the same id, dedup keeps one. For docs the LLM types the id, gets it wrong in repeatable ways, and nothing checks it. The same path-based id also changes when a file moves, so an incremental build cannot follow the node.",
+      "evidence": "On 0.9.89, a/x.md and a/x.html with the same id x lose a/x.html. The rule is unchanged on 0.9.97: dedup still trusts the id (`dedup.py:1047`) and the prompt still asks the model to type it (`llm.py:555`). In #4432 the model invents a different stem in each chunk for Cyrillic paths. #4738 found 18 collisions in a 474-file Markdown corpus, each one a silently dropped node. The same cause is behind #4281, #3947, #3407 and #1829.",
       "parts": [
+        {
+          "label": "0. In plain words",
+          "md": "Two folders both contain a file called `notes`. A temp worker writes a label for each box by hand. Both labels say `notes`, so the warehouse stores one box and throws the other away. The worker was not being careless. The rule told the worker to invent the label.\n\nThe fix is to print the label from the shelf address. The worker only writes the title. Two boxes on different shelves cannot get the same label, and a mention of another box stays a mention until a resolver finds the box.",
+          "diagram": "flowchart TD\n  W1[\"worker types<br/>a/x.md -> id x\"] --> D{\"dedup: same id?\"}\n  W2[\"worker types<br/>a/x.html -> id x\"] --> D\n  D -->|yes| K[\"keep one node\"]:::bad\n  K --> L[\"a/x.html is gone,<br/>no error\"]:::bad\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111",
+          "caption": "The worker is asked to invent the key, so dedup cannot tell two real files apart."
+        },
         {
           "label": "1. A file disappears",
           "md": "Put two files in one folder, `a/x.md` and `a/x.html`. The LLM gives a node from each the id `x`. On 0.9.89 the graph keeps `a/x.md` and drops `a/x.html`:\n\n```text\ninput:   a/x.md   -> id x\n         a/x.html -> id x\noutput:  a_x  (a/x.md)\n         a/x.html is gone, one warning on stderr\n```\n\nAn agent reading the graph has no way to know `a/x.html` existed. It answers without it."
         },
         {
           "label": "2. Why: dedup trusts the id",
-          "md": "Dedup (`deduplicate_entities`, `dedup.py:885`) has one rule: two nodes with the same id are the same thing, so it keeps one and drops the other.\n\nThat rule is only safe if the id is right every time. Two different things must never get the same id, and the same thing must get the same id on every run. When an id is wrong, dedup can't tell, and a real node is dropped."
+          "md": "Dedup (`deduplicate_entities`, `dedup.py:1047`) has one rule: two nodes with the same id are the same thing, so it keeps one and drops the other.\n\nThat rule is only safe if the id is right every time. Two different things must never get the same id, and the same thing must get the same id on every run. When an id is wrong, dedup can't tell, and a real node is dropped."
         },
         {
           "label": "3. Where the id comes from",
-          "md": "For code, `make_id()` in `ids.py` builds the id from the file path and the symbol name. It is deterministic, but it throws away the file extension and the difference between `/` and `_`, so `x.py` and `x.html` both start from `x`.\n\nFor docs and concepts, the LLM types the id. The prompt (`llm.py:520`) tells it to write `{path}_{name}` using only `[a-z0-9_]`. So the model has to slug a path exactly like `ids.py` does, repeat it the same way in every chunk and every run, and invent ids for nodes in files it can't see. It gets this wrong in a few repeatable ways:",
+          "md": "For code, `make_id()` in `ids.py` builds the id from the file path and the symbol name. It is deterministic, but it throws away the file extension and the difference between `/` and `_`, so `x.py` and `x.html` both start from `x`.\n\nFor docs and concepts, the LLM types the id. The prompt (`llm.py:555`) tells it to write `{path}_{name}` using only `[a-z0-9_]`. So the model has to slug a path exactly like `ids.py` does, repeat it the same way in every chunk and every run, and invent ids for nodes in files it can't see. It gets this wrong in a few repeatable ways:",
           "diagram": "flowchart TD\n  P[\"prompt: write the id as path_name\"] --> L{\"LLM\"}\n  L -->|right| OK[\"docs_firmware_protocol\"]:::good\n  L -->|drops the folder| A[\"protocol<br/>#4281\"]:::bad\n  L -->|path is Cyrillic, rule says a-z| B[\"invents a stem per chunk<br/>#4432\"]:::bad\n  L -->|points at another file| C[\"guesses that file's id<br/>#3947\"]:::bad\n  OK --> D[\"dedup trusts every one of these\"]\n  A --> D\n  B --> D\n  C --> D",
           "caption": "The same prompt rule produces right and wrong ids, and dedup can't tell them apart"
         },
@@ -1966,11 +1972,21 @@
           "caption": "Proposed: the model names things, code builds ids, references are resolved at the end"
         },
         {
-          "label": "6. What it costs",
-          "md": "- Any prompt change re-runs semantic extraction once for every user, because the cache key includes a prompt fingerprint (`cache.py:162`). Grouping the prompt changes pays this once.\n- The id rule is written in `llm.py` and in the skillgen fragments, so each step touches both.\n- Stage 4 changes ids in saved graphs. It needs a graph format version and a remap, like `_semantic_id_remap` already does for old ids."
+          "label": "6. Across renames and machines",
+          "md": "The proposal so far makes the id deterministic inside one scan. It does not make it stable when a file moves.\n\nCode ids are built from the path (`ids.py:86`, `make_id`). Rename `src/a.py` to `lib/a.py` and every node in the file gets a new id. Every edge from an unchanged file still points at the old id. `build_from_json` drops the dangling edge (`build.py:1732` to `1801`), so the graph loses the relationship without an error. On a branch switch or a worktree copy the same thing happens at scale.\n\nThree ways to handle it, in order of increasing cost:\n\n- Keep a rename map from git and rewrite the ids in the edges of referencers. Works on one machine, needs git history and a reverse index.\n- Assign each file a stable id on first sight and store a small path-to-id map. Carry that id through a rename using git rename detection or a content match. Key symbol nodes by file id plus symbol name, and keep the path as an attribute. Content alone is not enough: two identical files would collide.\n- Keep path ids and accept a full rebuild on rename. Honest, but the production case in #4740 is worktrees and branch switches, which are mostly renames.\n\nThe new fact-store proposal depends on this. It can use a rename map for the transition, but the clean answer is a stable key. That is why this proposal is a prerequisite, not a parallel track.",
+          "diagram": "flowchart LR\n  A[\"src/a.py<br/>id src_a_x\"] --> M[\"git mv to lib/a.py\"]\n  M --> B[\"id lib_a_x\"]:::bad\n  B --> C[\"edges from unchanged files<br/>still point at src_a_x\"]:::bad\n  C --> D[\"rename map or stable key<br/>rewrites the edges\"]:::good\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
+          "caption": "A move changes every path-based id. Without a rename map or a stable key, the old edges are dropped."
         },
         {
-          "label": "7. Questions for you",
+          "label": "7. What it costs",
+          "md": "- Any prompt change re-runs semantic extraction once for every user, because the cache key includes a prompt fingerprint (`cache.py:166`). Grouping the prompt changes pays this once.\n- The id rule is written in `llm.py` and in the skillgen fragments, so each step touches both.\n- Stage 4 changes ids in saved graphs. It needs a graph format version and a remap, like `_semantic_id_remap` (`build.py:1125`) already does for old ids."
+        },
+        {
+          "label": "8. What this does not fix",
+          "md": "- It does not make the LLM name a concept the same way twice. Two correct names for one idea can still create two nodes. Dedup merges them only when the key matches.\n- It does not fix cross-chunk references by itself. The model can only mention a name it was given. A reference to a node outside its chunk needs the resolver and the fact store.\n- It does not make the build transactional. Ids can be right and the state still be half-written.\n- It does not decide how old graphs migrate. That is the cost part above.\n- It does not make a rename free. It makes the rename correct; the cost is a re-key of the affected nodes and their referencers."
+        },
+        {
+          "label": "9. Questions for you",
           "md": "1. Do you agree with the direction: code makes ids, the model names and picks, mentions are references?\n2. Would you review stages 0 to 3 as separate small PRs?\n3. For stage 4, is a graph format version fine, or do old ids have to keep working?\n4. Is a property test of about 4 seconds fine in CI, or should it run nightly?"
         }
       ],
@@ -1980,371 +1996,266 @@
         "Stage 2: the model picks its file from a list and returns a short name. Code builds the id. The old output format is still accepted. Easy to undo.",
         "Stage 3: a mention of another file becomes a reference, linked after extraction, behind a flag. Easy to undo.",
         "Stage 4: dedup merges on a full key (path with extension, kind, name) and reports conflicts. Changes saved ids, so I'd only start after you agree.",
-        "Stage 5: keep ids the same across --update by matching old and new keys."
+        "Stage 5: keep ids stable across --update and a rename using an old-to-new key map. A move rewrites the ids of the referencers, not the whole graph.",
+        "Stage 5: a test that renames a file, moves it between directories, and switches branches, then checks that every edge from an unchanged file still resolves."
       ],
       "size": "large",
       "risk": "medium",
       "related": [
+        1829,
+        3103,
+        3257,
+        3328,
+        3407,
+        3568,
+        3726,
+        3947,
         4281,
         4432,
-        3947,
-        3103,
-        3407,
-        1829,
-        3726,
-        3568,
-        3257,
-        3328
+        4738,
+        4804
       ]
     },
     {
       "id": "indexing-cost-time",
-      "title": "Make indexing cheaper, faster and safer without a rewrite",
+      "title": "Pay for a doc once, not once per machine",
       "status": "Planning, nothing built yet",
-      "problem": "On big repos with many users, graphify pays the LLM again on every machine for the same doc, re-bills a whole big doc for a one-line edit, runs most steps after parsing on one core, and can drop a node or an edge without an error.",
-      "evidence": "From the code on 0.9.92 (86c57be8): the semantic cache sits in each checkout (cache.py:1015); its key is the whole file's hash even for sliced docs (cache.py:511); the model is not in the key; --update copies edges of unchanged files without re-resolving them (watch.py:1981); same-id nodes overwrite each other with nothing counted (build.py:9-16); graph.json writes schema_version but nothing reads it (export.py:476). No cost or time numbers yet: stage 0 measures them.",
+      "problem": "The semantic cache lives in each checkout, keys a sliced document by the whole file, and does not record the model or backend. Teams pay again for unchanged docs, a one-line edit re-bills a large file, and switching models replays old output. The cache is also mixed into the build output, so copying a graph does not reliably copy its cache.",
+      "evidence": "From the code on 0.9.97: the semantic cache sits under `graphify-out/cache/` (`cache_dir`, `cache.py:1016`); the key hashes the whole file, even for a slice (`file_hash`, `cache.py:512`); the prompt is in the key (`_resolve_prompt_fp`, `cache.py:166`), but the model and backend are not; `graph.json` writes `schema_version` (`export.py:482`) and no reader checks it. The update cost and the silent edge loss that this proposal used to cover are now separate proposals because a cache fix cannot make a one-file update cheap.",
       "parts": [
         {
+          "label": "0. In plain words",
+          "md": "Ten people read the same handbook. Each one pays a translator to translate it again, because each person keeps their notes in their own desk. One person fixes a typo on page 2, and the translator re-translates the whole book. If someone switches to a different translator, the old translation is handed back without a warning.\n\nA shared, content-addressed shelf fixes the first two. The translation is stored once under a hash of the page. Anyone with the same page reads the same translation. A typo re-translates one slice. The translator's name is written on the entry, so a different model does not silently replay the old output.",
+          "diagram": "flowchart LR\n  DOC[\"docs/guide.md<br/>unchanged\"] --> A[\"laptop A<br/>cache miss\"]:::bad\n  DOC --> B[\"laptop B<br/>cache miss\"]:::bad\n  DOC --> C[\"CI runner<br/>cache miss\"]:::bad\n  DOC --> S[\"shared cache<br/>content hash\"]:::good\n  S --> H[\"one entry,<br/>one model\"]:::good\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
+          "caption": "The same document is billed once per desk today. A shared content-addressed entry bills it once."
+        },
+        {
           "label": "1. What goes wrong",
-          "md": "Three things get worse as a repo and its team grow.\n\n- **LLM cost.** Every laptop and every CI runner pays for the same unchanged doc, because the semantic cache lives inside each checkout.\n- **Time.** Parsing runs on all cores, but the steps after it (resolving calls, dedup, clustering, writing files) run on one core.\n- **Wrong graphs with no error.** When two different things get the same id, one is dropped and nothing counts it. After a commit, an unchanged file that calls a newly added function may get no edge to it (suspected, test pending).\n\nI have no numbers yet for any of these. Stage 0 below measures them before anything changes.",
-          "diagram": "flowchart LR\n  DOC[\"docs/guide.md<br/>unchanged\"] --> A[\"laptop A<br/>cache miss, LLM call\"]:::bad\n  DOC --> B[\"laptop B<br/>cache miss, LLM call\"]:::bad\n  DOC --> C[\"CI runner<br/>cache miss, LLM call\"]:::bad\n  A --> CA[\"graphify-out/cache on A\"]\n  B --> CB[\"graphify-out/cache on B\"]\n  C --> CC[\"graphify-out/cache on CI\"]\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111",
-          "caption": "Today: three machines pay the LLM for the same unchanged doc"
+          "md": "- **LLM cost.** Every laptop and every CI runner pays for the same unchanged doc, because the semantic cache lives inside each checkout.\n- **Wasted work on a small edit.** A sliced document is keyed by the whole file, so changing one page re-sends every slice.\n- **A silent model switch.** The prompt is in the key, but the model and backend are not. A run with a different model can serve entries produced by the old one.\n- **A cache that does not travel.** The cache lives under `graphify-out`, but its location can follow the working directory rather than the output. Copying a graph does not reliably copy the cache. That is one half of #4740."
         },
         {
-          "label": "2. Why it happens",
-          "md": "Each problem has one cause in the code (references are to 0.9.92, `86c57be8`):\n\n| Problem | Cause | Where |\n|---|---|---|\n| Same doc billed on every machine | the semantic cache folder sits under `graphify-out/` in each checkout | `cache_dir`, `cache.py:1015` |\n| A typo re-bills a whole big doc | big docs are split into slices, but the cache key is the hash of the whole file | `file_hash`, `cache.py:511`; `file_slice.py` |\n| Switching models replays old output | the model is not part of the cache key and not stored with the entry | `cache.py` |\n| Missing call edge after a commit | `--update` re-reads changed files only; edges of unchanged files are copied, never re-resolved. #2406 fixed the other direction | `watch.py:1981` |\n| Silent drop on the same id | the last node with an id overwrites the first, by design, with nothing counted | `build.py:9-16`, `dedupe_nodes` `build.py:886` |\n| Slow on big repos | only parsing is parallel | `_extract_parallel`, `extract.py:8949` |\n| No safe way to change ids | `graph.json` stores `schema_version`, but no reader checks it | `export.py:176`, `export.py:476` |"
+          "label": "2. Where it lives in the code",
+          "md": "| Problem | Cause | Where |\n|---|---|---|\n| Same doc billed on every machine | the semantic cache sits under each checkout's `graphify-out` | `cache_dir`, `cache.py:1016` |\n| A typo re-bills a whole big doc | slices exist, but the key is the hash of the whole file | `file_hash`, `cache.py:512`; `file_slice.py` |\n| Switching models replays old output | model and backend are not in the key or the entry | `cache.py`, `load_cached` / `save_semantic_cache` |\n| No safe format change | `schema_version` is written, nothing reads it | `export.py:482` |\n| Cache location is not the output | cache root defaults to the working directory | `extract.py:9960`, `cache.py:1016` |"
         },
         {
-          "label": "3. How a commit can miss an edge",
-          "md": "This is the correctness gap I suspect, not one I've proven. A test that compares `--update` with a full rebuild will settle it.\n\nRenames are fine: if you rename `foo` and fix its callers in the same commit, both files are re-read. The gap is a name that **appears** or **moves** while its caller stays untouched.",
-          "diagram": "sequenceDiagram\n  participant Dev as Developer\n  participant Hook as post-commit hook\n  participant Ex as extract\n  participant Old as saved graph.json\n  Dev->>Hook: commit adds def foo in b.py\n  Hook->>Ex: re-extract b.py only\n  Ex-->>Hook: new node foo\n  Hook->>Old: copy edges of unchanged a.py\n  Note over Old: a.py already called foo, but its call was unresolved last time\n  Hook-->>Dev: graph has foo, no edge from a.py to foo\n  Note over Dev,Old: a full rebuild would have the edge",
-          "caption": "The caller in a.py is never re-read, so its call to the new foo stays unresolved"
+          "label": "3. A shared cache is not only a folder",
+          "md": "Three things have to be true before a shared cache is safe:\n\n- **Read-only for laptops, write for CI.** A laptop that writes can poison the entry every other laptop reads. The default should be read-only unless the user opts in.\n- **Model, backend and prompt in the key.** Otherwise a switch serves the old model's output. Store the values with the entry and warn on a mismatch. The key stays stable so nobody's cache is lost.\n- **A tenant boundary.** Doc text and docstrings can contain secrets. A user-level or team-level store needs permissions, a repo identity and a documented scope. The old per-checkout cache was contained by accident. A shared one is a new surface.\n\nA content-addressed entry also needs integrity checks. A truncated JSON entry is a miss today; a valid JSON entry with the wrong content is worse. Store a checksum and verify it."
         },
         {
-          "label": "4. How this affects the project",
-          "md": "- Teams pay per person, not per repo. Ten people on one docs-heavy repo pay about ten times.\n- An agent answers from the graph with confidence. A dropped node or a missing edge turns into a wrong answer, not an error.\n- Id bugs get fixed one shape at a time (#4449, #4432, #4362, #4410), because no check shows how many collisions there are.\n- Any change to the prompt or to ids resets every user's cache, so the fixes that matter most are also the most expensive to ship."
+          "label": "4. The fix",
+          "md": "1. **A shared, content-addressed cache.** A setting points graphify at a shared folder. CI writes, laptops read. The key is the content hash, so a changed file cannot match a stale entry.\n2. **Cache each slice by its own hash**, with slices that break at headings. An edit re-bills only the slice it is in.\n3. **Put the model, backend and prompt in the entry**, and warn when a run would serve a different model's output.\n4. **Keep the cache next to the graph it belongs to.** If the state moves to a generation store, the cache moves with it. A copied `graphify-out` should carry the cache or say that it did not.\n\nThe first two are the cost win. The third is correctness. The fourth is what makes a copied checkout behave the same as the original."
         },
         {
-          "label": "5. The fix, part 1: share the cache and cache by slice",
-          "md": "Two ideas from build tools (Bazel, sccache, restic):\n\n1. **A shared, content-addressed cache.** A setting points graphify at a shared folder. CI writes to it. Laptops only read. The key is the file's content hash, so a changed file can never match a stale entry.\n2. **Cache each slice of a big doc by its own hash**, with slices that break at headings. An edit then re-bills only the slice it is in.\n\nSmall extra: store the model name with each entry and warn when it differs. The key stays the same, so nobody's cache is lost.",
-          "diagram": "sequenceDiagram\n  participant CI as CI job on main\n  participant S as shared cache folder\n  participant Dev as developer laptop\n  participant LLM as LLM API\n  CI->>LLM: extract docs that miss\n  LLM-->>CI: nodes and edges\n  CI->>S: write entries, key is content hash\n  Dev->>S: read entry for docs/guide.md\n  S-->>Dev: hit, no LLM call\n  Dev->>LLM: only files the developer changed\n  Note over Dev,S: laptops read only, so they cannot poison the shared folder",
-          "caption": "CI fills the shared folder once; laptops read it and pay only for their own edits"
-        },
-        {
-          "label": "6. Slices today vs proposed",
+          "label": "5. Slices today vs proposed",
           "diagram": "flowchart TD\n  F[\"handbook.md, 300 pages\"] --> T{\"today: key is hash of whole file\"}\n  T -->|typo on page 2| ALL[\"send every slice again\"]:::bad\n  F --> P{\"proposed: key is hash of each slice,<br/>slices break at headings\"}\n  P -->|typo on page 2| ONE[\"send slice 1 only,<br/>other slices hit the cache\"]:::good\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
           "caption": "Slice-level keys make the cost of an edit follow the edit, not the file"
         },
         {
-          "label": "7. The fix, part 2: correctness and speed",
-          "md": "- **Count collisions first, change nothing.** Log and report how often two different things share an id. That gives real numbers for the node-identity proposal.\n- **Re-resolve only when names change.** Store the set of top-level names each file defines. When a commit adds or moves a name, re-resolve the unchanged files whose unresolved calls use it. Body-only edits do no extra work.\n- **Speed up the one-core steps** only where the benchmark points, and only in ways that leave `graph.json` byte-identical. Starting Leiden from the last run's communities changes output, so it goes behind a flag."
+          "label": "6. What this does not fix",
+          "md": "- It does not make a one-file update cheap. Even with every cache hit, the graph stages still run over every node. That is the fact-store proposal.\n- It does not fix silent node loss. That is the node-identity proposal.\n- It does not make the build transactional. That is the state proposal.\n- It does not make a shared cache safe by itself. Tenant identity, permissions and integrity checks are part of the change.\n- It does not make the LLM deterministic. It makes a replay visible and attributable to a model."
         },
         {
-          "label": "8. The order, and why",
-          "md": "Changes that keep ids and the prompt as they are ship first, as small PRs that are easy to undo. Changes to ids, the prompt, slice breaks and the `graph.json` layout ship **once**, together, so users pay the cache reset one time.\n\nBefore that release, a small PR makes readers check `schema_version`, so older graphify versions refuse a newer graph instead of misreading it. The release then ships a translator from old ids to new ids, like `_semantic_id_remap` (`build.py:963`) did after #1504, so saved graphs and cached LLM output carry over without new LLM calls.",
-          "diagram": "flowchart LR\n  M[\"0. measure<br/>benchmark script\"] --> C[\"1. correctness<br/>no id or prompt change\"]\n  C --> K[\"2. cost and time<br/>no id or prompt change\"]\n  K --> V[\"3. one breaking release<br/>ids, prompt, slices, format<br/>with version and translator\"]:::oneway\n  classDef oneway fill:#fff4d6,stroke:#b7791f,color:#111",
-          "caption": "Two-way doors first, one batched one-way door last"
+          "label": "7. The order, and why",
+          "md": "1. **Stage 0: measure.** A script outside graphify runs three corpora: this repo, a 15k-file Go repo with no LLM, and a docs-heavy repo. Record cache hits, misses, tokens by slice, and the cost of a one-line doc edit. The paid run is capped at $5. Post the numbers before a format change.\n2. **Stage 1: shared cache, read-only by default.** No key change. Measure hit rate and cost on a second machine.\n3. **Stage 2: slice keys.** Break at headings. Measure the re-bill on a one-line edit. Keep whole-file keys readable for one release.\n4. **Stage 3: model and backend in the entry.** Warn on mismatch. Do not invalidate old entries silently.\n5. **Stage 4: move the cache with the state.** Only after the transaction proposal picks a state root.\n\nChanges that keep the key stable ship first. The key change ships once, with a migration note, so users pay the cache reset one time.",
+          "diagram": "flowchart LR\n  M[\"0. measure<br/>cache and slices\"] --> C[\"1. shared cache<br/>read-only laptops\"]\n  C --> S[\"2. slice keys<br/>one re-bill\"]\n  S --> K[\"3. model in entry<br/>warn on mismatch\"]\n  K --> T[\"4. cache moves<br/>with the state\"]:::oneway\n  classDef oneway fill:#fff4d6,stroke:#b7791f,color:#111",
+          "caption": "Stable-key changes first. The key change and the state move ship once, together."
         },
         {
-          "label": "9. What I'm doing now",
-          "md": "Nothing is built yet. The first piece is a benchmark script that lives outside graphify, so it needs no PR. It runs the CLI on three repos:\n\n| Repo | Why |\n|---|---|\n| graphify itself | mid size, easy to check by hand |\n| kubernetes | about 15k Go files, no LLM cost, shows where the time goes |\n| fastapi `docs/en` | real prose, shows where the LLM cost goes |\n\nIt records time per step, tokens split by cache hit and miss, nodes lost in dedup, and `graph.json` size per field. The paid run is capped at $5. I'll post the numbers here before opening any PR."
+          "label": "8. Questions for you",
+          "md": "1. Is a shared cache folder that CI writes and laptops read something you'd take, or would you rather keep the cache per checkout?\n2. Should the model name be part of the key, or only part of the entry with a warning? A key change resets the cache once.\n3. For a one-line edit in a sliced doc, is a heading-based slice boundary good enough, or do you want a token-budget slice with overlap?\n4. Would you review the shared cache and the slice key as two small PRs?"
+        }
+      ],
+      "plan": [
+        "Stage 0: a benchmark outside graphify on three corpora. Cache hits, misses, tokens by slice, cost of a one-line edit. Cap the paid run at $5.",
+        "Stage 1: a shared cache path, read-only by default for laptops. No key change. Measure hit rate from a second machine.",
+        "Stage 1: a test that a laptop cannot write unless it opts in.",
+        "Stage 2: slice-level keys with heading breaks. Keep whole-file entries readable for one release.",
+        "Stage 2: a test that a one-line edit re-bills one slice, not the file.",
+        "Stage 3: store model, backend and prompt with each entry; warn on mismatch. Do not invalidate silently.",
+        "Stage 3: a checksum on each entry; a corrupt entry is a miss, not a hit.",
+        "Stage 4: move the cache with the state store from the transaction proposal, after the state root is chosen."
+      ],
+      "size": "medium",
+      "risk": "medium",
+      "related": [
+        4063,
+        3889,
+        4835,
+        1939,
+        1369,
+        2199,
+        1774,
+        1990,
+        1991,
+        4740
+      ]
+    },
+    {
+      "id": "transactional-state",
+      "title": "One build, one transaction",
+      "status": "Proposed, needs your call",
+      "problem": "A build is a set of files written in place by different stages. No stage owns the run, the inputs are not rechecked before publish, and a crash or a second writer can leave a mixture that the next run trusts. The CLI and the 16 host runbooks implement the same state machine with different files.",
+      "evidence": "On 0.9.97, a 200-file corpus copied with graph.json and manifest.json but without a cache inside graphify-out re-extracts 200/200 files (0 hits). Built from the checkout's own working directory, the same copy gets 200/200 hits. #4740 reports 19,397 files, zero changes, 6 min 12 s and 6.3 GB. #4811: the merge overwrites the extraction Step 9 reads. #4814: a stale partial holds a cached doc back. #4802: a contended incremental request records nothing. #4603: concurrent install tests corrupt build output. In the code, _rebuild_code writes graph.json (watch.py:2844), manifest.json (2946) and the build state (2989) as three separate atomic writes. _write_build_state itself uses write_text (1805). cache_dir is at cache.py:1016, the cache root defaults to CWD at extract.py:9960, and file_hash is at cache.py:512.",
+      "parts": [
+        {
+          "label": "0. In plain words",
+          "md": "A workshop has one bench and several people. Today each person leaves tools and half-finished parts on the same bench. If two people work at once, or one leaves halfway, the next person picks up a mixture. Nobody can tell which parts belong to which job.\n\nThe fix is a tray per job. A person works on their own tray, checks that the bench has not changed underneath them, and swaps the finished tray onto the bench in one move. A crash leaves the old tray on the bench. A second person cannot overwrite the first.\n\nThe state store also records which parts are still missing: a failed doc, a partial chunk, an unfinished report. A build can publish with those gaps written down instead of pretending the tray is complete.",
+          "diagram": "flowchart TD\n  S[\"scan\"] --> E[\"extract\"]\n  E --> M[\"merge\"]\n  M --> P[\"publish\"]\n  E -.->|\"writes extract\"| F[(\"shared files\")]:::bad\n  M -.->|\"overwrites it\"| F\n  P -.->|\"reads what is there\"| F\n  X[\"crash or second run\"] -.-> F\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111",
+          "caption": "Today the stages share mutable files. There is no owner and no commit."
+        },
+        {
+          "label": "1. The state machine today",
+          "md": "| artifact | written by | read by | owner |\n|---|---|---|---|\n| `graph.json` | `to_json` (`export.py:287`) | update, query, MCP, tree | none |\n| `manifest.json` | `save_manifest` (`detect.py:2720`) | `detect_incremental` (`3128`) | none |\n| `.graphify_build_state.json` | `_write_build_state` (`watch.py:1775`) | `_build_state_matches` (`1812`) | none |\n| `.graphify_extract.json` | update Part C, merge | Step 9, merge | none |\n| `.graphify_partial.txt` | semantic pass | next build | none |\n| `.pending_full`, `.pending_changes` | hook, watcher | next lock holder | none |\n| `cache/` | `save_cached`, `save_semantic_cache` | `load_cached` | none |\n\nEach file is written atomically on its own. There is no commit across them, so a reader can see a new graph next to an old manifest. There is no run id, so a stage cannot prove it is reading its own output. The lock serializes cooperating writers in one checkout, but it does not give a run ownership of the files, and the skill path does not use it.\n\nThat is the shared cause behind #4811, #4814, #4802 and the copied-checkout half of #4740. Each fix so far adds another side file or another read order. The state machine still has no owner."
+        },
+        {
+          "label": "2. What I measured",
+          "md": "I built the same 200-file Python corpus twice.\n\n| build | where the cache landed | copy and `update` |\n|---|---|---|\n| `graphify extract /tmp/inc/a` from another working directory | output in `a/graphify-out`, cache in the working directory's `graphify-out` | 0/200 cache hits, full re-extract |\n| `cd /tmp/inc/c && graphify extract .` | cache inside `c/graphify-out/cache` | 200/200 cache hits |\n\nSame code, same files, different invocation. `graphify-out` is not a self-contained state bundle. `file_hash` includes the relative path, so the digest is portable. The cache location is not. A user copying `graphify-out` cannot tell whether the cache came with it.\n\n#4740 is the production version of this: 19,397 code files, 184,314 nodes, 463,239 edges, a 258 MB graph. A copied checkout with zero changes took 6 min 12 s and 6.3 GB. A run with no topology change still took 3 min 12 s and 6.1 GB. The short-circuit existed, but it sat at the end of the pipeline.\n\n#4811 and #4814 are the same class inside one run. The merge writes over the extraction that Step 9 reads. A partial list from an older run survives and holds a doc back. Our snapshot fix (#4838) patches the first. It does not give the run ownership, so the next multi-stage change can reintroduce the shape."
+        },
+        {
+          "label": "3. The four missing pieces",
+          "md": "- **Input snapshot.** A rebuild can take minutes. Files can change, a branch can switch, a rebase can land. The scan digest is recorded at the start, but nothing checks at publish time that the inputs still match. A generation can describe a tree that never existed. Record stat signatures at read time and recheck them before publish, or pin to a git tree. If they moved, abort and retry.\n- **Readiness, not all-or-nothing.** `extract_files` counts `failed_chunks`, `save_semantic_cache` stamps `partial: True`, and `_rebuild_code` tracks `failed_sources`. A transaction that aborts on any failure never publishes a large docs corpus. A transaction that commits hides the gap. Publish a readiness vector per tier and let stamping consult it.\n- **Durable intents.** `.pending_full` and `.pending_changes` are coalescing hints, not a queue. #4802 shows the failure: a contended incremental request writes nothing and returns the same `False` as a queued request. An intent needs an id, an atomic claim, an ack, and idempotent replay by content hash. Coalescing is a policy on top.\n- **Storage, leases and security.** A generation is not free. A 258 MB graph per update is disk amplification. An MCP server can hold a generation open. Windows cannot delete an open file. A cloned repo can ship a crafted state directory. Choose the storage engine, define reader leases and GC, and treat state as untrusted input.\n\nWithout these four, a transaction is a lock with better manners. It still cannot say what is complete, and it still cannot survive a crash or a hostile state."
+        },
+        {
+          "label": "4. The design",
+          "md": "A generation-based store:\n\n```text\n.graphify/state/\n  gen-000123/\n    manifest.json          inputs, hashes, tier readiness\n    fragments/             per-file extraction, content-addressed\n    views/graph.json       derived view for this generation\n    views/analytics.json   communities, report inputs\n  CURRENT                  gen id, parent id, checksums\n```\n\nA run reads the parent named by `CURRENT`, writes its own generation, fsyncs it, and publishes with a compare-and-swap. If `CURRENT` no longer names the parent it read, the publish is rejected and the run rebases or queues. The old generation stays until a later GC.\n\nThe publish is one pointer swap, not six file writes. Readers open `CURRENT` and use that generation for the whole request. A crash before the swap leaves the old generation. A crash after the swap leaves a complete new one.\n\nThe CLI owns this. The runbook calls one primitive, for example `graphify state begin` and `graphify state commit`, instead of learning a file format. That removes the second implementation of the state machine and the host drift that comes with it.",
+          "diagram": "sequenceDiagram\n  participant A as run A\n  participant B as run B\n  participant S as state store\n  A->>S: read parent gen 122\n  B->>S: read parent gen 122\n  A->>S: write gen 123\n  B->>S: write gen 124\n  A->>S: publish if parent is 122\n  S-->>A: current = 123\n  B->>S: publish if parent is 122\n  S-->>B: rejected, current is 123\n  Note over B: rebase on 123 and retry\n  Note over S: a crash before publish leaves 122",
+          "caption": "Compare-and-swap publish. A loser is rejected instead of overwriting a newer run."
+        },
+        {
+          "label": "5. Readiness, not all-or-nothing",
+          "md": "| tier | can be incomplete | how the state records it | what may use it |\n|---|---|---|---|\n| AST / code | yes, per file | `failed_sources`, extractor errors | query on code, with the file marked stale |\n| semantic / docs | yes, per file or chunk | `partial_source_files`, failed chunk ids | query on docs minus the pending files |\n| dedup / graph | yes | node count, collision report | any reader, with the report attached |\n| communities / report | yes | view version and input generation | readers that ask for analytics |\n\nA generation is publishable when the tier it claims is complete, not when every tier is complete. `CURRENT` carries the vector. Stamping a doc as done reads the semantic tier, not the presence of a file. A retry queue holds the pending set and is drained by the next run or by a worker. That is the difference between #4807 and a transaction that either blocks or lies."
+        },
+        {
+          "label": "6. Storage: decide with a spike",
+          "md": "Two designs are on the table, and the proposal should not pretend one is obvious.\n\n| option | what it gives | what it costs |\n|---|---|---|\n| generation directory + `CURRENT` | simple mental model, easy to inspect, old generation is a rollback | 258 MB per generation, GC with open readers, Windows delete, fsync per directory |\n| SQLite with WAL | one transaction across fragments, views and intents; reader snapshots; indexes; no file copies | database growth, WAL on network drives, export speed, one writer at a time |\n\nSQLite is in the standard library. It already has the transaction and the index that the fact store in the next proposal needs. A one-week spike on the 19k-file corpus should compare startup, publish latency, reader isolation, peak RSS, crash recovery and disk after 100 updates. Pick the engine from those numbers, not from taste.\n\nThe lock is a third decision. A per-checkout flock does not serialize two worktrees of the same repository. Publish needs a per-worktree lock, and the shared content store needs its own GC lock. Foreign graphs are a fourth: `merge-graphs`, `global add`, `--out` and library callers can produce a graph with no fragments. Treat those as an opaque base generation and do a full rebuild on first touch, instead of pretending the fragments exist.\n\nThe state root is a second decision. Inside `graphify-out` is portable but dies with `rm -rf graphify-out`. Outside is shared across worktrees but needs repo identity and permissions. Worktrees want a shared content store and a per-worktree published view. Those are different lifetimes and should not share one directory blindly."
+        },
+        {
+          "label": "7. Security and operations",
+          "md": "State is input. A cloned repository can contain a crafted `graphify-out` or state directory. Validate generation ids and fragment keys against path traversal, do not follow symlinks on write or GC, cap fragment sizes, verify checksums, and quarantine a corrupt fragment instead of failing the whole generation.\n\nA shared or user-level store needs a tenant boundary. Fragments can contain doc text, docstrings and LLM output. Set permissions, scope by repository identity, and document what is shared. The old per-checkout cache was sloppy but contained. A shared store is a new surface.\n\nOperators need three commands:\n\n- `graphify status --json`: current generation, parent, input digest, tier readiness, pending intents, last durations.\n- `graphify doctor`: validate checksums, references and tier completeness.\n- `graphify gc --keep N`: delete old generations that no reader holds.\n\nWithout these, a stuck build is invisible and the only recovery is `rm -rf graphify-out`."
+        },
+        {
+          "label": "8. What it does not fix",
+          "md": "- It does not make a one-file update cheap. The pipeline still rebuilds the graph; that is the next proposal.\n- It does not make node ids stable across a rename. Path-based ids change when a file moves, so the fact store still needs the node-identity proposal or a rename map.\n- It does not decide whether `graph.json` is a complete artifact or a lazy view. That contract belongs to the next proposal and to the maintainer.\n- It does not make LLM output deterministic. The generation records the model, prompt and backend; byte-identical output is only promised for the AST tier and a canonical projection."
+        },
+        {
+          "label": "9. How this helps, and what it costs",
+          "md": "- A crash, a kill or a full disk cannot leave a half state that the next run trusts.\n- Two agents on one repository cannot silently overwrite each other. The loser is rejected and retries.\n- A copied checkout carries a state that says what it has and what it is missing.\n- The runbook stops implementing a state machine in 16 places. It calls one command.\n- A failed doc is recorded as pending, not stamped as done.\n- The cost is migration and disk. It is a storage change, not a query change."
         },
         {
           "label": "10. Questions for you",
-          "md": "1. Is a shared cache folder that CI writes and laptops read something you'd take, or would you rather keep the cache per checkout?\n2. Would you review the report-only collision count and the `schema_version` check as two small PRs?\n3. For the breaking release: v1 graphs keep working with a warning for two minor releases. Is that long enough?\n4. Is there a repo you'd rather I benchmark than kubernetes and fastapi?"
+          "md": "1. Do you want the storage spike first, before any format is committed? I would not write the migration without it.\n2. Should the state live inside `graphify-out` for portability, or outside for worktrees and shared caches?\n3. Is a CLI state primitive acceptable to the skill hosts, or do you want the runbook to keep its own files for one release?\n4. For a failed chunk, should the default be publish-with-pending or refuse-to-publish? I lean publish with an explicit pending set, because a large docs run otherwise never lands.\n5. Is `graphify-out` allowed to contain an engine-readable state at all, or would you rather keep it as a pure output directory and put the state in a user cache?"
         }
       ],
       "plan": [
-        "Stage 0: benchmark script outside graphify, CLI only, three repos, LLM spend capped at $5. Numbers posted here first.",
-        "Stage 1: count id collisions in the log and the report. Graph output unchanged. Easy to undo.",
-        "Stage 1: a test that compares --update with a full rebuild for: a new function an unchanged file calls, a function moved behind a re-export, and a body-only edit.",
-        "Stage 1: readers check schema_version and refuse a newer graph with a clear message. Easy to undo.",
-        "Stage 2: a shared semantic cache folder, read-only by default, written by CI. Model stored with each entry, with a warning on mismatch. Easy to undo.",
-        "Stage 2: if stage 1's test shows the gap, re-resolve unchanged files whose unresolved calls use a name that was added or moved.",
-        "Stage 2: speed up the one-core steps the benchmark points at, with a byte-identical graph.json test. Leiden warm start behind a flag.",
-        "Stage 3, one release: new ids (see the node-identity proposal), slice-level cache with heading breaks, a smaller graph.json layout, schema_version 2 and an old-to-new id translator. Only after you agree."
+        "Stage 0: inventory every state file, its writer, its reader and its failure mode on 0.9.97. Post the table.",
+        "Stage 0: reproduce crash and concurrent-writer cases (kill -9 after graph write, two updates, copied checkout) and record the current damage.",
+        "Stage 1: add an input-snapshot check and a readiness vector to the existing files. No format change. This alone makes #4807/#4814 reportable.",
+        "Stage 1: replace the pending markers with a durable intent file that has an id, a claim and an ack. Keep coalescing.",
+        "Stage 2: spike SQLite against a generation directory on the 19k corpus: publish latency, reader isolation, RSS, disk after 100 updates, crash recovery.",
+        "Stage 2: add `graphify status` and `graphify doctor` over the current files, so the state is observable before it moves.",
+        "Stage 3: implement the chosen store behind `GRAPHIFY_STATE=legacy|generations|sqlite`, dual-write `graph.json` for compatibility, compare on every run.",
+        "Stage 3: add a CLI state primitive and move one split host plus aider and devin to it. Keep the old runbook path until all 16 pass.",
+        "Stage 4: default the new store, add GC with leases, and keep one release of dual-write for rollback."
       ],
       "size": "large",
       "risk": "medium",
       "related": [
-        1252,
-        1939,
-        1369,
+        4740,
+        4800,
+        4811,
+        4814,
+        4802,
+        4603,
+        4838,
+        4313,
+        3889,
+        4063
+      ]
+    },
+    {
+      "id": "incremental-facts",
+      "title": "Store facts, resolve on read",
+      "status": "Proposed, needs your call",
+      "problem": "One changed file still pays for the whole graph. The graph is the state, every stage rebuilds it, and edges are stored after resolution. A change in one file cannot update an edge in another unchanged file, and a cap would hide that by dropping the edge.",
+      "evidence": "On a 1,000-file Python corpus (31,000 nodes, 40,000 edges, 14 MB graph.json): cold build 22.0 s and 330 MB; full rebuild with 1,000/1,000 AST cache hits 15.8 s and 343 MB; one-file update with changed_paths 21.4 s and 286 MB, output unchanged. #4800: two edited files 68.15 s and 1,071 MB; with a manifest change set 48.72 s and 537 MB; the no-change gate 1.96 s and 46 MB. #4740: 19,397 files, 184,314 nodes, 463,239 edges, 258 MB graph; zero changes on a copied checkout 6 min 12 s and 6.3 GB. Under cProfile, the one-file run spent 33 s in extract (26 s in _python_absolute_import_alias_files), 17.5 s in _reconcile_existing_graph, 11 s in build_from_json and 7.5 s in _alias_index. The same alias function took 8.66 s on the 31,000 context paths the code passes and 0.25 s on the 1,000 unique paths, with identical output.",
+      "parts": [
+        {
+          "label": "0. In plain words",
+          "md": "A library rewrites every catalogue card when one book moves. It also recalculates every shelf label, every index and every poster, and then prints the whole catalogue again. That is what update does with the graph.\n\nThe fix is to keep one card per book and one index of who cites whom. When a book moves, update its card and the cards that point to it. Rebuild the shelf labels only when someone asks for them. The index is the part that makes this correct: without it, another book that cites the moved one would keep a stale pointer.\n\nThe graph file becomes a view built from those cards, not the place where the cards live. No edge is thrown away. Facts stay; the edges are expanded when a reader needs them.",
+          "diagram": "flowchart TD\n  SRC[\"source files\"] --> FACTS[\"per-file facts<br/>nodes + unresolved references\"]:::good\n  FACTS --> REV[\"reverse index<br/>target -> referencers\"]\n  FACTS --> BASE[\"canonical graph view<br/>generation 124\"]\n  REV --> RES[\"resolver<br/>dirty files only\"]\n  RES --> BASE\n  BASE --> Q[\"query, path, affected\"]\n  BASE --> C[\"communities\"]\n  BASE --> X[\"graph.json, report, html\"]\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
+          "caption": "Facts are durable. Indexes and views are derived. The reverse index decides what to re-resolve."
+        },
+        {
+          "label": "1. The bill for one changed file",
+          "md": "| run | wall | peak RSS |\n|---|---|---|\n| cold build, 1,000 files | 22.0 s | 330 MB |\n| full rebuild, 1,000/1,000 AST cache hits | 15.8 s | 343 MB |\n| one-file update with a change set | 21.4 s | 286 MB |\n| no-change gate (#4800, 1,059 files) | 1.96 s | 46 MB |\n\nThe one-file update is slower than a full rebuild with a warm cache, and the output is unchanged. The work is the graph, not the change.\n\n#4800 shows the same shape at 1,059 files: 68.15 s and 1,071 MB for two edits, 48.72 s and 537 MB with a change set. The PR says the remaining 49 s is build, cluster, analyze, report and export over every node.\n\n#4740 is the production scale: 19,397 files, a 258 MB graph, 6 min 12 s and 6.3 GB for zero changes. Memory is 20 to 24 times the graph file in both our runs and the report."
+        },
+        {
+          "label": "2. Where the time goes",
+          "md": "Every stage treats the whole graph as its input:\n\n- `_reconcile_existing_graph` (`watch.py:996`) loads `graph.json` through `_load_existing_graph` (`build.py:2168`), then parses the same file again at `watch.py:1041`.\n- `rebase_preserved` (`watch.py:663`) runs 70,929 times on the 1,000-file corpus.\n- `build_from_json` (`build.py:1309`) rebuilds every node and edge, then `_alias_index` (`build.py:1049`) walks every node.\n- `cluster` (`cluster.py:233`), analyze, report and `to_json` (`export.py:287`) walk everything again.\n\nThe Python import map is rebuilt once per context node. `extract.py:9855` starts with the changed file and appends **every context node's source path**. On this corpus that is 31,000 paths for 1,000 files. I ran `_python_absolute_import_alias_files` directly with the same inputs:\n\n| input | time | aliases |\n|---|---|---|\n| 31,000 context paths, as passed today | 8.66 s | 2,000 |\n| 1,000 unique paths | 0.25 s | 2,000, identical |\n\nThat is a 35x difference for the same answer. Deduplicating the list is a useful first patch. It is not the fix. The fix is to maintain the index and update it for the files that changed, instead of deriving it from every node on every run.",
+          "diagram": "sequenceDiagram\n  participant U as one-file update\n  participant G as graph.json\n  participant R as reconcile\n  participant B as build\n  participant C as cluster\n  participant O as export\n  U->>G: parse the full file\n  U->>R: parse the same file again\n  R->>B: every node and edge\n  B->>C: every node\n  C->>O: every node\n  O-->>U: write the whole graph again",
+          "caption": "Today's one-file update. The change set only decides what to parse."
+        },
+        {
+          "label": "3. The correctness trap",
+          "md": "This is the part the first draft missed. A per-file store is not correct unless it can update the files that point at a changed file.\n\n**A new name.** A calls `foo()`, but `foo` does not exist. B adds `foo`. A is unchanged, so its fragment is reused. Nothing re-resolves A and the edge never appears. Today the code avoids this by passing every unchanged node as resolution context, which is the 31,000-path cost above.\n\n**A rename or a delete.** Node ids are path-based (`ids.py:86`, `make_id`). Moving `src/a.py` to `lib/a.py` changes every id in the file. Every edge from an unchanged file still points at the old id. `build_from_json` drops the dangling edge (`build.py:1732` to `1801`), so the result is a missing edge, not an error.\n\n**A stale semantic edge.** `save_semantic_cache` groups results by `source_file`. An edge carries the citing file's `source_file`. If the target is renamed or deleted, the citing file's cached entry still holds the old target id. The next build drops it. The cache does not know the target changed.\n\n**A changed chunk.** Semantic extraction is per chunk, not per file. `_pack_chunks_by_tokens` (`llm.py:2321`) groups files by directory, and adding or removing a file changes the grouping. A per-file cache entry was produced next to neighbours that may no longer be there. Cross-file edges in that entry can be stale or missing. Per-file facts are only compositional if the references are unresolved and resolved again, or if chunk membership is part of the key.\n\nThe reverse index is the mechanism that makes all four safe:\n\n- Store `A references foo` as a fact, not `A -> id_of_foo` as an edge.\n- Index `foo -> [A]` and `module -> [importers]`.\n- When B changes, mark B and every referencer of B's changed names dirty.\n- Re-resolve only the dirty set, then update the view.\n\nA rename map (old path to new path, from git or from a content match) handles the path-based id change. A stable key from the node-identity proposal is the cleaner long-term answer.",
+          "diagram": "flowchart LR\n  B[\"B adds foo()\"] --> F[\"B fragment dirty\"]\n  F --> R[\"reverse index<br/>A references foo\"]\n  R --> A[\"re-resolve A only\"]\n  A --> E[\"edge A -> foo\"]:::good\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
+          "caption": "A new symbol in B marks only its referencers dirty. Without the reverse index, A is never re-resolved."
+        },
+        {
+          "label": "4. The model: facts, then views",
+          "md": "A fragment per file, keyed by content hash, extractor version and fact schema version:\n\n```text\nnode fact:  (file, kind, name, label, line, attrs)\nref fact:   (source_file, source_node, target_name | module,\n             relation, line, confidence)\nchunk fact: (chunk_id, member files, prompt version)\n```\n\nA `ref fact` points at a **name or module**, never at a resolved node id. Resolution is a separate step against the current symbol table and reverse index. That is what makes a change in one file repairable without re-reading the others.\n\nDerived state, all carrying the generation id:\n\n- the canonical graph view used by query, path, affected and communities\n- the dedup result and the collision report\n- communities, report, HTML and callflow\n\nThe reverse index is the core. It needs point lookups and a transaction, so the store chosen in the state proposal (SQLite is the leading candidate) should hold it too:\n\n```text\nsymbol -> [(file, node, relation, line)]\nmodule -> [(file, relation, line)]\nfile   -> files that reference it\ntarget -> referencers\n```\n\nUpdate flow:\n\n1. Diff the fragments for the changed files.\n2. Compute the names and modules that appeared, disappeared or moved.\n3. Look up every referencer in the reverse index.\n4. Re-resolve only those files, against the new symbol table.\n5. Tombstone deleted files and rewrite or drop their references.\n6. Publish a new base generation. Rebuild views lazily.\n\nOn call-heavy code the fact count can approach the edge count. That is why stage 0 measures the ratio before promising a memory win. On the 800,000-edge import corpus the ratio is 400 import statements, each naming 2,000 symbols, to 800,000 expanded edges. That is the extreme end."
+        },
+        {
+          "label": "5. The graph.json contract",
+          "md": "`graph.json` is a complete artifact today. MCP, `tree`, `callflow`, `wiki`, `merge-graphs`, `global add` and third-party scripts read it and expect every edge.\n\nThere are only three honest options:\n\n| option | what it means | cost |\n|---|---|---|\n| complete export always | facts stay internal, `graph.json` remains complete | the 800,000-edge case still writes 163 MB and still costs export time |\n| compact or lazy format | `graph.json` carries facts or a compact edge form; consumers expand on read | breaking change, schema version, every consumer updated |\n| two artifacts | a complete `graph.json` for compatibility plus a compact fast view for graphify's own reads | two formats, two tests, disk |\n\nA cap is not one of the options. A cap drops edges and makes the artifact lie.\n\nCommunities and queries must use the same canonical view. If queries traverse facts while communities were computed on a different materialization, the two disagree. Incremental Leiden also cannot be byte-identical to a full run in general. Promise deterministic output for the canonical core, not for labels or volatile metadata.\n\nLazy expansion needs a budgeted traversal, not a materialized graph. The 2,000-token render budget does not bound the BFS that runs before rendering. Add a streaming traversal with a visited set and a work budget, and define the fallback when the budget is hit."
+        },
+        {
+          "label": "6. Measure before the rewrite",
+          "md": "The 6.3 GB is reported, not attributed. Before choosing a representation, run a stage-by-stage profile on the 19k-file corpus and one public monorepo:\n\n| stage | wall | peak RSS | objects / notes |\n|---|---|---|---|\n| detect and hash | | | 19,397 files |\n| extract | | | cache hits, alias map |\n| reconcile | | | two full parses |\n| build / dedup | | | nodes, edges |\n| cluster | | | communities |\n| analyze / report / export | | | JSON copies |\n\nOur 1,000-file run says the full-graph passes dominate even with a warm cache. It does not prove the 6.3 GB distribution. A cheap first patch (dedupe context paths, parse once, cache the alias index) may capture a large share without changing the format. Gate the fragment store on the numbers.\n\nDefine acceptance before the rewrite:\n\n- one-file update p95 on 20k files, from a measured baseline\n- peak RSS ceiling as a multiple of graph.json, measured\n- incremental vs full equality on a canonical projection\n- no edge loss, no new unresolved-capable edge dropped silently"
+        },
+        {
+          "label": "7. How I would stage it",
+          "md": "1. **Remove the obvious re-derivation.** Deduplicate context paths, parse `graph.json` once, key the alias and path indexes by generation. Output unchanged. This is a small PR and gives a baseline.\n2. **Add fragments next to the current graph.** Build the view from per-file fragments. No output change. The AST cache grows into a real store.\n3. **Add the reverse index and unresolved refs.** Store refs by name and module. Re-resolve the dirty set. This is the correctness milestone; the graph view is still complete.\n4. **Patch update at the fragment level.** No full `graph.json` load for the merge. Tombstone deleted files. Rebuild the view from fragments.\n5. **Separate analytics.** Communities, report and HTML get a generation id and rebuild lazily. `--no-analytics` becomes the fast path.\n6. **Lazy import expansion.** Facts first, edges on demand, with a budgeted traversal. Only then decide the `graph.json` format.\n7. **Compact the materialization.** Target the measured memory ratio, not a rewrite of every stage at once."
+        },
+        {
+          "label": "8. What it does not fix",
+          "md": "- It does not make publishing safe. A fast pipeline still needs the transaction from the first proposal; fragments must publish together with the view.\n- It does not give stable ids across renames. The reverse index plus a rename map handles the transition, but the node-identity proposal is the clean fix.\n- It does not make LLM output deterministic. The fact store records prompt, model and backend; equality is checked on the canonical core and on cached output, not on a fresh model call.\n- It does not decide the `graph.json` contract. That is a maintainer decision, and it blocks the last stage."
+        },
+        {
+          "label": "9. How this helps, and the risks",
+          "md": "- A one-file change stops paying for a 258 MB graph and six full passes.\n- A new symbol or a rename updates the files that reference it, instead of leaving a stale edge to be silently dropped.\n- Memory stops scaling with a 20 to 24 times multiplier over the graph file, once the representation is measured and compacted.\n- The 800,000-edge case is handled by not materializing edges that can be derived, not by a cap.\n- The risk is real: incremental dedup, communities and lazy expansion can change output. The differential test against a full rebuild is mandatory, and the first version should be report-only.\n- This is the largest change in the set. It should not start before the stage-0 profile and the transaction design are agreed."
+        },
+        {
+          "label": "10. Questions for you",
+          "md": "1. Is a complete `graph.json` a promise to consumers? If yes, the lazy-edge win cannot reach export without a second artifact.\n2. Which comes first: the reverse index or the storage transaction? I would do the transaction first, then fragments, then the index.\n3. Is a rename map from git acceptable, or do you want stable ids before any incremental store?\n4. For communities, is a versioned, stale-but-marked view acceptable, or must a query always see communities from the same generation?\n5. Which corpus should set the acceptance numbers: this repository, a 20k-file monorepo, or a docs-heavy corpus?"
+        }
+      ],
+      "plan": [
+        "Stage 0: profile the 19k-file corpus by stage, with wall, RSS and object counts. Post the table before any format change.",
+        "Stage 0: measure the fact-to-edge ratio on code-heavy, docs-heavy and generated corpora. Decide whether the memory promise is real.",
+        "Stage 1: dedupe context paths, parse graph.json once, and cache the alias/path indexes by generation. Output unchanged. Measure the delta.",
+        "Stage 1: add a differential test that applies random edits, renames, deletes and branch switches, then compares incremental output to a full rebuild on a canonical projection.",
+        "Stage 2: store per-file fragments next to the current graph and build the view from them. No output change.",
+        "Stage 2: add unresolved ref facts and the reverse index; re-resolve only referencers of changed names or modules.",
+        "Stage 3: patch update at the fragment level and publish fragments plus view in one transaction.",
+        "Stage 3: version analytics separately; rebuild communities and report lazily; add `--no-analytics`.",
+        "Stage 4: decide the graph.json contract, then add lazy expansion with a budgeted traversal.",
+        "Stage 4: compact or stream the final materialization against the measured RSS ceiling."
+      ],
+      "size": "large",
+      "risk": "high",
+      "related": [
+        4740,
+        4800,
+        4801,
+        4802,
         2406,
-        1504,
-        4167,
-        4449,
-        4432
-      ]
-    },
-    {
-      "id": "retrieval-eval",
-      "title": "Measure the answer, then make it smaller",
-      "status": "Proposed, needs your call",
-      "problem": "A query answer can miss the file that answers the question, and the benchmark will not notice because it only counts answer size. A shorter wrong answer looks like an improvement.",
-      "evidence": "From the issue threads on 0.9.85 to 0.9.92: the fixed file is first for 78 of 285 SWE-bench Lite questions (#4480); 25% of 177 answers lead with the right file against 32% for BM25 (#4341); 36% of answer characters are repeated file paths, and a compact form is 1.74x smaller with the same files in the same order (#4469); the default budget keeps 35 of 240 and 41 of 400 nodes on a 167k-node graph (#3810). I also ran the current renderer on a fresh code-only graph of graphify/extractors (1,206 nodes, 3,058 edges): 93.5% of the answer's characters are NODE lines, 12.8% are source paths and 10.0% are repeated paths.",
-      "parts": [
-        {
-          "label": "0. In plain words",
-          "md": "Ask a librarian for the book on bees. She hands you five books and charges by weight. A thin stack with no bee book looks like a win. Query changes are judged the same way today: by tokens, not by whether the right file is in the answer.\n\nThe first fix needs no new ranking. Write down a question and the file that should answer it. Score every change on whether that file is first, in the first three, in the first five, or anywhere. Keep the token count next to it.",
-          "diagram": "flowchart TD\n  Q[\"question\"] --> S[\"pick a start node\"]\n  S -->|\"one word or one node\"| W[\"a test or a same-named helper leads<br/>fixed file first in 78 of 285\"]:::bad\n  S -->|\"sum scores per file\"| R[\"the file that matches most leads<br/>88 of 285\"]:::good\n  W --> A[\"answer\"]\n  R --> A\n  A --> H[\"score: first file, first 3,<br/>first 5, anywhere, tokens\"]:::good\n  H -->|\"same ruler for every change\"| S\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
-          "caption": "The ruler the proposal adds, and where it sends the fixes"
-        },
-        {
-          "label": "1. The check we do not run",
-          "md": "`graphify benchmark` compares answer tokens with reading the corpus. #4341 built the missing check on 177 SWE-bench Lite issues across nine repos. Each repo sat at the commit its issues were filed against. The question was the issue title. The right answer was the files the real fix changed. The run used the MCP defaults: BFS, depth 3, about 2,000 tokens, on 0.9.85.\n\n| | first file | first 3 | first 5 | anywhere |\n|---|---|---|---|---|\n| `query_graph` | 25% | 34% | 38% | 62% |\n| BM25 over the repo's `.py` files | 32% | 56% | 64% | 92% in the top 50 |\n\n55 of the 177 full-issue questions ended with a \"Complete answer over budget\" notice. The answer was small and still missed the file."
-        },
-        {
-          "label": "2. What a miss looks like",
-          "md": "#4480 measured 285 issues in 12 repos on `graphify update` graphs, BFS depth 2, 2,000-token budget. The key was the files the fix changed.\n\n| | count |\n|---|---|\n| fixed file printed first | 78 of 285 |\n| in the first 3 files | 115 of 285 |\n| in the first 5 files | 131 of 285 |\n\nOf the 207 misses, the first file was a test 58 times, a file in the same folder 41 times, and a file elsewhere 108 times. The fixed file was already among the 50 best-scored nodes in 113 of those 207.\n\nThe ranking often has the right file. The answer starts with a node that is not in it."
-        },
-        {
-          "label": "3. Where the words go",
-          "md": "#4469 measured 600 answers: 300 SWE-bench Lite issues with two queries each, AST-only graphs, default BFS and 2,000-token budget.\n\n| part of an answer | share of its characters |\n|---|---|\n| NODE lines | 87% |\n| repeated `src=` paths | 36% |\n| empty `community=` | 12% |\n| EDGE lines | 3% |\n\nA file with five nodes in the answer pays for its path five times. The compact form writes each file once, puts its nodes below it, and leaves out empty fields. It returned the same files in the same order in 600 of 600 answers at 1.74x fewer tokens.\n\nMy run on a smaller graph shows the same shape:\n\n| | |\n|---|---|\n| graph | 1,206 nodes, 3,058 edges, code only |\n| answer | 92 NODE lines, about 2,126 tokens |\n| NODE lines | 93.5% of characters |\n| source paths | 12.8%, of which 10.0% repeated |\n| compact form | 20% fewer characters |\n\nPaths in graphify are short (`dm.py`, `base.py`), so repetition costs less here than the 36% measured on Django-sized paths. The shape is the same."
-        },
-        {
-          "label": "4. Two changes with numbers",
-          "md": "#3810 ran MCP queries on a 167k-node graph of mixed books. `query_graph(\"incidence algebra derivations poset\")` seeded on `Poset`, `Incidence`, `Derivations` and `Algebra`. `Incidence` matched a biostatistics book, so the walk crossed domains. At the default budget the two queries showed 35 of 240 and 41 of 400 nodes.\n\n#4480 proposes a small change: for a question of three or more terms, sum the scores of the 50 best candidates per file, lead with the best node of the best file, and let a test file lead only when the question names tests. Measured on the same 285 issues:\n\n| | by title | by title + 400 characters |\n|---|---|---|\n| today | 78 / 115 / 131 | 67 / 99 / 122 |\n| proposed | 88 / 121 / 136 | 80 / 117 / 140 |\n\nThe other ten repos alone went from 24 to 27 by title and from 20 to 29 with the body. The constants were chosen on django and sympy."
-        },
-        {
-          "label": "5. What I would build first",
-          "md": "1. Build the harness outside graphify and publish the baseline on the 285 issues. It runs `query_graph` on stored graphs, needs no LLM calls, and can live in a branch or a script.\n2. Land `graphify benchmark --questions FILE` from #4341, so a reviewer can reproduce the number without the external script. Without `--questions` the command is unchanged.\n3. Land phrase-first seeding and per-file aggregation (#3810, #4480). Score it on the same set, by title and by title plus body.\n4. Land the compact renderer behind `--compact` (#4469). Check three things: same files in the same order, tokens, and gold-file rank. Only then decide the default.\n\nThe harness is the only piece that has to exist before the other two can be judged."
-        },
-        {
-          "label": "6. How this helps, and what it does not do",
-          "md": "- It gives about twenty open query PRs (#2403, #3284, #3417, #3636 and others) one number to compare against. A change that makes answers smaller and worse stops looking like a win.\n- An agent reading a 1.7x smaller answer with the same files saves context on every query.\n- Leading with the right file helps the first thing the agent reads, before any reasoning.\n- It does not add a user-facing feature. It is test work first. Its value is that a smaller wrong answer stops looking like progress.\n- If you do not want another benchmark command, the external harness still helps and touches no library code."
-        },
-        {
-          "label": "7. Questions for you",
-          "md": "1. Is SWE-bench Lite the right public set, or would you rather the first `--questions` file be a project's own issue history?\n2. Should the compact form be opt-in for one release, or would you take it as the default once the file order is unchanged?\n3. Which matters more for your users: first file, first 5, or whether the file appears at all? I would score all three, but the order sets the target.\n4. Do you want the harness inside `graphify benchmark` from the start, or an external script first and no library change until the numbers are in?"
-        }
-      ],
-      "plan": [
-        "Stage 0: external harness on 285 stored graphs; publish first-file, first-3, first-5 and anywhere, with answer tokens.",
-        "Stage 1: `graphify benchmark --questions FILE` from #4341. CLI and docs only, no change without the flag.",
-        "Stage 1: a small test that the harness finds a known file in a fixture graph, so the score cannot pass vacuously.",
-        "Stage 2: phrase-first seeding and per-file score aggregation, measured on the same set. Easy to revert, one scoring function.",
-        "Stage 2: a regression test for a title-only question whose fix file is not a test.",
-        "Stage 3: compact rendering behind `--compact`, with a same-files-same-order test and a token count.",
-        "Stage 3: flip the compact default only if the gold-file score does not drop.",
-        "Stage 4, optional: reuse an answer for a rephrased question keyed by graph version and question, once the harness can measure whether reuse helps (#4477)."
-      ],
-      "size": "medium",
-      "risk": "medium",
-      "related": [
-        4341,
-        4480,
-        4469,
-        3810,
-        4477,
-        2403,
-        3284,
-        3417
-      ]
-    },
-    {
-      "id": "corpus-limits",
-      "title": "Bound what a corpus can make graphify build",
-      "status": "Reproduced, nothing built yet",
-      "problem": "A 5.28 MB source tree with 401 files makes graphify build 805,600 edges and a 163.6 MB graph.json at 2.16 GB of memory. Nothing stops it, and watch and the post-commit hook run it without asking.",
-      "evidence": "Measured on 0.9.97 (972f14a5) with a generated corpus: one module with 2,000 classes, 400 files that import all 2,000 names and define 8 local classes each, 5.28 MB in total. `graphify extract --code-only` produced 5,601 nodes and 805,600 edges (800,000 imports), a 163.6 MB graph.json, peak RSS 2.16 GB, 2 min 53 s wall time and 192.6 s user time. One source node has 2,009 outgoing edges. #3868 reported 6,405,600 edges on the same shape at 0.9.92; #2652 cut the per-class fan-out, but no budget was added. `_MAX_CROSS_FILE_EDGES` does not exist in the code.",
-      "parts": [
-        {
-          "label": "0. In plain words",
-          "md": "A 5 MB folder should not be able to ask for 2 GB of memory. Right now it can. One import statement in 400 files becomes 800,000 edges, and graphify writes every one of them.\n\nA cap is not the whole fix. The better fix is to stop storing one edge per imported name and keep one edge per module. But the cap comes first, because it stops the damage while the smaller graph is designed.",
-          "diagram": "flowchart TD\n  F[\"401 files, 5.28 MB\"] --> I[\"400 files import<br/>2,000 names each\"]\n  I --> E[\"800,000 import edges\"]:::bad\n  E --> G[\"163.6 MB graph.json<br/>2.16 GB RAM<br/>2 min 53 s\"]:::bad\n  G --> H[\"watch or git hook<br/>runs it again\"]:::bad\n  E --> C{\"edge budget?\"}\n  C -->|\"none today\"| G\n  C -->|\"estimate first, then cap\"| S[\"stop before writing,<br/>name the top files\"]:::good\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
-          "caption": "The path from a small folder to a 2 GB process, and the two places to cut it"
-        },
-        {
-          "label": "1. The measurement",
-          "md": "I generated the corpus from #3868 and ran the current CLI. The recipe is short enough to repeat:\n\n| item | value |\n|---|---|\n| module | `big.py` with 2,000 classes |\n| generated files | 400 files, each imports `C0` to `C1999` and defines 8 local classes |\n| input | 5.28 MB, 401 files |\n| command | `graphify extract /tmp/blow --code-only --out /tmp/blow-out` |\n\n| measure | value |\n|---|---|\n| wall time | 2 min 53 s |\n| user CPU | 192.6 s (114% of wall) |\n| peak resident memory | 2.16 GB |\n| nodes | 5,601 |\n| edges | 805,600 |\n| `imports` edges | 800,000 |\n| `contains` edges | 5,200 |\n| `imports_from` edges | 400 |\n| graph.json | 163.6 MB |\n| graph.json / input | 31x |\n| edges per node | 143.8 |\n| largest out-degree | 2,009 |\n| exit code | 0 |\n\nThere was no warning about size and no flag that would have stopped it."
-        },
-        {
-          "label": "2. Why one import line becomes 2,000 edges",
-          "md": "`_resolve_cross_file_imports` (`graphify/extractors/resolution.py:2926`) builds a map from each file's stem to the entities it defines, then walks every import in every file. For each imported name it finds a target id and writes an edge. In this corpus each of the 400 files imports 2,000 names, so the file-level import stage alone writes 400 x 2,000 = 800,000 edges.\n\n#3868 found a worse version: the old code wrote one edge from every local class to every imported name, a cartesian product of files, names and classes (6.4M edges on the same corpus). #2652 changed `uses` edges to attach only to the symbol that references the name, which is the right fix for that relation. The file-level `imports` fan-out is still one edge per imported name, and nothing bounds it. The node count is small (5,601). The edge count is what grows."
-        },
-        {
-          "label": "3. What it costs downstream",
-          "md": "The 2.16 GB peak is mostly the in-memory graph plus the edge list. The same structure is then written as a 163.6 MB JSON file. #3868 notes that the watch rebuild and `to_json`/`to_cypher` materialize it again, so a commit that adds the crafted files can trigger the work from a git hook without anyone running a command.\n\nThe run also took almost three minutes on one core. That is not the LLM path: it is AST parsing plus resolution plus serialization. A repository with many generated files can pay this on every watch event."
-        },
-        {
-          "label": "4. A cap is a contract",
-          "md": "There are four ways to bound it, and they are not equivalent:\n\n| lever | what it protects | what it costs |\n|---|---|---|\n| total edge cap | memory, disk, export time | a legitimate large graph is rejected |\n| per-node degree cap | hub nodes and JSON bloat | a real god node is truncated |\n| input-scaled budget | adapts to corpus size | needs a defensible ratio |\n| lazy import expansion | removes most of the edges | changes what the graph stores |\n\nA silent truncation is worse than a failure, because the graph then claims to be complete. My preference is a preflight estimate that names the top ten fan-out nodes, a default input-scaled cap, and an explicit `--allow-large` override. `--max-edges` gives the operator the final say.\n\nThe ratio should not be a guess. Measure the distribution on public repos first, AST-only, then pick a default that none of them hits. A cap that trips on Kubernetes is not a cap, it is a bug report."
-        },
-        {
-          "label": "5. The cheaper graph: do not store the product",
-          "md": "The 800,000 `imports` edges answer a file-level question: does this file depend on that module? One edge per (file, module) pair does that in about 400 edges. Symbol-level resolution can stay in the resolver and run when a query needs it, against the module's node index.\n\nThat is a graph semantics change, so it cannot be the first step. But it is the step that makes the cap less painful: a smaller graph, the same answers, and less to serialize. I would measure it on the query harness from the retrieval proposal before touching the default."
-        },
-        {
-          "label": "6. The order I would do it",
-          "md": "1. Commit the generator as a fixture and assert today's numbers: 401 files, 5,601 nodes, 805,600 edges, exit 0. That is the regression test for the fix.\n2. Add a report-only estimate before extraction: input files, AST nodes, projected import edges, top ten fan-out files. No output change, easy to review.\n3. Add `--max-edges` with no default. Compare it on public repos and on the generated corpus.\n4. Turn on a default cap that the measured repos do not hit, with `--allow-large` to override. One release.\n5. Only after the numbers: collapse import edges to one per module pair, measured on the query set."
-        },
-        {
-          "label": "7. How this helps, and what it does not do",
-          "md": "- A single commit cannot make a watch loop or a git hook exhaust memory and disk.\n- CI for large repos gets a predictable ceiling and a clear error instead of an OOM kill.\n- The operator learns which files cause the blow-up while the run is still cheap to stop.\n- It does not make normal repos faster. It removes a cliff that only a generated or hostile corpus reaches.\n- It is the strongest of these four because the numbers are reproduced on the current release, not inferred."
-        },
-        {
-          "label": "8. Questions for you",
-          "md": "1. Would you take a default cap at all, or only an opt-in `--max-edges` plus a warning?\n2. If a cap trips, should the run fail or write a graph with a recorded truncation? I lean fail, because a truncated graph looks complete later.\n3. Is collapsing import edges to one per module pair acceptable for the queries you care about, or does the graph need per-symbol import edges?\n4. Which public repos should set the default? I would use three sizes, about 500, 5,000 and 30,000 files, with no LLM."
-        }
-      ],
-      "plan": [
-        "Stage 0: commit the generated 401-file corpus as a fixture and assert the current 805,600 edges and 2.16 GB peak.",
-        "Stage 1: a report-only preflight estimate (files, AST nodes, projected edges, top fan-out) with no output change.",
-        "Stage 1: a test that the estimate ranks the crafted module first.",
-        "Stage 2: `--max-edges` with no default, compared on the fixture and on public repos.",
-        "Stage 2: fail before writing when the cap trips; print the top ten fan-out files and the two levers.",
-        "Stage 3: a measured default cap plus `--allow-large`. One release, documented.",
-        "Stage 3: streaming or chunked graph.json writing, measured on the fixture.",
-        "Stage 4: collapse import edges to one per (file, module), measured on the query gold set before the default changes."
-      ],
-      "size": "large",
-      "risk": "medium",
-      "related": [
-        3868,
-        2652,
-        3982,
-        4124,
-        4603
-      ]
-    },
-    {
-      "id": "cross-chunk-linking",
-      "title": "Link the edges no chunk can see",
-      "status": "Proposed, needs your call",
-      "problem": "Each extraction chunk is alone. A relation between two chunks cannot be written, so the same fact can sit in the graph twice with no edge between the copies. More parallelism makes this worse.",
-      "evidence": "The rendered extraction spec says \"if two concepts in this chunk solve the same problem\", and `extract_files` packs files by directory and dispatches chunks to a pool (`graphify/llm.py`, default concurrency 4). #3948 documents two data files in different directories that state one design rule: both became rationale nodes, each has one edge to its own file, and they ended in different communities. Its experiment: word-shingle Jaccard found 5 pairs and missed the known one; TF-IDF cosine found 32 and missed it at 0.371 against a 0.42 threshold; rare-term overlap with a moderate cosine caught it and added 12 more true pairs with no false positives on manual review. #3947 describes the same wall for references to nodes outside the chunk, and #65 left a global pass \"on the table\".",
-      "parts": [
-        {
-          "label": "0. In plain words",
-          "md": "Two people write the same rule in two different notebooks. Both notebooks are correct. Nobody draws a line between them because neither person saw the other notebook. Graphify does the same with chunks.\n\nThe fix is a small clerk who reads the finished notebooks after everyone is done. The clerk looks for shared rare words, not exact sentences, and writes a line between the two pages that state the same rule. The clerk marks the line as a guess and writes down both pages.",
-          "diagram": "flowchart TD\n  R[\"one design rule\"] --> A[\"chunk A<br/>data/a.yml\"]\n  R --> B[\"chunk B<br/>data/b.yml\"]\n  A --> NA[\"rationale node A\"]\n  B --> NB[\"rationale node B\"]\n  NA -.->|\"no edge: the chunks never met\"| NB\n  NA --> P[\"controller pass<br/>rare terms + cosine\"]:::good\n  NB --> P\n  P --> L[\"semantically_similar_to<br/>score and two sources\"]:::good\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
-          "caption": "The missing edge and the controller pass that can add it after extraction"
-        },
-        {
-          "label": "1. Each chunk is an island",
-          "md": "`_pack_chunks_by_tokens` (`graphify/llm.py:2321`) groups units by parent directory and closes a chunk when the next unit would exceed the token budget. Oversized documents are split into slices first. `extract_files` then runs the chunks through a thread pool, four by default. Each subagent sees its chunk and the fixed prompt, and nothing else.\n\nThe design is right for cost and speed. Cross-file edges are more likely within a chunk than across chunks, and parallelism is why a large docs corpus finishes. The cost is structural: a relation between two chunks is not something the model forgot, it is something no model was asked."
-        },
-        {
-          "label": "2. The rule that got stored twice",
-          "md": "#3948's case is a project design rule written in two data files in two directories. Both files were extracted correctly as rationale nodes. Each node has one edge, to its own file. They are not connected to each other, and they landed in different communities.\n\nThe graph holds the same fact twice and does not know it. An agent asking why the project does X can get one of the two answers and never see the other. The failure is quiet: both nodes are valid, both files are present, and no warning says a relation is missing."
-        },
-        {
-          "label": "3. What was tried, and what found the pair",
-          "md": "#3948 implemented a controller-side pass and checked it against a known pair chosen before the metric.\n\n| method | pairs found | known pair | false positives |\n|---|---|---|---|\n| word-shingle Jaccard | 5 | missed | not reported |\n| TF-IDF cosine | 32 | missed (0.371 against 0.42) | not reported |\n| rare terms in common, plus a moderate cosine | known pair + 12 more | found | none on manual review |\n\nThe two texts state one rule in different words. Shingles measure near-verbatim copying; long texts dilute the cosine with their own material. Shared low-frequency vocabulary is what carries the paraphrase. That result is the one to keep: cheap, deterministic, no model, and it produced true pairs a human could check."
-        },
-        {
-          "label": "4. What is impossible today",
-          "md": "| relationship | same chunk | different chunks |\n|---|---|---|\n| `semantically_similar_to` | emitted | impossible |\n| reference to a named node | emitted | the model copies an id fragment or mints a stub (#3947) |\n| two rationale nodes stating one rule | may merge or link | two nodes, two communities |\n| imports and calls | AST stage, global | handled globally, not affected |\n| community assignment | global | duplicate nodes split the topic |\n\nThe top three rows are the semantic layer. The AST rows are fine because code extraction runs over the whole corpus before the graph is built."
-        },
-        {
-          "label": "5. The pass",
-          "md": "After all chunks are collected, before Part C:\n\n1. Take the `rationale` and `concept` nodes with text and their source files.\n2. Block candidates by shared rare terms, so the pass does not compare every pair with every other pair. An inverted index over low-frequency terms is enough.\n3. Score each candidate pair with rare-term overlap plus cosine. Accept on either a strong cosine or a high rare-term overlap with a moderate cosine, following #3948.\n4. Emit `semantically_similar_to` edges marked `INFERRED`, with the score and the two source locations. Cap the number of pairs per node and per run.\n5. Write the accepted pairs to the report as well as the graph, so a human can see what was inferred from content graphify did not author.\n\nNo LLM call. Deterministic on the same input, sorted output. The pass is a controller step, not a prompt change, so it can be added and removed without touching the extraction spec."
-        },
-        {
-          "label": "6. Why not let one chunk see everything",
-          "md": "A single global extraction would make the relation visible, but it would also remove the parallelism and pay for the whole corpus in one context window. On a large docs corpus that is slower and more expensive, and the context limit still forces a split. The controller sees all the output without holding all the text, which is the right place for a global pass."
-        },
-        {
-          "label": "7. How this helps, and what it does not do",
-          "md": "- Cross-document rules become edges, so a query can walk from one statement of a rule to the other.\n- Duplicate rationale and concept nodes can be linked or merged instead of splitting a topic across communities.\n- Fewer stub nodes from out-of-chunk references (#3947).\n- It adds no LLM spend: the pass reads text the run already produced.\n- It will not help code edges. Those are resolved globally already. It only helps docs, papers and mixed corpora.\n- A wrong similarity edge is worse than none, so the first version should report candidates before it writes them."
-        },
-        {
-          "label": "8. Questions for you",
-          "md": "1. Should accepted pairs be written to the graph by default, or reported first and written only with a flag?\n2. Is a lexical pass enough to start, or do you want embeddings (#7) in the first version? I would ship lexical first and keep the interface open.\n3. What cap is acceptable per run: 50 pairs, 500, or a fraction of the concept nodes?\n4. Would you rather this run in the Python CLI (controller) or in the runbook as a Step B3.5 block? The CLI keeps it testable and host-independent."
-        }
-      ],
-      "plan": [
-        "Stage 0: turn #3948's known pair into a fixture with the two rationale nodes and an expected edge. No production change.",
-        "Stage 1: a controller pass behind `--semantic-link=lexical` that writes candidates to the report only. No graph change.",
-        "Stage 1: a test that the known pair is found and that a near-duplicate negative pair is not.",
-        "Stage 2: write accepted `semantically_similar_to` edges with score and locations; cap per node and per run.",
-        "Stage 2: measure precision on a hand-labelled sample of 50 pairs from a real docs corpus.",
-        "Stage 3: dedupe or merge identical rationale nodes only after the link pass shows the pairs are trustworthy.",
-        "Stage 3: optional embeddings behind the same flag, compared on the same fixture.",
-        "Stage 4: amend the extraction spec so agents know cross-chunk similarity is handled by the controller, not by them."
-      ],
-      "size": "medium",
-      "risk": "medium",
-      "related": [
+        3763,
         3948,
         3947,
-        65,
-        7,
-        537,
-        4547
-      ]
-    },
-    {
-      "id": "host-conformance",
-      "title": "Run every host's runbook instead of diffing its text",
-      "status": "Measured, nothing built yet",
-      "problem": "Sixteen host skills are generated into 134 files. Tests compare text and run snippets. Only four host renders run a documented route, and the shared body used by 14 hosts skips the code-only route. A bug in step order, like #4811, passes every check.",
-      "evidence": "`tools/skillgen/platforms.toml` declares 16 platforms: 14 split and 2 monolith. They share 36 fragments and 134 expected artifacts, across 8 dispatch variants, 2 extraction modes, 2 shells and 2 hook variants. `tests/test_code_only_update_all_hosts.py` defines 14 `SHARED_HOSTS` but runs only aider and devin; the shared list is commented out until #4313 lands. `tests/test_extract_snapshot_4811.py` executes the claude render for update merge and Step 9, and checks the other shared hosts by string, not by running them. 25 of the 115 open issues on 2026-10-28 name the skill, installer or hooks, including #4812, #4811, #4807, #4777, #4539, #4447, #4431 and #3820.",
-      "parts": [
-        {
-          "label": "0. In plain words",
-          "md": "A runbook is a recipe card. Today the test checks that every step is written on the card. It does not cook the dish. A card that says \"taste, then add salt\" passes even if it should say \"add salt, then taste\".\n\nThe fix is to cook one small dish for each host: three files, one doc, one chunk that fails. Run the card in order and look at the plate. If the failed doc is still queued and the good one is not, the order works.",
-          "diagram": "flowchart TD\n  F[\"36 fragments\"] --> H[\"16 hosts<br/>134 files\"]\n  H --> X[\"4 hosts:<br/>one route executed\"]\n  H --> Y[\"12 hosts:<br/>text and 31 snippets\"]:::bad\n  X --> T[\"route test:<br/>run the shipped blocks\"]\n  Y --> T\n  T --> A[\"check files, manifest,<br/>queue and exit code\"]:::good\n  A --> C[\"an order bug like #4811<br/>fails in CI\"]:::good\n  classDef bad fill:#fde2e1,stroke:#c0392b,color:#111\n  classDef good fill:#dff3e4,stroke:#2e7d32,color:#111",
-          "caption": "What is checked today, and what a route test adds"
-        },
-        {
-          "label": "1. One runbook, sixteen deliveries",
-          "md": "The generator is a good design: one lean core, shared references, and per-platform slots. The slots are where hosts differ.\n\n| dimension | values | exercised in an executed route |\n|---|---|---|\n| bucket | 14 split, 2 monolith | split yes (claude, codex), monolith only for code-only update |\n| shell | 15 POSIX or default, 1 PowerShell | POSIX yes, PowerShell no |\n| extraction spec | 10 verbose, 4 compact | both yes (claude verbose, codex compact) |\n| dispatch | 8 variants | 2 of 8 (agent-tool-disk, codex-agenttask) |\n| hooks | 13 claude-md, 3 agents-md | no executed route, string checks only |\n| always-on block | 2 hosts (claude, windows) | installer tests, not the runbook route |\n\nA split host is more than the shared core. Windows runs PowerShell, four hosts use the compact extraction spec, three wire AGENTS.md hooks, and eight dispatch forms tell the agent how to call a subagent. Those are the parts a text diff cannot verify."
-        },
-        {
-          "label": "2. What the tests execute today",
-          "md": "| documented route | host render executed |\n|---|---|\n| build path: detect, B0, Part C, Step 9 (no build or cluster step) | claude |\n| `--update` merge | claude |\n| code-only `--update` | aider, devin |\n| semantic chunk merge (B2/B3) | codex |\n| install and hooks | Python installer tests, not the rendered host blocks |\n\nThat is four of sixteen host renders with any executed route, and each of those four covers one or two pieces of a route. None of them runs the eight-step build. The other 12 hosts are covered by the shared text, golden files and 31 executed scan snippets. Those snippets are useful, but they test a step, not the order of steps.\n\nThe 31-snippet test is what caught scan-option drift across every artifact. The gap is the route: start, order, merge, stamp, cleanup."
-        },
-        {
-          "label": "3. Why text checks miss order",
-          "md": "#4811 is the example to keep. The update merge block read `.graphify_extract.json`, built a merged extraction, and wrote it back to the same path. Step 9 then read that path to decide which changed docs to stamp. Every string was present in every render. The order was wrong: after the merge, the file described the old graph, not this run.\n\nA test that checks \"the merge block contains `build_merge`\" passes. A test that runs start, merge, then Step 9 on a project whose chunk failed does not. That is the difference between a text check and a route check.\n\n#4812 is the same shape on the monoliths: aider and devin never saved the manifest on `--update`. #4807 is the same shape inside one file: the partial set was omitted, so a partly read doc was stamped as done. None of these is a missing string."
-        },
-        {
-          "label": "4. The harness",
-          "md": "A fixture project is enough: two code files, one doc, one chunk that fails, one stale `.graphify_partial.txt`, and a manifest from an earlier build. The harness runs the rendered blocks in order, not a reimplementation of them.\n\nFor each host and route, assert on disk and on the next run:\n\n- the graph has the expected nodes and edges;\n- the manifest lists what was read;\n- a failed doc is still queued;\n- a successful doc is not queued;\n- the exit code is 0 on success and non-zero on a refused shrink;\n- no temp file is left behind.\n\nThe matrix is per host bundle, not per file. The 14 split hosts can share one run when their rendered blocks are byte-identical, and run separately when a slot differs. Aider and devin always run their own. Windows needs a PowerShell lane, or a documented skip with the reason.\n\nA `tools/skillgen --routes` report can print the covered cells from the test names, so the matrix cannot silently shrink."
-        },
-        {
-          "label": "5. Paths as well as bodies",
-          "md": "The route tests also need to check where files land. #4812 is about a missing manifest write, but the manifest path depends on the host: aider and devin use a cwd-relative `graphify-out/`, the split hosts use `graphify-out/` too, and Windows has its own shell. #4447 was a code-only update that never wrote the extract file, and #4539 was an instruction in the wrong order.\n\nA route test that runs in a scratch project and looks at the actual files catches all three. A route test that only greps the body does not."
-        },
-        {
-          "label": "6. Cost and CI",
-          "md": "The fixture is small and the blocks are local Python, so a route is seconds, not minutes. The expensive part is the install and hook tests, which already exist separately. Start with the five routes for claude, codex, aider and devin (the four executed today), then add the 12 missing hosts one variant at a time: PowerShell first, then compact extraction, then agents-md hooks.\n\nThe suite can run in the normal test job. If the full 16-host matrix is too slow, split it: shared routes on every PR, monolith and variant lanes on a schedule or a label."
-        },
-        {
-          "label": "7. How this helps, and what it does not do",
-          "md": "- The next #4811 fails in CI before a review, not after a user report.\n- A platform author can see which routes are guaranteed for their host instead of inferring it from prose.\n- Regressions in one slot (PowerShell, compact spec, hooks) stop hiding behind a shared body.\n- It does not add a feature. It is test work, and the weakest of these four as a product change.\n- It only pays off if runbook regressions are expensive. The last week of issues says they are, but this can wait behind the first two proposals."
-        },
-        {
-          "label": "8. Questions for you",
-          "md": "1. Would you rather have all 16 hosts for one route first (update merge), or four hosts for all five routes first?\n2. Is a PowerShell lane on Linux acceptable through `pwsh`, or should windows stay a documented skip in CI?\n3. Should the route matrix live in `tools/skillgen --routes`, in the test names, or in a generated Markdown table checked by a test?\n4. Do you want the harness to run the rendered bash blocks exactly as shipped (slower, higher fidelity) or call the Python blocks directly (faster, misses quoting)? I lean exact, with a separate quoted-block test where needed."
-        }
-      ],
-      "plan": [
-        "Stage 0: write the route table for 16 hosts and 5 routes, with the current executed cells marked. Post it in the issue.",
-        "Stage 0: build the fixture project (two code files, one doc, one failed chunk, one stale partial, an old manifest).",
-        "Stage 1: run the claude build path (detect, B0, Part C, Step 9) and the update merge from the rendered blocks. These exist in part today; make them a named suite.",
-        "Stage 1: add aider and devin full build and update routes. They run their own monolith body.",
-        "Stage 2: add windows PowerShell, the four compact-extraction hosts and the three agents-md hook hosts, one lane at a time.",
-        "Stage 2: add the code-only route for the 14 shared hosts once #4313 lands; until then record the skip with a reason.",
-        "Stage 3: `tools/skillgen --routes` prints covered and missing cells; CI fails if a covered cell disappears.",
-        "Stage 3: document the matrix in CONTRIBUTING so a new platform declares which routes it supports."
-      ],
-      "size": "medium",
-      "risk": "low",
-      "related": [
-        4811,
-        4807,
-        4812,
-        4313,
-        4777,
-        4539,
-        4447,
-        4431,
-        3820,
-        4781,
-        4786
+        3868,
+        4281,
+        4738
       ]
     }
   ]
