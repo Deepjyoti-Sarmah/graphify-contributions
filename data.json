@@ -275,6 +275,33 @@
         4832
       ],
       "reported_by": "gitmotion"
+    },
+    {
+      "id": "4828",
+      "title": "C#: calls to a classic extension method from another file get no calls edge",
+      "issue": 4828,
+      "prs": [
+        4849
+      ],
+      "reported_by": "Voltair88"
+    },
+    {
+      "id": "4831",
+      "title": "extract --out <dir>: semantic cache never saved, docs missing from manifest (relative source_file resolved against --out)",
+      "issue": 4831,
+      "prs": [
+        4850
+      ],
+      "reported_by": "R-u-d"
+    },
+    {
+      "id": "4854",
+      "title": "JS file/class ID collision drops class Js and emits self-contains edges (0.9.87)",
+      "issue": 4854,
+      "prs": [
+        4857
+      ],
+      "reported_by": "Den4ik"
     }
   ],
   "prs": {
@@ -1859,6 +1886,73 @@
         "test_rerunning_the_merge_block_is_idempotent",
         "test_every_shared_core_host_ships_the_snapshot_lifecycle"
       ]
+    },
+    "4849": {
+      "summary": "A call to a classic C# extension method now gets a calls edge to the static class that declares it, even when the declaration sits in another file.",
+      "why": "Think of the method as living in the neighbour's shed. `s.Mask()` looks like a string method, so the resolver searched the string type and found nothing. `Mask` is declared in another file as `public static string Mask(this string s)`, on a static class. The receiver is `string`, which the corpus does not declare, so the lookup had no place to land. The extractor also threw away the `this` type and refused lowercase type names, so no later pass had the facts to join the call to its declaration.",
+      "what": "The extractor now writes `extended_type`, `extended_type_arity` and `extended_is_type_param` on the method node when it parses the declaration, and it keeps primitive receiver names. A new `csharp_extension_calls` pass runs after the nominal member pass and binds a call when the receiver type, namespace scope, assignability and argument count all agree. Typed receivers get INFERRED 0.85, guarded out-of-corpus receivers 0.75. A tie binds nothing. Measured against 22 expected bindings, the shipped rules reach recall 0.955 and precision 1.000, with 21 correct edges and none wrong. The full suite reports 9201 passed.",
+      "helps": "The helper stops looking dead. `graphify explain \".Mask()\"` lists the call sites that the compiler would bind, including `s.Mask()` on a string and the chained `v.ToString().Mask()`. Calls that cannot be proven stay unbound, so the graph does not gain a guessed edge.",
+      "before": "graphify explain \".Mask()\" --all\nConnections (1):\n  <-- StringExtensions [method] [EXTRACTED] Ext.cs:L3",
+      "after": "graphify explain \".Mask()\" --all\nConnections (3):\n  <-- StringExtensions [method] [EXTRACTED] Ext.cs:L3\n  <-- .A() [calls] [INFERRED] Svc.cs:L3\n  <-- .B() [calls] [INFERRED] Svc.cs:L4",
+      "limits": [
+        "Call sites in `.razor` and `.cshtml` files keep the old gap, because the member resolver reads `.cs` only.",
+        "The BCL deny-list is a heuristic. An out-of-corpus receiver stays unbound when the extension name matches a BCL member or a regular method in the corpus, so `PropertyInfo.GetValue` and `string.ToInt32()` beside `Conv.ToInt32()` remain known misses.",
+        "The unbound-static-class path is a gap. A static call such as `StringExtensions.Mask(s)` does not go through this pass and keeps its existing edge, or its absence.",
+        "Generic extended types compare by simple name, so `this Box<int>` and a `Box<string>` receiver look the same.",
+        "Chained receivers use the untyped 0.75 rung. No return-type inference is added.",
+        "Not tested on Windows."
+      ],
+      "tests": [
+        "tests/test_csharp_extension_calls.py",
+        "tests/test_csharp_extension_metadata.py",
+        "tests/test_csharp_extension_resolution.py"
+      ],
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"s.Mask() in Svc.cs\"] --> B2[\"resolver looks on string\"]:::bad\n    B315[\"Mask(this string s) in Ext.cs\"] --> B2\n    B2 --> B3[\"no calls edge\"]:::bad\n  end\n  subgraph After\n    A1[\"extractor records extended_type\"]:::good --> A2[\"extension pass matches receiver and scope\"]:::good\n    A2 --> A3[\"calls edge to StringExtensions.Mask\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant C as Svc.cs\n  participant X as Extractor\n  participant E as Ext.cs\n  participant R as Resolver\n  X->>E: parse Mask(this string s)\n  E-->>X: extended_type string, extension true\n  C->>R: raw call s.Mask()\n  R->>R: check receiver, scope, arity\n  alt one declaration survives\n    R-->>C: calls edge, INFERRED 0.85\n  else none or tie\n    R-->>C: no edge\n  end"
+    },
+    "4850": {
+      "summary": "Two runs of `extract --out` now reuse the semantic cache, and a guard keeps every cache call site passing both the corpus root and the cache root.",
+      "why": "The spare key was left under the wrong doormat. The writer resolved each model `source_file` against `--out`, while the reader used the scanned folder. The model returns `n1.md` relative to the scanned folder, so `Path(out_root) / \"n1.md\"` did not exist. The save skipped every group, the manifest join missed every doc, and run two extracted the whole docs corpus again. The code half landed upstream in v8. This PR pins the two roots at every call site and adds the missing tests.",
+      "what": "The CLI passes `root=target, cache_root=out_root` to `save_semantic_cache` and `check_semantic_cache`, and the `cache-check` command passes `root=root, cache_root=root` because it has no `--out`. A new test runs extract twice with `--out` and asserts that run two dispatches nothing and hits three cache entries. A static guard walks `graphify/**/*.py` and fails when a caller omits `cache_root`. The full suite reports 8971 passed.",
+      "helps": "A second `--out` run spends no tokens on unchanged docs, and `manifest.json` receives a `semantic_hash` for every doc. A future call site that drops `cache_root` fails the guard before it can bring the bug back.",
+      "before": "graphify extract ../vault --out ../out\nrun 2: 0 files cached/unchanged, 3 re-extracted\nout/graphify-out/cache/semantic/ is empty",
+      "after": "graphify extract ../vault --out ../out\nrun 2: 3 files cached/unchanged, 0 re-extracted\nout/graphify-out/cache/semantic/ holds 3 entries",
+      "limits": [
+        "The read half of the cache path still has no test outside the stubbed backend, so a provider-specific reader can drift.",
+        "The static guard scans production Python only. It does not scan generated skill markdown, where a single root is legitimate.",
+        "The CLI tests drive `main()` in process with a stubbed backend. They do not exercise `claude-cli` or provider-specific paths.",
+        "Not tested on Windows. The tests use `tmp_path` and the same path rules as the rest of the suite."
+      ],
+      "tests": [
+        "tests/test_semantic_cache_call_sites.py",
+        "tests/test_extract_out_semantic_cache.py"
+      ],
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"save uses root=out_root\"] --> B2[\"Path(out_root)/n1.md is missing\"]:::bad\n    B2 --> B3[\"nothing cached, manifest empty\"]:::bad\n  end\n  subgraph After\n    A1[\"save uses root=target and cache_root=out_root\"]:::good --> A2[\"source_file resolves in the corpus\"]:::good\n    A2 --> A3[\"cache entry and semantic_hash written\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383"
+    },
+    "4857": {
+      "summary": "A JavaScript file and a class inside it keep different node ids, so the class survives and the graph stops emitting a self-contains edge.",
+      "why": "Two people at the party had the same name tag. The file id for `a.js` is `a_js`, and the class id for `class Js` is also `a_js`. `add_node` saw the class id already taken, kept the file, and dropped the class. The file then took the class flags, and the graph drew `a_js -> a_js` as a contains edge. Method ownership pointed at the file. The fix puts a unique suffix on the class tag and teaches references in other files to look up the declared tag.",
+      "what": "`DeclIdRegistry` reserves the file id, assigns a declaration id after an availability check, salts with `sha1(name)[:12]` when the declaration would land on the file id, bumps a counter until the id is free, and remembers the assignment so a re-walk returns the same id. A corpus map keyed by `(source path, normalized name)` points JS and TS references at the declared node, so `@Ts class Other` in `b.ts` binds `Ts` from `a.ts`. The AST cache schema moves to schema 30. The targeted file reports 70 passed, 1 skipped, and the full suite reports 9036 passed.",
+      "helps": "The class node exists, the file keeps its own flags, and the contains edge points from `a_js` to the salted class id. A method belongs to the class instead of the file. Cross-file decorator and inheritance references land on the declared class, including when two modules export a name like `Ts`.",
+      "before": "a.js  class Js\nfile id     make_id(\"a.js\")     -> a_js\nclass id    make_id(\"a\", \"Js\")  -> a_js\nadd_node    -> class dropped\nedge        a_js -> a_js contains",
+      "after": "a.js  class Js\nfile id     a_js\nclass id    a_js_b692bab43393\nedge        a_js -> a_js_b692bab43393 contains\nmethod      a_js_b692bab43393_run",
+      "limits": [
+        "Standalone extractors do not use the registry yet. Apex, Bash, Dart, the config extractors and several other families still mint ids from the file stem.",
+        "Cross-file `new Ts()` and TypeScript type annotations do not emit a reference edge today, so the corpus map covers decorators and inheritance only.",
+        "C++ namespace declarations are not modeled, so the language zoo skips that case.",
+        "An existing `graph.json` keeps the missing class until a full rebuild, because `graphify update` only re-extracts changed files."
+      ],
+      "tests": [
+        "tests/test_file_id_collision_4854.py",
+        "tests/test_extract.py",
+        "tests/test_build.py",
+        "tests/test_cache.py",
+        "tests/test_dedup.py",
+        "tests/test_ext_tagged_id_clash.py",
+        "tests/test_file_node_id_spec.py"
+      ],
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"a.js file id is a_js\"] --> B2[\"class Js id is a_js\"]:::bad\n    B2 --> B3[\"add_node drops the class\"]:::bad\n    B3 --> B4[\"a_js contains a_js\"]:::bad\n  end\n  subgraph After\n    A1[\"DeclIdRegistry reserves a_js\"]:::good --> A2[\"class gets a_js_b692bab43393\"]:::good\n    A2 --> A3[\"a_js contains the class\"]:::good\n    A3 --> A4[\"references bind the declared id\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
+      "sequence": "sequenceDiagram\n  participant F as a.js parser\n  participant R as DeclIdRegistry\n  participant B as b.ts parser\n  F->>R: resolve a_js, Js, type\n  R->>R: a_js is the file id\n  R-->>F: a_js_b692bab43393\n  B->>R: look up Ts from a.ts\n  R-->>B: declared id for a.ts Ts\n  alt declaration exists\n    B-->>B: references edge to the class\n  else name missing or ambiguous\n    B-->>B: no edge\n  end"
     }
   },
   "issues": [
