@@ -302,6 +302,33 @@
         4857
       ],
       "reported_by": "Den4ik"
+    },
+    {
+      "id": "4874",
+      "title": "[Bug]: Java/Kotlin imports do not resolve to the class node, so `affected` silently omits dependents",
+      "issue": 4874,
+      "prs": [
+        4879
+      ],
+      "reported_by": "rafaelltlins"
+    },
+    {
+      "id": "4898",
+      "title": "AST mode: opt-in to index data JSON skipped by _is_config_json (since 0.8.37)",
+      "issue": 4898,
+      "prs": [
+        4911
+      ],
+      "reported_by": "GstMirabal"
+    },
+    {
+      "id": "4909",
+      "title": "Full code rebuild spends ~100 s in path and string work with nothing changed (0.9.48, 21.5k nodes)",
+      "issue": 4909,
+      "prs": [
+        4913
+      ],
+      "reported_by": "danieltamas"
     }
   ],
   "prs": {
@@ -1555,7 +1582,14 @@
           "after": "glob a#b/*",
           "covered_by": "test_hash_inside_quotes_is_part_of_the_glob"
         }
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "a9a0d01f",
+          "a47deee3"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      }
     },
     "4712": {
       "summary": "A Rust `use` from another crate no longer binds to a same-named local definition, and a binding made on the name alone is marked `INFERRED`.",
@@ -1952,7 +1986,82 @@
         "tests/test_file_node_id_spec.py"
       ],
       "diagram": "flowchart LR\n  subgraph Before\n    B1[\"a.js file id is a_js\"] --> B2[\"class Js id is a_js\"]:::bad\n    B2 --> B3[\"add_node drops the class\"]:::bad\n    B3 --> B4[\"a_js contains a_js\"]:::bad\n  end\n  subgraph After\n    A1[\"DeclIdRegistry reserves a_js\"]:::good --> A2[\"class gets a_js_b692bab43393\"]:::good\n    A2 --> A3[\"a_js contains the class\"]:::good\n    A3 --> A4[\"references bind the declared id\"]:::good\n  end\n  classDef bad fill:#fee,stroke:#c33\n  classDef good fill:#efe,stroke:#383",
-      "sequence": "sequenceDiagram\n  participant F as a.js parser\n  participant R as DeclIdRegistry\n  participant B as b.ts parser\n  F->>R: resolve a_js, Js, type\n  R->>R: a_js is the file id\n  R-->>F: a_js_b692bab43393\n  B->>R: look up Ts from a.ts\n  R-->>B: declared id for a.ts Ts\n  alt declaration exists\n    B-->>B: references edge to the class\n  else name missing or ambiguous\n    B-->>B: no edge\n  end"
+      "sequence": "sequenceDiagram\n  participant F as a.js parser\n  participant R as DeclIdRegistry\n  participant B as b.ts parser\n  F->>R: resolve a_js, Js, type\n  R->>R: a_js is the file id\n  R-->>F: a_js_b692bab43393\n  B->>R: look up Ts from a.ts\n  R-->>B: declared id for a.ts Ts\n  alt declaration exists\n    B-->>B: references edge to the class\n  else name missing or ambiguous\n    B-->>B: no edge\n  end",
+      "landed": {
+        "commits": [
+          "41acf849",
+          "0fa0db50",
+          "d157b98c"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      }
+    },
+    "4879": {
+      "summary": "Java and Kotlin references now reach the real class in either direction, so `affected` stops leaving out one language's dependents.",
+      "why": "Java and Kotlin share packages and classes, but graphify built its lookup table one file extension at a time, so neither language could see the other. A Kotlin import of a Java class landed on the file node. A Java subclass of a Kotlin class landed on a stub with no source file. A Kotlin call into a Java method got no edge. `affected` gave no warning: `affected \"Logger\"` listed only `JavaUser.java`.",
+      "what": "`_resolve_jvm_references` builds one index of Java and Kotlin types, keyed by package and type name, before the call pass runs. An edge moves only when the written name matches exactly one type that has a source file. `_resolve_kotlin_member_calls` now accepts receiver types from Java as well as Kotlin.",
+      "helps": "Anyone with a mixed Java and Kotlin repo. Changing `Logger` or `BaseScreen` now lists the dependents in both languages. An external import such as `org.springframework.stereotype.Component` still does not bind to a local `Component`.",
+      "diagram": "flowchart TD\n  subgraph Before\n    K1[KotlinUser.kt] -->|imports| F[Logger.java file node]\n    J1[JavaUser] -->|inherits| S[BaseScreen stub, no source]\n  end\n  subgraph After\n    K2[KotlinUser.kt] -->|imports| L[Logger class]\n    K3[KotlinUser.run] -->|calls| I[Logger.info]\n    J2[JavaUser] -->|inherits| B[BaseScreen class]\n  end",
+      "before": "KotlinUser.kt --imports--> Logger.java               (file node)\nJavaUser.java --imports--> com.example.ui.BaseScreen (no source)\nJavaUser     --inherits--> com.example.ui.BaseScreen (no source)\nKotlinUser.run() --/--> Logger.info()",
+      "after": "KotlinUser.kt --imports--> Logger      (class node)\nJavaUser.java --imports--> BaseScreen  (class node)\nJavaUser     --inherits--> BaseScreen  (class node)\nKotlinUser.run() --calls--> Logger.info()",
+      "limits": [
+        "Nested types are not indexed as `package.Outer.Inner` yet.",
+        "The index reads this run's files only, so a warm update may not resolve exactly like a cold build.",
+        "Java package and import facts come from a small regex, tested on the normal forms only.",
+        "An existing graph may keep its old edges until a full rebuild."
+      ],
+      "tests": [
+        "test_kotlin_import_of_java_class_targets_the_class_node",
+        "test_java_import_and_inheritance_of_kotlin_class_target_the_class_node",
+        "test_kotlin_member_call_reaches_the_java_method",
+        "test_affected_reaches_dependents_in_both_languages",
+        "test_existing_kotlin_subclass_of_java_base_is_unchanged",
+        "test_java_to_kotlin_import_without_inheritance_targets_class",
+        "test_external_java_import_does_not_bind_to_a_local_same_name_class",
+        "test_same_simple_name_in_two_packages_uses_the_import_package",
+        "test_jvm_call_does_not_bind_to_a_non_jvm_type"
+      ]
+    },
+    "4911": {
+      "summary": "You can tell graphify which project JSON files are config, with a path glob, and it reports the JSON it skipped.",
+      "why": "Since 0.8.37 `_is_config_json()` keeps a JSON file only if its name or root key is on a short list. `allowlist.json` and `gates.json` are not, so they return zero nodes while the manifest stamps them and `graphify update` reports success. A full `graphify extract` with an LLM misses them too, because `.json` counts as code and the LLM pass only takes documents, papers and images.",
+      "what": "`json.include=config/**/*.json` in `.graphifyrc`, or `--include-json` on `update` and `extract`, lets matching paths past that one check. `.gitignore`, `.graphifyignore`, the secret filter and JSON Schema rejection still win. The patterns are hashed into `cache_salt()`, so adding or removing one takes effect without `--force`.",
+      "helps": "Projects whose behaviour lives in their own JSON config. `graphify query \"allowlist\"` goes from no match to 6 nodes. The default stays the same, and a one-line summary now reports the skipped files.",
+      "diagram": "flowchart TD\n  A[JSON file detected] --> B{ignored or secret?}\n  B -- yes --> X[left out]\n  B -- no --> C{matches json.include?}\n  C -- yes --> S{JSON Schema?}\n  S -- yes --> R\n  S -- no --> I[indexed]\n  C -- no --> D{_is_config_json?}\n  D -- yes --> I\n  D -- no --> R[skipped and counted in the warning]",
+      "before": "nodes 12, edges 14, communities 2\nconfig/allowlist.json absent\ngraphify query \"allowlist\" -> No matching nodes found.",
+      "after": "json.include=config/**/*.json\nnodes 21, edges 21\ngraphify query \"allowlist\" -> 6 nodes found.\n\nAlso with hooks/**/*.json:  25 nodes, 5 communities\njson.include=all:          536 nodes, 164 communities",
+      "limits": [
+        "`json.include=all` can bring back the #1224 noise on repos with large data files. One 300-key fixture added 501 nodes.",
+        "JSON Schema documents stay skipped even under `all`.",
+        "`--include-json` exists on `update` and `extract`. `watch` reads `.graphifyrc`.",
+        "The glob supports `*`, `?` and `**`, not braces or character classes."
+      ],
+      "tests": [
+        "test_rc_parses_repeated_json_include_lines",
+        "test_rc_rejects_include_outside_the_scan_root",
+        "test_glob_matches_rc_config_and_nested_config",
+        "test_all_is_the_explicit_every_json_sentinel",
+        "test_policy_is_part_of_the_cache_salt",
+        "test_worker_init_forwards_the_policy",
+        "test_cli_override_survives_rc_activation",
+        "test_extract_json_uses_the_active_policy"
+      ]
+    },
+    "4913": {
+      "summary": "A full rebuild of a 21k-node TypeScript repo drops from 14 minutes to 24 seconds, with the same graph on the 200-file comparison.",
+      "why": "My #4854 fix added a pass that loops over every edge for every import, and resolves a path each time. Small test fixtures hid the cost. On 1,312 files the rebuild took 847 s, against 26.8 s on 0.9.48. Files grew 6.56x and time grew 33.5x.",
+      "what": "`_apply_symbol_resolution_facts` now groups reference edges by source file once, before the import loop. Each import then reads only its own file's edges. The per-edge checks did not change.",
+      "helps": "Anyone rebuilding a large JS or TS repo after a change, including `watch`. The 200-file graph compares equal: same node ids, node fields and edges.",
+      "diagram": "flowchart LR\n  subgraph Before\n    I1[each import] --> E1[scan every edge]\n    E1 --> P1[resolve its path]\n  end\n  subgraph After\n    A[all edges once] --> M[edges grouped by file]\n    I2[each import] --> M\n  end",
+      "before": "200 files / 3,200 nodes:     25.3 s\n1,312 files / 20,992 nodes: 847.0 s  (14 m 7 s)\n464 path lookups for 8 imports and 40 edges; budget 416",
+      "after": "200 files / 3,200 nodes:      4.24 s\n1,312 files / 20,992 nodes:  24.32 s",
+      "limits": [
+        "This does not close #4909. `_collect_js_symbol_resolution_facts` still parses every JS and TS tree a second time.",
+        "Graph equality was checked on the 200-file corpus, not the 21k one."
+      ],
+      "tests": [
+        "test_reference_binding_scales_with_edges_not_imports"
+      ]
     }
   },
   "issues": [

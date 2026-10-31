@@ -1,7 +1,282 @@
-{"fetched_at":"2026-10-29T15:46:45Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 40,
+{"fetched_at":"2026-10-31T18:42:04Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 43,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4913",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4913/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4913/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4913/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4913",
+      "id": 6138268445,
+      "node_id": "PR_kwDOR4-pD88AAAABMACiKw",
+      "number": 4913,
+      "title": "perf(resolve): index reference edges by source (#4909)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-31T18:23:15Z",
+      "updated_at": "2026-10-31T18:31:33Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4913",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4913",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4913.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4913.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nRefs #4909.\n\nThe current full rebuild is O(imports times edges) in `_apply_symbol_resolution_facts`. On a 21k-node TypeScript corpus it takes 14 minutes. The pass added for #4854 loops over every edge for every import so it can rewrite a reference edge from a sourceless stub to the imported declaration.\n\nThe index is keyed by the same `_js_source_path(...)` value the old comparison computed. The per-edge checks stay the same:\n\n- relation must be `references`\n- target must be a sourceless stub\n- stub label must match the imported or local name\n\nNo graph schema, cache schema, or manifest field changes. The written graph is identical on the 200-file fixture.\n\nThis does not close the rest of #4909. `_collect_js_symbol_resolution_facts` still re-parses every JS/TS tree, and the original 0.9.48 profile has other costs. This removes the current regression that makes a full rebuild worse than the reported version.\n\n## Type of change\n\n- [ ] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [x] Refactor\n- [ ] Security fix\n\n## Evidence\n\n**Before:** current `v8` at `a0946f96`.\n\n```text\n200 files / 3,200 nodes:     25.3 s\n1,312 files / 20,992 nodes: 847.0 s  (14 m 7 s)\n```\n\n**After:** branch `fix/4909-reference-index`.\n\n```text\n200 files / 3,200 nodes:      4.24 s\n1,312 files / 20,992 nodes:  24.32 s\n```\n\nSpeedup on the 21k corpus: about 34.8x.\n\nScaling:\n\n```text\nfiles:   200 -> 1,312      6.56x\nbefore:  25.3 -> 847.0     33.5x\nafter:    4.24 -> 24.32     5.7x\n```\n\nThe before path is quadratic. The after path is close to linear.\n\n**Failing test before the fix:**\n\n```text\n464 path lookups for 8 imports and 40 edges; linear budget is 416\n```\n\n**After:**\n\n```text\n1 passed\n```\n\nThe test counts `_js_source_path` calls and requires a linear budget. It does not measure wall time, so it will not flake on a busy CI machine.\n\n**Graph equality on the 200-file corpus:**\n\n```text\nnodes: 3,200 both\nlinks: 5,400 both\nnode ids equal: yes\nnode field diffs: 0\nedge set equal: yes\nmissing edges: 0\nextra edges: 0\n```\n\n## Verification & Invariants\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\nThe invariant: the cost of reference binding scales with nodes, edges, and imports, not with imports times edges. A per-import full scan fails the new test.\n\nLimitation: the index holds reference edges grouped by source file for the duration of this pass. That is one list per file, not a second graph. Memory is proportional to the reference edge count.\n\n## How was this tested?\n\n```text\n.venv/bin/python -m ruff check graphify/extractors/resolution.py \\\n  tests/test_4909_reference_binding_scale.py\n\n.venv/bin/python -m pytest tests/test_4909_reference_binding_scale.py \\\n  tests/test_file_id_collision_4854.py tests/test_watch.py \\\n  tests/test_extract.py tests/test_build.py -q\n\n.venv/bin/python -m pytest -q\n```\n\nResults:\n\n```text\nruff: All checks passed\n\ntargeted: 745 passed, 1 skipped, 1 xfailed in 23.62s\n\nfull: 9191 passed, 18 skipped, 1 xfailed in 608.40s\n```\n\n## Merge Danger\n\n**Door:** Two-way.\n\nThe change is local to one resolution pass and can be reverted without a graph migration. No schema bump and no cache invalidation.\n\n**Blast Radius:** JS/TS reference binding.\n\nThe main risk is a subtle change in which edges are rewritten. The index uses the same source path and the same checks as the old loop. The 200-file graph comparison found identical nodes, fields, and edges, and all #4854 tests pass. A revert restores the old behavior and the old cost.\n\n## Graphify-specific checklist\n\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. No source fragments changed.\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4913/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4913/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4911",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4911/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4911/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4911/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4911",
+      "id": 6135448212,
+      "node_id": "PR_kwDOR4-pD88AAAABL92wPw",
+      "number": 4911,
+      "title": " feat(json): add scoped json.include for project configs (#4898)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        },
+        {
+          "id": 12626523901,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2_Q",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/needs:title",
+          "name": "needs:title",
+          "color": "fbca04",
+          "default": false,
+          "description": "PR title should follow the conventional-commit format",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-10-31T13:41:01Z",
+      "updated_at": "2026-10-31T14:00:03Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4911",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4911",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4911.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4911.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\r\n\r\nFixes #4898.\r\n\r\nSince v0.8.37, `_is_config_json()` has accepted only a short filename list, a few suffixes, and nine root keys. Framework configs such as `allowlist.json`, `registry.json`, `gates.json`, and `settings.template.json` fall outside that list, so they return zero nodes. The manifest still stamps them, and `graphify update` reports success.\r\n\r\nThe loss is broader than `update`. `.json` is in `CODE_EXTENSIONS`, and the semantic pass only receives documents, papers, and images. A full `graphify extract` with an LLM does not index these files either.\r\n\r\nThis change adds an explicit policy:\r\n\r\n```text\r\n# .graphifyrc\r\njson.include=config/**/*.json\r\njson.include=hooks/**/*.json\r\n```\r\n\r\n```bash\r\ngraphify update . --include-json 'config/**/*.json'\r\ngraphify extract . --code-only --include-json 'hooks/**/*.json'\r\n```\r\n\r\nThe default stays unchanged. A matching path bypasses only `_is_config_json()`. `.gitignore`, `.graphifyignore`, the secret filter, and JSON Schema rejection still win. `json.include=all` is the explicit whole-repo escape hatch.\r\n\r\nPolicy changes invalidate the AST cache and the manifest gate. The include patterns are hashed into `cache_salt()`, which the manifest already stores under its generic `language` field. Enabling or removing the policy therefore works on unchanged files without `--force`.\r\n\r\nThe change also prints one summary line when JSON is skipped, so the decision is visible:\r\n\r\n```text\r\nskipped 5 JSON file(s) as data/config; set json.include=<glob> in .graphifyrc to index matching paths (#4898).\r\n```\r\n\r\n## Type of change\r\n\r\n- [ ] Bug fix\r\n- [x] New feature\r\n- [ ] Documentation\r\n- [x] Tests or CI\r\n- [ ] Refactor\r\n- [ ] Security fix\r\n\r\n## Evidence\r\n\r\n**Before:** default policy on the regression fixture.\r\n\r\n```text\r\nnodes 12, edges 14, communities 2\r\nconfig/allowlist.json absent\r\ngraphify query \"allowlist\" -> No matching nodes found.\r\n```\r\n\r\n**After:** scoped `config/**/*.json`.\r\n\r\n```text\r\nnodes 21, edges 21\r\ngraphify query \"allowlist\" -> 6 nodes found.\r\nallowlist.json --contains--> roles, paths, enabled\r\n```\r\n\r\nThe full test fixture also includes `hooks/**/*.json`:\r\n\r\n```text\r\nnodes 25, edges 24, communities 5\r\n```\r\n\r\nThe same fixture under `json.include=all`:\r\n\r\n```text\r\nnodes 536, edges 533, communities 164\r\n```\r\n\r\nOne 300-key data fixture added 501 nodes. That is the #1224 failure shape, which is why `all` is an escape hatch and the glob is the recommended path.\r\n\r\n**Tests:**\r\n\r\n```text\r\n$ .venv/bin/python -m pytest tests/test_json_include_4898.py -q\r\n19 passed\r\n\r\n$ .venv/bin/python -m pytest -q\r\n9209 passed, 18 skipped, 1 xfailed in 666.38s\r\n\r\n$ .venv/bin/python -m ruff check graphify/rcfile.py graphify/cli.py \\\r\n    graphify/extractors/json_config.py graphify/extract.py \\\r\n    tests/test_json_include_4898.py tests/test_language_overrides.py\r\nAll checks passed!\r\n```\r\n\r\n## Verification & Invariants\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n\r\nThe invariant: every detected JSON source is either indexed, explicitly excluded by the user, or reported as skipped with a way to change the decision.\r\n\r\nThe tests pin:\r\n\r\n- Default skip and warning.\r\n- Direct and nested glob matches.\r\n- `*` does not cross a slash; `**/` matches zero or more directories.\r\n- Absolute paths and `..` are rejected.\r\n- `all` indexes data JSON but still respects ignore and secret filters.\r\n- JSON Schema files stay out under `all` (#2255).\r\n- Enabling the policy reindexes unchanged files without `--force`.\r\n- Removing the policy evicts the nodes without `--force`.\r\n- The policy reaches process-pool workers.\r\n- The CLI override wins over `.graphifyrc`.\r\n\r\nKnown limitations:\r\n\r\n- `json.include=all` can recreate #1224 on repos with large data fixtures. Scoped globs are the safe form.\r\n- JSON Schema documents remain skipped even under `all`.\r\n- `--include-json` is available on `update` and `extract`. `watch` reads `.graphifyrc`.\r\n- The glob matcher supports `*`, `?`, and `**`. It does not support brace expansion or character classes.\r\n\r\n## How was this tested?\r\n\r\n```text\r\n.venv/bin/python -m pytest tests/test_json_include_4898.py -q\r\n.venv/bin/python -m pytest -q\r\n.venv/bin/python -m ruff check graphify/rcfile.py graphify/cli.py \\\r\n  graphify/extractors/json_config.py graphify/extract.py \\\r\n  tests/test_json_include_4898.py tests/test_language_overrides.py\r\n.venv/bin/python -m graphify update .\r\n```\r\n\r\nBranch `fix/4898-json-include` is based on `upstream/v8` (`a0946f96`, v0.9.99).\r\n\r\n## Merge Danger\r\n\r\n**Door:** Two-way.\r\n\r\nThe default path is unchanged. No cache schema bump and no graph format change. The policy salt is added only when `json.include` is active, so existing manifests without it re-extract the affected JSON once. Removing the include evicts the previously added nodes on the next rebuild.\r\n\r\n**Blast Radius:** Config indexing.\r\n\r\nThe main risk is a user choosing `json.include=all` on a data-heavy repo and getting the #1224 noise again. The warning and the measured 164-community result document that cost. Ignore rules, secret filtering, and JSON Schema protection are unchanged.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. No source fragments changed.\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python). Include globs cannot escape the scan root and cannot bypass secret filtering.\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\r\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4911/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4911/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4879",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4879/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4879/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4879/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4879",
+      "id": 6124697464,
+      "node_id": "PR_kwDOR4-pD88AAAABL1XGYw",
+      "number": 4879,
+      "title": "fix(extract): resolve Java/Kotlin imports and calls across the JVM (#4874)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-10-30T18:21:51Z",
+      "updated_at": "2026-10-30T18:31:51Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4879",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4879",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4879.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4879.patch",
+        "merged_at": null
+      },
+      "body": "## Summary\n\nJava and Kotlin share package names, class names, and call sites. Graphify built its cross-file type index from one extension at a time, so each language could not see the other:\n\n```text\nbefore\nKotlinUser.kt --imports--> Logger.java              (file node)\nJavaUser.java --imports--> com.example.ui.BaseScreen (source-less stub)\nJavaUser     --inherits--> com.example.ui.BaseScreen (source-less stub)\nKotlinUser.run() --/--> Logger.info()\n\nafter\nKotlinUser.kt --imports--> Logger      (class node)\nJavaUser.java --imports--> BaseScreen  (class node)\nJavaUser     --inherits--> BaseScreen  (class node)\nKotlinUser.run() --calls--> Logger.info()\n```\n\nThis PR builds one JVM-wide package and type index and uses it before the shared call-evidence pass runs. That gives imports, inheritance, references, and member calls one place to resolve the same namespace.\n\nCloses #4874.\n\n## What does this PR do?\n\n- Adds `_jvm_package_name`, `_jvm_imports_by_file`, and `_resolve_jvm_references` in `graphify/extract.py`.\n- Indexes sourced Java and Kotlin type nodes by `(package, type name)`.\n- Repoints Java and Kotlin import, inheritance, and reference edges only when the written FQN names exactly one sourced type.\n- Keeps file-level import edges where they already exist, so `affected <File>` still reaches importers.\n- Lets `_resolve_kotlin_member_calls` accept JVM receiver types instead of only `.kt` and `.kts` files.\n- Leaves external imports on their stubs. A bare or same-named local class is never chosen.\n- Adds a regression suite that uses the issue's four-file project plus external, ambiguous, and non-JVM controls.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [ ] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Evidence\n\n**Before:** `affected \"Logger\"` returned only `JavaUser.java`. `affected \"BaseScreen\"` returned only `KotlinUser.kt`.\n\n**After:**\n\n```text\naffected \"Logger\"\n  KotlinUser.kt [imports]\n  JavaUser.java [imports]\n  .run() [calls] JavaUser.java\n  .run() [calls] KotlinUser.kt\n\naffected \"BaseScreen\"\n  KotlinUser.kt [imports]\n  JavaUser.java [imports]\n  JavaUser [inherits]\n  KotlinUser [inherits]\n```\n\nThe regression suite is 9 tests:\n\n```text\ntests/test_4874_jvm_resolution.py    9 passed\n```\n\nFull suite:\n\n```text\n8975 passed, 17 skipped, 1 xfailed in 510.20s\n```\n\n## Verification & Invariants\n\nThe invariant: if a Java or Kotlin file imports a type that exists in the scanned corpus, and exactly one sourced declaration matches the written package and type name, the edge must reach that declaration node. If the candidate is missing or ambiguous, the reference stays unresolved.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue on clean `0.9.97` (`0a8cd4e1`) before changing code.\n- [x] Made the **smallest fix** that covers both directions of the JVM namespace.\n- [x] Added a **regression test** for each failure and for the controls.\n- [x] Kept the PR description synchronized with the final implementation.\n- [x] Documented limitations below.\n\nThe exact FQN is the only key used. Source-less stubs are not candidates, and two candidates produce no edge. That keeps these existing behaviours:\n\n- `org.springframework.stereotype.Component` does not bind to a local `Component`.\n- `a.Logger` and `b.Logger` are separated by the import package.\n- A Kotlin call cannot bind to a same-named Python class.\n\nNo AST cache schema changes. Resolution runs on every extraction, so a full rebuild is enough to heal an existing graph.\n\nKnown limitations:\n\n- Nested JVM types are not indexed as `package.Outer.Inner` yet.\n- The shared index reads this run's `per_file` results. Unchanged JVM declarations still need to be added through `resolution_context_nodes` for warm updates to resolve exactly like a cold build.\n- Java package and import facts are read from source with a small regex instead of a second tree-sitter parse. The tests cover the normal declaration forms, not every legal Java formatting variant.\n\n## How was this tested?\n\n```text\nPYTHONPATH=. .venv/bin/python -m pytest -q tests/test_4874_jvm_resolution.py\n9 passed\n\nPYTHONPATH=. .venv/bin/python -m pytest -q\n8975 passed, 17 skipped, 1 xfailed in 510.20s\n\ngraphify update <fixture>\ngraphify affected Logger --depth 2\ngraphify affected BaseScreen --depth 2\n```\n\nThe CLI output matches the expected result in #4874.\n\n## Merge Danger\n\n**Door:** two-way. Reverting the branch restores the previous edges, and no persisted schema or cache format changes.\n\n**Blast Radius:** resolver. Mixed Java/Kotlin repositories get new class-level edges. Single-language repositories and non-JVM languages keep their existing behaviour.\n\nA graph built before this change may keep its old edges until a full rebuild. A warm `--update` is not guaranteed to repair it.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments.\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] I disclosed AI authorship in my commit messages. The commit trailers still need this before merge.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4879/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4879/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4857",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -47,16 +322,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-29T13:28:58Z",
-      "updated_at": "2026-10-29T13:38:33Z",
-      "closed_at": null,
+      "updated_at": "2026-10-30T23:00:06Z",
+      "closed_at": "2026-10-30T23:00:06Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
