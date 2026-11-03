@@ -1059,6 +1059,12 @@
       ]
     },
     "4572": {
+      "landed": {
+        "commits": [
+          "e7601946"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      },
       "summary": "A package.json dependency's manifest entry is linked to the code that imports the package again, and explain react finds one node instead of two.",
       "why": "Each dependency made two nodes labelled react: the manifest entry, which has the version line, and ref_react, which code imports resolve to. The #1764 fix moved the imports edge to the manifest so it would stop reading as react imports react, and that removed the only link between them. On v8 the entry is 4 hops from the importing code, the two land in different communities, and explain react exits 3 as ambiguous.",
       "what": "The manifest entry gets a declares edge to ref_react and is relabelled name@range, for example react@^19.0.0. The range is kept to one line and capped at 40 characters. ref_react keeps the bare name, so no edge joins two react nodes and react resolves to one node. A blank range links nothing, the same as an empty one. The AST cache schema goes from 20 to 21.",
@@ -2042,6 +2048,14 @@
       }
     },
     "4879": {
+      "landed": {
+        "commits": [
+          "128f08c3",
+          "5945b5a5",
+          "992428e6"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      },
       "summary": "Java and Kotlin references now reach the real class in either direction, so `affected` stops leaving out one language's dependents.",
       "why": "Java and Kotlin share packages and classes, but graphify built its lookup table one file extension at a time, so neither language could see the other. A Kotlin import of a Java class landed on the file node. A Java subclass of a Kotlin class landed on a stub with no source file. A Kotlin call into a Java method got no edge. `affected` gave no warning: `affected \"Logger\"` listed only `JavaUser.java`.",
       "what": "`_resolve_jvm_references` builds one index of Java and Kotlin types, keyed by package and type name, before the call pass runs. An edge moves only when the written name matches exactly one type that has a source file. `_resolve_kotlin_member_calls` now accepts receiver types from Java as well as Kotlin.",
@@ -2093,6 +2107,13 @@
       ]
     },
     "4913": {
+      "landed": {
+        "commits": [
+          "ecec030c",
+          "bed3864d"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      },
       "summary": "A full rebuild of a 21k-node TypeScript repo drops from 14 minutes to 24 seconds, with the same graph on the 200-file comparison.",
       "why": "My #4854 fix added a pass that loops over every edge for every import, and resolves a path each time. Small test fixtures hid the cost. On 1,312 files the rebuild took 847 s, against 26.8 s on 0.9.48. Files grew 6.56x and time grew 33.5x.",
       "what": "`_apply_symbol_resolution_facts` now groups reference edges by source file once, before the import loop. Each import then reads only its own file's edges. The per-edge checks did not change.",
