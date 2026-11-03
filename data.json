@@ -329,6 +329,51 @@
         4913
       ],
       "reported_by": "danieltamas"
+    },
+    {
+      "id": "4923",
+      "title": "Hook rebuild ignores `--code-only` scope: code-only graph becomes full graph",
+      "issue": 4923,
+      "prs": [
+        4939
+      ],
+      "reported_by": "stoneskin"
+    },
+    {
+      "id": "4925",
+      "title": "`file_hash` opens the lowercased path on Windows, so files with uppercase names fail on case-sensitive dirs",
+      "issue": 4925,
+      "prs": [
+        4937
+      ],
+      "reported_by": "AndresDiagoM"
+    },
+    {
+      "id": "4940",
+      "title": "Shrink-guard refuses a valid merge when exact-duplicate dedup drops nodes the saved cache references",
+      "issue": 4940,
+      "prs": [
+        4952
+      ],
+      "reported_by": "webmasterarbez"
+    },
+    {
+      "id": "4935",
+      "title": "Kotlin calls to overloaded Java methods and from init blocks get no edge; inherited external calls bind to unrelated classes",
+      "issue": 4935,
+      "prs": [
+        4956
+      ],
+      "reported_by": "rafaelltlins"
+    },
+    {
+      "id": "4955",
+      "title": "build_merge(dedup=False) refuses a no-op merge: #479 guard counts intentional ghost merges (#1145, #3344) as drops",
+      "issue": 4955,
+      "prs": [
+        4957
+      ],
+      "reported_by": "cabgab-dev"
     }
   ],
   "prs": {
@@ -2061,6 +2106,165 @@
       ],
       "tests": [
         "test_reference_binding_scales_with_edges_not_imports"
+      ]
+    },
+    "4952": {
+      "landed": {
+        "commits": [
+          "ba6d292b",
+          "e7bf2adb",
+          "4c81e6f5",
+          "7566615d"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      },
+      "summary": "An --update that re-extracts one doc is no longer refused when dedup folded it into an untouched twin.",
+      "why": "The #479 write guard calls a saved node lost when its id is missing from the new graph. Entity dedup also removes ids: it folds a re-extracted node into a twin, and the content lives on under the twin's id. So an --update that re-extracted GLOSSARY.md alone was refused, and graph.json stayed stale.",
+      "what": "Dedup now reports which ids it merged away. The map rides on the built graph to `to_json`, and the guard counts a merged id as present when its survivor is in the new graph. The node-count check got the same allowance.",
+      "helps": "Anyone who runs --update on a graph that holds twin nodes for the same concept. Before, graph.json stayed at its old state and the refusal gave no way forward.",
+      "diagram": "flowchart LR\n  subgraph Before\n    S1[saved glossary_the_nudge] --> D1[dedup folds it into claude_the_nudge]\n    D1 --> G1[guard: glossary_the_nudge missing]\n    G1 --> R1[refuse the write]\n  end\n  subgraph After\n    S2[saved glossary_the_nudge] --> D2[dedup reports the fold]\n    D2 --> G2[guard: survivor claude_the_nudge is present]\n    G2 --> W2[write the graph]\n  end",
+      "before": "[graphify] Deduplicated 2 node(s) (2 exact).\n[graphify] WARNING: Refusing to overwrite — saved semantic node(s) are missing from the new graph: glossary_first_contact, glossary_the_nudge.\ngraph written: False",
+      "after": "graph written: True, one node per concept,\nan edge that pointed at the merged id now points at the survivor\n\ntests/test_shrink_guard_dedup_merge_4940.py: 17 passed\nfull suite: 9405 passed, 18 skipped, 1 xfailed",
+      "limits": [
+        "`watch._check_shrink` has its own copy of the guard and no graph to carry the map, so an update that goes through it can still refuse a merge.",
+        "The extract CLI keeps its own dedup-shrink policy (`--allow-dedup-shrink`, #3774). It is not touched.",
+        "I did not trace how the reporter's graph came to hold both twins."
+      ],
+      "tests": [
+        "test_re_extracting_a_doc_alone_writes_when_dedup_folds_it_into_its_twins",
+        "test_an_edge_to_the_merged_away_id_is_kept_and_rewired",
+        "test_same_file_exact_duplicates_do_not_block_the_write",
+        "test_two_saved_ids_folded_into_one_new_survivor_write",
+        "test_the_updated_graph_has_one_node_per_concept",
+        "test_full_rebuild_that_merges_the_same_twins_writes",
+        "test_a_real_loss_next_to_a_merge_is_refused_and_only_it_is_named",
+        "test_a_survivor_that_is_itself_gone_excuses_nothing",
+        "test_the_allowance_counts_only_merges_whose_survivor_is_present",
+        "test_the_dedup_map_is_never_written_into_graph_json"
+      ]
+    },
+    "4939": {
+      "landed": {
+        "commits": [
+          "f3421ff1",
+          "9e6f271a",
+          "2207cf22",
+          "b80cd838",
+          "93b7a9c1"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      },
+      "summary": "A graph built with --code-only stays code-only after hook, update and watch rebuilds.",
+      "why": "A graph built with `graphify extract . --code-only` grew .md, .mdx and .qmd nodes on the next git hook, `graphify update` or `graphify watch` rebuild. `_rebuild_code` has no --code-only flag and nothing recorded the scope, so it re-detected the repo and added every markdown file that has an AST extractor.",
+      "what": "`extract --code-only` now writes `code_only: true` into `.graphify_build.json`, and `_rebuild_code` reads it back. The flag is part of the state the no-change gate compares. A flagless extract clears it only when it goes on to ingest docs.",
+      "helps": "Anyone with a code-only graph who uses the git hooks, update or watch. In the scratch repo the update went from 17 nodes (12 from .md) to the original 5.",
+      "diagram": "flowchart LR\n  subgraph Before\n    E1[extract --code-only] --> R1[rebuild re-detects the repo]\n    R1 --> M1[adds .md/.mdx/.qmd nodes]\n  end\n  subgraph After\n    E2[extract --code-only] --> B2[write code_only in .graphify_build.json]\n    B2 --> R2[rebuild reads the scope]\n    R2 --> K2[skips the doc quick-scan]\n  end",
+      "before": "$ graphify extract . --code-only\nnodes 5, edges 7, from .md: 0\n$ graphify update .\nnodes 17, edges 16, from .md: 12",
+      "after": "$ graphify extract . --code-only\nnodes 5, edges 7, from .md: 0\n$ graphify update .\nnodes 5, edges 7, from .md: 0",
+      "limits": [
+        "A graph built before this change has no recorded scope. Run `extract --code-only` once to record it.",
+        "Doc nodes already in the graph are not evicted when the scope turns on, and a rebuild no longer refreshes them.",
+        "The two side notes in the issue (the CLI and the hook disagreeing about docs without a key, and manifest.json changing on every rebuild) are not part of this PR."
+      ],
+      "tests": [
+        "test_full_rebuild_keeps_code_only_scope",
+        "test_incremental_rebuild_keeps_code_only_scope",
+        "test_update_cli_keeps_code_only_scope",
+        "test_doc_added_after_extract_stays_out",
+        "test_code_only_rebuild_still_tracks_new_code",
+        "test_code_only_rebuild_still_tracks_deleted_code",
+        "test_default_graph_still_gets_doc_nodes",
+        "test_issue_repro_via_real_post_commit_hook",
+        "test_doc_nodes_already_in_graph_survive_turning_scope_on",
+        "test_build_state_differs_by_scope",
+        "test_aborted_flagless_extract_keeps_scope",
+        "test_flagless_extract_that_ingests_docs_resets_scope",
+        "test_flagless_extract_on_doc_free_corpus_keeps_scope"
+      ]
+    },
+    "4937": {
+      "landed": {
+        "commits": [
+          "4d678b4a",
+          "5c4a8589",
+          "99b8da78",
+          "ff8ddf54"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept."
+      },
+      "summary": "On Windows, a file with an uppercase name hashes and caches under its real name instead of failing or sharing an entry with its lowercase twin.",
+      "why": "On Windows, `file_hash()` ran the path through `os.path.normcase()`, which lowercased the path used to read the file. On a case-sensitive WSL share, README.md became readme.md and the rebuild failed. The same lowercased value was the cache key, so when both README.md and readme.md existed, one file got the other's cache entry.",
+      "what": "The path used for reading and the path used for the cache key are now separate. `file_hash()` and `cached_word_count()` read through `os_long_path()`, and `_normalize_path()` keeps case.",
+      "helps": "Windows users with uppercase file names, especially on a case-sensitive share. On POSIX nothing changes.",
+      "diagram": "flowchart LR\n  subgraph Before\n    P1[README.md] --> N1[normcase lowercases it]\n    N1 --> IO1[read readme.md: not found]\n    N1 --> K1[cache key readme.md shared with the other file]\n  end\n  subgraph After\n    P2[README.md] --> IO2[read README.md through os_long_path]\n    P2 --> K2[cache key keeps case]\n  end",
+      "before": "file_hash requires a file, got: ...\\readme.md\n\nwith both README.md and readme.md present:\nfile_hash(README.md) == file_hash(readme.md)\nload_cached(readme.md) returned the entry saved for README.md\n\ntests/test_cache_windows_case_4925.py: 8 failed",
+      "after": "tests/test_cache_windows_case_4925.py: 8 passed\ncache-focused suites: 146 passed, 1 skipped\nfull suite: 9396 passed, 18 skipped, 1 xfailed",
+      "limits": [
+        "On Windows, a case-only spelling change of a path can now miss the cache. That is safer than returning another file's entry."
+      ],
+      "tests": [
+        "test_file_hash_accepts_uppercase_file",
+        "test_file_hash_accepts_uppercase_root",
+        "test_save_and_load_roundtrip_uppercase",
+        "test_case_variants_with_same_content_have_different_hash",
+        "test_case_variants_do_not_cross_hit_the_semantic_cache",
+        "test_hardlink_aliases_keep_distinct_hashes",
+        "test_symlink_aliases_keep_distinct_hashes",
+        "test_cached_word_count_uses_stat_index_for_uppercase"
+      ]
+    },
+    "4956": {
+      "summary": "Kotlin calls to an overloaded method and calls inside an init block now get an edge, and a call no longer binds to an unrelated class through an outside base class.",
+      "why": "Three Kotlin and Java calls edges were missing or wrong. Overloads share one Java node id, so the resolver read two entries as an ambiguous name. The engine never visited `init { }`. And `class KotlinScreen : Activity()` calling `getString(1)` bound to the only `getString` in the repo, a method of an unrelated class.",
+      "what": "Three independent fixes. The overload guard counts distinct ids. An `init` block feeds the same initializer path a property initializer uses, owned by its class. For a class with a base declared outside the repo, a bare call keeps only candidates that are not class members, belong to the class chain, or are imported by name.",
+      "helps": "Anyone who reads the call graph of a Kotlin or mixed Kotlin/Java app. The edge to the wrong class is gone, and the two missing edges are there.",
+      "diagram": "flowchart TD\n  C[bare call in a Kotlin or Java class] --> W[walk own class, in-repo bases, enclosing classes]\n  W --> X{any base declared outside the repo?}\n  X -- no --> U[candidates unchanged]\n  X -- yes --> F[keep only top-level functions, class-chain members, names imported by name]",
+      "before": "KotlinCaller.kt  .callSingle()  -> Logger.java  .single()      [EXTRACTED]\nKotlinScreen.kt  .title()       -> Prefs.java   .getString()   [INFERRED]   (unrelated class)\nmissing: KotlinCaller.callOverloaded -> Logger.overloaded\nmissing: KotlinInit (init block)     -> Logger.single\n\ntests/test_kotlin_java_call_edges_4935.py: 10 failed, 7 passed",
+      "after": "JavaCaller.java  .callOverloaded()  -> Logger.java  .overloaded()  [EXTRACTED]\nJavaCaller.java  .callSingle()      -> Logger.java  .single()      [EXTRACTED]\nKotlinCaller.kt  .callOverloaded()  -> Logger.java  .overloaded()  [EXTRACTED]\nKotlinCaller.kt  .callSingle()      -> Logger.java  .single()      [EXTRACTED]\nKotlinInit.kt    KotlinInit         -> Logger.java  .single()      [EXTRACTED]\n(no edge to Prefs.getString)\n\ntests/test_kotlin_java_call_edges_4935.py: 17 passed\nfull suite: 9580 passed, 18 skipped, 1 xfailed",
+      "limits": [
+        "A class with no outside base that calls an unrelated class's method by bare name still gets the edge. It is not in the issue and not changed.",
+        "A wildcard import of an object member, called bare from a class with an outside base, loses its edge, because the graph does not record which names a wildcard brings in. A `with(p) { ... }` receiver lambda in such a class loses it too.",
+        "Three older gaps remain: a bare call to an own member inside an initializer, calls in a secondary constructor body, and the owner of a companion `init`."
+      ],
+      "tests": [
+        "test_kotlin_call_to_an_overloaded_java_method_resolves",
+        "test_kotlin_call_to_an_overloaded_kotlin_object_method_resolves",
+        "test_an_init_block_call_attaches_to_its_class",
+        "test_an_init_block_call_to_an_overloaded_method_resolves",
+        "test_a_class_with_a_property_and_an_init_block_gets_both_edges",
+        "test_an_init_block_is_attributed_like_a_property_initializer_in_a_nested_class",
+        "test_an_external_base_does_not_bind_a_bare_call_to_an_unrelated_class",
+        "test_a_java_class_with_an_external_base_gets_the_same_guard",
+        "test_an_in_repo_base_that_extends_an_external_class_still_taints_its_children",
+        "test_a_top_level_function_is_still_called_from_a_class_with_an_external_base",
+        "test_a_member_imported_by_name_survives_an_external_base_in_kotlin",
+        "test_a_member_imported_by_name_survives_an_external_base_in_java"
+      ]
+    },
+    "4957": {
+      "summary": "build_merge no longer refuses a graph that holds a ghost twin, so an update goes through instead of failing with a drop error.",
+      "why": "`build_from_json` folds three kinds of duplicate on purpose: a semantic ghost into its AST twin (#1145), a document node whose label names a file into that file (#3344), and a bare method into its AST method (#3705). The #479 guard in `build_merge` excused only the #1799 doc twin, so it read these folds as nodes lost from sources nobody re-extracted or pruned. `dedup=False` does not stop the fold.",
+      "what": "The ghost folds are now reported on the `{merged-away id: survivor id}` channel entity dedup already uses (#4940). The `build_merge` guard excuses an id whose survivor is still in the graph, and `to_json` reads the same map, so its own guard no longer misses the method fold.",
+      "helps": "Anyone updating a graph that contains such twins through `build_merge`, including an ordinary update where a re-extracted file brings a new AST node next to a saved semantic twin. That raised before, with an error pointing at `prune_sources`.",
+      "diagram": "flowchart LR\n  subgraph Before\n    G1[saved ghost client_py] --> F1[build_from_json folds it into src_client]\n    F1 --> C1[guard: client_py dropped]\n    C1 --> E1[ValueError, no way through]\n  end\n  subgraph After\n    G2[saved ghost client_py] --> F2[fold reported in the remap]\n    F2 --> C2[guard: survivor src_client is present]\n    C2 --> W2[merge and write succeed]\n  end",
+      "before": "same file, same label (#1145 path): ValueError: graphify: build_merge would drop 1 node(s) ... graph would go 2 → 1 nodes. (#479)\ndoc mentions the file by name (#3344 path): ValueError: graphify: build_merge would drop 1 node(s) ... graph would go 2 → 1 nodes. (#479)\n\ntests/test_build_merge_ghost_fold_4955.py: 8 failed, 6 passed",
+      "after": "same file, same label: written, 1 node (src_client)\ndoc mentions the file: written, 1 node (src_client)\nmethod ghost (.run() + run): build_merge ok, to_json writes\n\ntests/test_build_merge_ghost_fold_4955.py: 14 passed\nfull suite: 9577 passed, 18 skipped, 1 xfailed",
+      "limits": [
+        "`dedup=False` still merges an AST twin with its ghost, as `test_ast_twin_remains_canonical_despite_semantic_location_drift` pins. Only whether the guard refuses changes, not node counts.",
+        "`watch._check_shrink` calls the lost-node check without the fold map. I did not reproduce a refusal there.",
+        "A saved id that is rekeyed and then folded in the same run might miss the map. I did not build that combination.",
+        "The reporter's three graphs that still fail after filtering these patterns are unexplained."
+      ],
+      "tests": [
+        "test_same_file_same_label_twin_is_not_an_unexplained_drop",
+        "test_document_naming_a_file_is_not_an_unexplained_drop",
+        "test_directory_qualified_file_label_folds",
+        "test_method_ghost_is_not_an_unexplained_drop",
+        "test_to_json_accepts_a_method_ghost_fold",
+        "test_edge_into_the_ghost_is_repointed_to_the_survivor",
+        "test_incremental_update_folds_new_ast_node_into_saved_semantic_twin",
+        "test_merge_then_write_round_trips_each_fold",
+        "test_ghost_fold_map_is_not_written_to_graph_json"
       ]
     }
   },
