@@ -1,7 +1,381 @@
-{"fetched_at":"2026-11-02T23:10:41Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 48,
+{"fetched_at":"2026-11-07T06:13:42Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 52,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5075",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5075/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5075/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5075/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/5075",
+      "id": 6255288144,
+      "node_id": "PR_kwDOR4-pD88AAAABNdsjnA",
+      "number": 5075,
+      "title": "fix(watch): prune ignored directories from the watch tree (#5033)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-11-07T04:49:32Z",
+      "updated_at": "2026-11-07T04:49:41Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": true,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/5075",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/5075",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/5075.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/5075.patch",
+        "merged_at": null
+      },
+      "body": "## Stacked on #5046\n\nThis PR is stacked on #5046. The first five commits are #5046's event-filter fix; review only the five commits after `56bb24b3`.\n\nUntil #5046 merges, the GitHub diff includes both. After it merges, I will rebase this onto `v8` and retarget. The branch is `fix/5033-pruned-watch`.\n\n## What does this PR do?\n\nFixes #5074.\n\nOn Linux, `graphify watch` installs one inotify watch per directory under the root, including directories that `.graphifyignore` and `.gitignore` exclude. The handler drops their events, but the watches still consume `max_user_watches`. A 2,024-directory test tree used 2,024 watches when only 23 directories were kept. The reporter's tree used 45,885.\n\nThis PR replaces the recursive schedule on Linux with a pruned, non-recursive watch tree:\n\n```text\nbefore:\n  observer.schedule(root, recursive=True)\n  root -> keep -> src\n       -> node_modules -> vendor -> ...     every directory gets a watch\n\nafter:\n  add_tree(root)\n  root -> keep -> src                       only kept directories\n       (node_modules skipped before schedule)\n```\n\nThe watch tree is maintained from directory events:\n\n- create and move-in: `add_tree()`\n- delete and move-out: `remove_tree()`\n- file events whose parent is not watched: dropped\n\n`add_tree()` schedules kept directories and then scans each one. Files that already exist are synthesized as `FileCreatedEvent`, so a file written in the same instant as its directory is not missed.\n\n## The rule\n\nA watch on an ignored directory is pure cost. It takes a slot from the per-user watch table and can never produce a useful rebuild, because `Handler.on_any_event` drops the event anyway.\n\nwatchdog's recursive mode cannot prune because it walks the tree before the handler sees anything. The fix has to move the walk into `watch()`, where `ignored_predicate()` is available. That is the same predicate `detect()` uses, so the watcher and the scanner agree on what is kept.\n\n## What changes\n\n- `add_tree(path, emit_existing=...)` walks kept directories and schedules each one.\n- `schedule_one(path)` skips ignored directories and `graphify-out/`.\n- `remove_tree(path)` unschedules a path and everything below it.\n- Directory create, delete and move events maintain the tree.\n- A new directory is scanned and its existing files are replayed, closing the `mkdir && write` race.\n- `.graphifyignore` and `.gitignore` changes rebuild the predicate and reschedule the tree.\n- A file event whose parent is not in the watched map, or no longer exists, is dropped. This covers a directory moved out of the root while watchdog delays `DirMovedEvent`.\n- `ENOSPC` from `schedule_one` logs the directory and continues. Before this, the exception killed the observer thread.\n- Non-Linux keeps the recursive schedule. The limit is inotify-specific.\n\n## Commits\n\n```text\n76a01bb6  test(watch): pin the pruned watch tree (#5033)\n52246a8d  fix(watch): survive ENOSPC while adding a watch (#5033)\nd49259b4  fix(watch): reload ignore rules when an ignore file changes (#5033)\n38b29df4  fix(watch): drop events from directories no longer watched (#5033)\nd890bd04  fix(watch): prune ignored directories from the watch tree (#5033)\n```\n\nThe scheduling change, the stale-event guards, the ignore reload, the ENOSPC catch and the tests are separate, so each can be reverted without touching the others.\n\n## Evidence\n\n| Check | Before | After |\n|---|---:|---:|\n| nested tree, 2,024 directories | 2,024 watches | 23 |\n| nested tree, 10,023 directories | 10,023 watches | 22 |\n| `mkdir && write`, 10 runs | 0/10 delivered | 10/10 delivered |\n| `copytree`, 5 files | not delivered | 5/5 delivered |\n| directory moved out of root | rebuild fired | no rebuild |\n| `ENOSPC` from `schedule_one` | observer thread died | logged, watcher survived |\n\nThe 2,024 and 10,023 counts are root plus kept directories. Ignored trees are not watched.\n\nThe move-out check used `pdb`: the batch was `['/tmp/.../src/move/late.ts']` before the parent guard and `[]` after. The stale-predicate check showed the rule missing from `loaded_dirs` before the reload and present after. The `ENOSPC` check raised errno 28 before the catch and survived with `schedule_calls=3` after.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\n- [x] Read the CONTRIBUTING.md guide.\n- [x] Reproduced the issue and identified the invariant.\n- [x] Made the smallest fix necessary.\n- [x] Added a regression test and mechanism tests.\n- [x] Kept the PR description synchronized with the final implementation.\n- [x] Documented limitations and unsupported cases.\n\n## Merge Danger\n\n**Door:** two-way. No schema, cache-key or file-format change. Reverting the five commits restores the recursive schedule.\n\n**Blast Radius:** moderate, because the watcher now decides which directories exist in its own tree:\n\n- Linux only. macOS and Windows keep the recursive schedule.\n- `ignored_predicate()` is the same predicate `detect()` uses. If it keeps a directory, the directory gets a watch.\n- `graphify-out/` is skipped explicitly.\n- A directory moved out of the root can still deliver an event after its watch is removed. The parent guard drops it.\n- Symlinked directories outside the root are not followed, same as watchdog's recursive walk.\n- `ENOSPC` now logs and continues. It does not retry later, and a tree with more than `max_user_watches` kept directories still loses watches.\n- A burst of more than 16,384 change events can still overflow the event queue. That is #5046's limit, not this one.\n\n## How was this tested?\n\nWatch tests, watchdog 7.1.0:\n\n```text\n227 passed\n```\n\nWatch tests, watchdog 6.0.0:\n\n```text\n224 passed, 3 skipped\n```\n\nFull suite, watchdog 6.0.0:\n\n```text\n10207 passed, 23 skipped, 1 xfailed in 827.77s\n```\n\n`graphify update .` ran clean on the branch.\n\n`tests/test_watch_pruned.py` pins the mechanism:\n\n- a fake observer is scheduled for root and `keep/`, never for `ignored/`, and every call has `recursive=False`\n- on Linux, the inotify watch count before/after `watch()` is exactly 2 for root plus one kept directory\n\nThe three contract assertions in `tests/test_watch.py` changed from `recursive=True` to `recursive=False`.\n\nNot tested: Windows and macOS. The manual path is Linux-only; the recursive path is unchanged there.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic. (Extraction is untouched.)\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages. (No trailer in the commit messages.)\n\nThis stays a draft until #5046 merges and the rebase is clean.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5075/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5075/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5046",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5046/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5046/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5046/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/5046",
+      "id": 6241396442,
+      "node_id": "PR_kwDOR4-pD88AAAABNSfKWw",
+      "number": 5046,
+      "title": "fix(watch): stop the inotify overflow loop on large Linux trees (#5033)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 3,
+      "created_at": "2026-11-06T10:56:32Z",
+      "updated_at": "2026-11-07T04:56:50Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/5046",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/5046",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/5046.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/5046.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #5033.\n\nOn Linux, `graphify watch` overflows the inotify queue on trees with more than roughly 4,000 directories. watchdog 7 then rebuilds every recursive watch by walking the tree again, so the overflow repeats and real changes are dropped.\n\nThe queue fills with events the watcher generates itself:\n\n```text\nobserver.schedule(root, recursive=True)      # no event_filter\n  mask includes IN_OPEN | IN_CLOSE_NOWRITE\n  watchdog walks the tree to add one watch per directory\n    opendir  -> IN_OPEN|IN_ISDIR           ─┐\n    closedir -> IN_CLOSE_NOWRITE|ISDIR     ─┴─> 16,384-slot queue\n  queue full -> IN_Q_OVERFLOW\n    watchdog 7: remove all watches, walk again -> overflow again\n  real writes are dropped in between\n```\n\n`_is_read_only_event()` already drops those events in the handler, but that happens after the kernel has queued them. The fix is producer-side: ask the kernel for only the events the handler treats as changes.\n\n```diff\n+  watch_event_filter = [created, modified, deleted, moved, closed-after-write]\n   observer.schedule(\n     handler,\n     root,\n     recursive=True,\n+    event_filter=watch_event_filter,\n   )\n```\n\nThe setup walk then produces no events of its own. There is no overflow, no rebuild loop, and real changes reach the handler.\n\n## The rule the filter is built on\n\nA false \"changed\" costs a rebuild. A false \"unchanged\" ships a graph that describes code the user no longer has. The filter only includes events that mean bytes moved.\n\n| event | keep? | why |\n|---|---|---|\n| created, modified, deleted, moved | yes | real changes |\n| closed-after-write | yes | the save some editors emit last |\n| opened, closed-without-write | no | reads, including the watcher's own walks |\n\nDirectory events stay in the filter (`DirCreatedEvent`, `DirDeletedEvent`, `DirMovedEvent`) because watchdog uses them to register watches for new and moved directories, even though the handler ignores directory events.\n\n## Commits\n\n```text\n56bb24b3  test(watch): characterize the inotify overflow boundary\neb1914c0  test(watch): pin the event filter and fallback contract\na5135ede  fix(watch): keep read-only events out of the inotify mask (#5033)\n7d94277b  refactor(watch): detect watchdog event_filter support\n52aacbb0  refactor(watch): extract the change-only event filter\n```\n\nThe two refactors are behavior-neutral. The fix is its own commit, so reverting it returns the watcher to the old `schedule()` call. The tests are separate so they can be reverted without touching the fix.\n\n## Evidence\n\n5,000 directories, watchdog 7.1.0, one real `.ts` write after startup:\n\n| | overflows | write delivered |\n|---|---|---|\n| before | 50–52 | no |\n| after | 0 | yes, rebuild triggered |\n\nThe boundary on a one-directory tree with one file:\n\n```text\n8,192 open+close  -> 16,384 events -> 0 overflows\n8,193 open+close  -> 16,385 events -> 1 overflow\n```\n\nThe limit is total events, not directories. The ~4,000-directory cliff is the setup walk generating about four events per directory.\n\nA directory created after startup is still watched and its new `.ts` file still triggers a rebuild.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [x] Refactor (the first two commits only)\n- [ ] Security fix\n\n## Verification & Invariants\n\n- [x] Read the CONTRIBUTING.md guide.\n- [x] Reproduced the issue and identified the invariant.\n- [x] Made the smallest fix necessary.\n- [x] Added a regression test and mechanism tests.\n- [x] Kept the PR description synchronized with the final implementation.\n- [x] Documented limitations and unsupported cases.\n\n## Merge Danger\n\n**Door:** two-way. No schema, cache-key or file-format change. Reverting `a5135ede` restores the old `schedule()` call.\n\n**Blast Radius:** moderate, because this changes what the watcher asks the kernel for:\n\n- The mask now excludes `IN_OPEN` and `IN_CLOSE_NOWRITE`. The handler already dropped those events, so handler behavior is unchanged.\n- `event_filter` is passed only when watchdog declares it. On watchdog < 4 the old call is used and a warning is logged.\n- A `**kwargs` wrapper is not detected. It also warns, so the fix is disabled visibly instead of silently.\n- On watchdog 4.0.0, `FileClosedEvent` maps to `IN_CLOSE` (write and nowrite), so `IN_CLOSE_NOWRITE` remains in the mask. The fix still removes `IN_OPEN` and roughly doubles the threshold. watchdog 5+ is fully clean.\n- A genuine burst of more than 16,384 change events can still overflow the queue. The follow-up re-walk no longer generates read events, so it does not loop forever. Events in that burst can still be lost.\n- The watcher still installs one inotify watch per directory, including ignored paths. The `max_user_watches` problem from the issue is separate and not addressed here.\n\n## How was this tested?\n\nWatch tests, watchdog 7.1.0:\n\n```text\n225 passed\n```\n\nWatch tests, watchdog 6.0.0 (repo lock):\n\n```text\n222 passed, 3 skipped\n```\n\nThe three skips are the watchdog-7-only mechanism tests.\n\nFull suite on the final tree, watchdog 6.0.0:\n\n```text\n10205 passed, 23 skipped, 1 xfailed in 621.60s\n```\n\n`graphify update .` ran clean on the branch.\n\n`tests/test_watch_inotify_overflow.py` pins the mechanism:\n\n- default mask includes `IN_OPEN`; the change-only mask does not\n- one directory read emits `IN_OPEN` and `IN_CLOSE_NOWRITE`\n- one file, `limit // 2 + 1` open+close pairs produce exactly one overflow marker\n- each `on_queue_overflow()` walks the tree again\n\nThe contract tests in `tests/test_watch.py` pin the call site:\n\n- `schedule()` receives the change-only filter\n- an observer without `event_filter` still schedules\n- a fallback logs a warning\n- a `**kwargs` wrapper logs a warning\n- the installed watchdog's real `Observer` declares `event_filter`\n\nNot tested: Windows. The change only affects the inotify mask; other observers accept `event_filter` or fall back.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). (Extraction is untouched. This only changes the watch mask.)\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages. (No trailer in the commit messages.)\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5046/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5046/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4999",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4999/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4999/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4999/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4999",
+      "id": 6208742943,
+      "node_id": "PR_kwDOR4-pD88AAAABM4WlWw",
+      "number": 4999,
+      "title": " fix(python): don't bind bare builtin calls to same-named package classes (#4989)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        },
+        {
+          "id": 12626523901,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2_Q",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/needs:title",
+          "name": "needs:title",
+          "color": "fbca04",
+          "default": false,
+          "description": "PR title should follow the conventional-commit format",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 3,
+      "created_at": "2026-11-04T18:20:25Z",
+      "updated_at": "2026-11-05T16:44:38Z",
+      "closed_at": "2026-11-05T16:44:38Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4999",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4999",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4999.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4999.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #4989.\n\nA bare Python name resolves through the caller module's own bindings. The cross-file call resolver matched bare callees by label across the whole corpus. A module that never bound `NotImplementedError` linked to a package class with that name. The only builtin guard was `_LANGUAGE_BUILTIN_GLOBALS`, which contains `open` but not the builtin exception classes.\n\nThe same wrong edge could be tagged `EXTRACTED` when the caller imported some other name from the file that defines the class, because module-level import evidence counted as proof for the symbol.\n\nThis change gives builtin-named Python callees one rule:\n\n```text\nresolve(bare_python_call)\n  candidates = label_index[callee]\n  tgt = unique candidate (or tie-breaker winner)\n+ if callee is a Python builtin and tgt was not imported as a symbol by this file\n+   emit no edge\n  emit calls(tgt)\n```\n\nThe builtin list is `_PYTHON_BUILTIN_NAMES` in `graphify/extractors/base.py`. It stays separate from `_LANGUAGE_BUILTIN_GLOBALS` because that set gates extraction, where dropping the raw call would also drop the evidence for an imported class that shares a builtin name.\n\n```text\ngraphify/extractors/base.py   # fixed Python builtin name set\ngraphify/extract.py           # direct-symbol-import gate for builtin names\ntests/test_python_builtin_call_shadowing_4989.py\n```\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Evidence\n\n**Before:** minimal tree from the issue (`graphify extract . --code-only`, `GRAPHIFY_BACKEND=none`).\n\n```text\npkg/b.py    | todo2() -> NotImplementedError @ pkg/errors.py | EXTRACTED\npkg/base.py | todo3() -> NotImplementedError @ pkg/errors.py | EXTRACTED   # imported a different name from the same module\npkg/a.py    | todo()  -> NotImplementedError @ pkg/errors.py | INFERRED\n```\n\n**After:**\n\n```text\npkg/b.py | todo2() -> NotImplementedError @ pkg/errors.py | EXTRACTED\n```\n\n**Tests:**\n\n```text\n$ .venv/bin/python -m pytest tests/test_python_builtin_call_shadowing_4989.py -q\n7 passed\n\n$ .venv/bin/python -m pytest -q\n9998 passed, 20 skipped, 1 xfailed, 1 failed in 669.54s\n\n$ .venv/bin/python -m ruff check graphify/extract.py graphify/extractors/base.py \\\n    tests/test_python_builtin_call_shadowing_4989.py\nAll checks passed!\n```\n\nThe one failure is `test_partial_extraction_warning.py::test_warning_carries_no_hardcoded_issue_number`. A cache-root RuntimeWarning from an earlier test in the same process lands on stderr and matches the test's `(#\\d+)` guard. It fails on the unmodified baseline with this change stashed and passes when the file runs alone.\n\n## Verification & Invariants\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\nThe invariant: in Python, a bare builtin name is the caller module's own binding. It is a project symbol only when that module imports the symbol itself.\n\nThe tests pin:\n\n- No edge for an unimported `NotImplementedError`.\n- The imported control case still resolves as `EXTRACTED`.\n- A different import from the same module does not certify the builtin name.\n- A plain `import pkg.errors` does not bind the bare name.\n- A same-file class with a builtin name still gets its in-file edge.\n- A builtin passed by name does not get a cross-file edge.\n- Non-builtin unimported names keep the existing `INFERRED` behavior.\n\nKnown limitations:\n\n- The gate covers calls (`calls` and `indirect_call`). Reference and type edges are untouched.\n- A module-level assignment alias (`NotImplementedError = Other`) is not treated as import evidence. That call stays unresolved rather than binding wrong.\n\n## How was this tested?\n\n```text\n.venv/bin/python -m pytest tests/test_python_builtin_call_shadowing_4989.py -q\n.venv/bin/python -m pytest tests/test_extract.py tests/test_symbol_resolution.py \\\n  tests/test_python_import_resolution.py tests/test_builtin_global_type_refs.py \\\n  tests/test_cross_language_call_resolution.py tests/test_phantom_cross_package_call.py \\\n  tests/test_go_builtin_call_targets.py tests/test_swift_builtin_noise.py \\\n  tests/test_rust_builtin_type_hubs.py -q\n.venv/bin/python -m pytest -q\n.venv/bin/python -m ruff check graphify/extract.py graphify/extractors/base.py \\\n  tests/test_python_builtin_call_shadowing_4989.py\n.venv/bin/python -m graphify update .\n```\n\nTargeted suites: `524 passed, 1 xfailed`.\n\nBranch `fix/4989-builtin-shadowing` is based on `upstream/v8` (`59b5ab11`).\n\n## Merge Danger\n\n**Door:** Two-way.\n\nThe change only removes edges for builtin-named Python callees that the caller never imported. Reverting restores the previous resolver. No cache schema bump and no graph format change.\n\n**Blast Radius:** Python-only.\n\nImported classes with builtin names still resolve and stay `EXTRACTED`. Non-builtin `INFERRED` resolution and every other language are unchanged. The cost is a possible false negative for a file that binds a builtin-named class through an assignment alias, which stays unresolved.\n\n## Graphify-specific checklist\n\n- [x] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. No source fragments changed.\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables).\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4999/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4999/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4986",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4986/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4986/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4986/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/4986",
+      "id": 6193116730,
+      "node_id": "PR_kwDOR4-pD88AAAABMrxx2w",
+      "number": 4986,
+      "title": " perf(update): stop re-reading headers once per node during reconcile",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        },
+        {
+          "id": 12626523901,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2_Q",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/needs:title",
+          "name": "needs:title",
+          "color": "fbca04",
+          "default": false,
+          "description": "PR title should follow the conventional-commit format",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "closed",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 3,
+      "created_at": "2026-11-03T23:34:45Z",
+      "updated_at": "2026-11-05T16:44:57Z",
+      "closed_at": "2026-11-05T16:44:57Z",
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/4986",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/4986",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/4986.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/4986.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\r\n\r\n```diff\r\n _reconcile_existing_graph\r\n   for node in nodes\r\n-    _get_extractor(Path(source_file))\r\n-      .h: _is_objc_header  -> read_bytes()[:256 KiB]   whole file, twice, per node\r\n-      .h: _is_cpp_header   -> read_bytes()[:256 KiB]\r\n+    _ast_owned(identity or source_file)                dict hit after the first node\r\n+      _get_extractor(..., sniff_headers=False)          once per file, reads nothing for .h\r\n```\r\n\r\nThe reconcile loop asked a per-file question once per node. For a `.h` path, `_get_extractor` ran two header probes, and each probe called `read_bytes()` before slicing to 256 KiB. The `is None` test cannot change for `.h`, because every dialect resolves to an extractor.\r\n\r\nThis branch asks the weaker \"is this source AST-owned\" question once per file, keyed by identity. It also reads only the sniff head and shares that head between the two probes. Reconcile now resolves `source_file` through `identity` first, so a relative path no longer makes both header probes swallow an `OSError` and misclassify `.m` sources when the process CWD is outside the project. Fixes #4978.\r\n\r\n## Type of change\r\n\r\n- [x] Bug fix\r\n- [ ] New feature\r\n- [ ] Documentation\r\n- [ ] Tests or CI\r\n- [ ] Refactor\r\n- [ ] Security fix\r\n\r\n## Verification & Invariants\r\n\r\nThe invariant is that reconcile work per node is constant, and a per-file fact is computed once per file. The suite asserts call and byte counts per variant, and asserts the frozen survivor set from `8e6a6d21` is unchanged. No generated or persisted state changes, because the survivor set is byte-identical.\r\n\r\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\r\n- [x] **Reproduced** the issue and identified the invariant.\r\n- [x] Made the **smallest fix** necessary.\r\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\r\n- [x] Kept the PR description **synchronized** with the final implementation.\r\n- [x] Documented any **limitations / unsupported cases** explicitly.\r\n- [x] Confirmed the frozen survivor set matches `8e6a6d21`.\r\n\r\nLimitations: `sniff_headers=False` answers \"is this source AST-owned\" only, and must never pick a grammar for a real parse, because a C++ header resolves to `extract_c` that way. The sniff window is still 256 KiB, so a marker past that is invisible; that is the pre-existing behavior, not something this PR changes. The memo is local to one `_reconcile_existing_graph` call, so `watch` re-reads a header after an edit.\r\n\r\n## How was this tested?\r\n\r\n```text\r\nPYTHONHASHSEED=0 .venv/bin/python -m pytest tests/test_4978_reconcile_cost.py -q\r\nPYTHONHASHSEED=0 .venv/bin/python -m pytest tests/test_watch.py -q\r\nPYTHONPATH=$PWD PYTHONHASHSEED=0 .venv/bin/python -m pytest tests -q -p no:cacheprovider\r\n```\r\n\r\n| | base `8e6a6d21` | this branch |\r\n|---|---|---|\r\n| bytes read (`rchar`) | 0.95 GB | 0.01 GB |\r\n| `_get_extractor` calls from the reconcile loop | 3,001 | 1 |\r\n\r\nAsk counts, from the suite's 61 node header:\r\n```text\r\nbefore   reconcile asks _get_extractor once per node, 2 reads of the whole file each\r\nafter    reconcile resolves each source once, 0 bytes read for .h; .m keeps exactly one read, capped at 262,144 bytes\r\n```\r\n\r\n| suite | result |\r\n|---|---|\r\n| `tests/test_4978_reconcile_cost.py` | 23 passed |\r\n| `tests/test_watch.py` | 215 passed |\r\n| `tests/` full, rebased `v0.9.102` | 10,015 passed, 20 skipped, 1 xfailed |\r\n\r\n## Merge Danger\r\n\r\n**Door:** two-way\r\nThe branch reverts cleanly and changes no file format.\r\n\r\n**Blast Radius:** contained\r\nNo schema, output format, or node set changes, and the only files touched are `graphify/extract.py`, `graphify/watch.py`, and the new test plus its fixture.\r\n\r\n## Graphify-specific checklist\r\n\r\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (no skill source fragments changed)\r\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). (the fix removes a CWD-dependent read, it adds none)\r\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python). (no interpolation was added)\r\n- [x] I confirmed no API keys or local-only graph data are included.\r\n- [ ] (If applicable) I disclosed AI authorship in my commit messages.\r\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4986/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4986/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4957",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -47,16 +421,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-11-02T23:04:05Z",
-      "updated_at": "2026-11-02T23:04:19Z",
-      "closed_at": null,
+      "updated_at": "2026-11-03T22:50:23Z",
+      "closed_at": "2026-11-03T22:50:23Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -135,16 +509,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-11-02T21:11:13Z",
-      "updated_at": "2026-11-02T21:20:40Z",
-      "closed_at": null,
+      "updated_at": "2026-11-03T22:51:34Z",
+      "closed_at": "2026-11-03T22:51:34Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -1301,16 +1675,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-26T20:44:23Z",
-      "updated_at": "2026-11-01T18:21:13Z",
-      "closed_at": null,
+      "updated_at": "2026-11-03T22:51:12Z",
+      "closed_at": "2026-11-03T22:51:12Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -1400,16 +1774,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 2,
+      "comments": 3,
       "created_at": "2026-10-26T20:30:34Z",
-      "updated_at": "2026-11-01T18:21:23Z",
-      "closed_at": null,
+      "updated_at": "2026-11-03T22:51:09Z",
+      "closed_at": "2026-11-03T22:51:09Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -4297,9 +4671,91 @@
   "search_type": "lexical"
 }
 ,"issue_search":{
-  "total_count": 9,
+  "total_count": 10,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5074",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5074/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5074/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5074/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/issues/5074",
+      "id": 6255268278,
+      "node_id": "I_kwDOR4-pD88AAAABdNfRtg",
+      "number": 5074,
+      "title": "graphify watch on Linux: .graphifyignore'd directories still get inotify watches (max_user_watches exhaustion)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 2,
+      "created_at": "2026-11-07T04:46:51Z",
+      "updated_at": "2026-11-07T04:53:19Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "sub_issues_summary": {
+        "total": 0,
+        "completed": 0,
+        "percent_completed": 0
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": 0,
+        "total_blocked_by": 0,
+        "blocking": 0,
+        "total_blocking": 0
+      },
+      "body": "## Summary\n\nFollow-up to #5033. The event queue overflow has a fix in #5046 (open), but the watcher still installs one inotify watch per directory under the root, including directories that `.graphifyignore` and `.gitignore` exclude.\n\nOn Linux, `max_user_watches` is per user (65,536 by default). @claudiofabiani measured 45,885 watches on a tree with 50,585 directories, most of them `node_modules`. VS Code and another IDE were already using part of the same budget. Past the limit, `inotify_add_watch` fails with `ENOSPC`, and editors stop seeing file changes too.\n\nThis is a separate limit from #5033. That one is the 16,384-event queue. This one is the watch table.\n\n## Why it happens\n\n`watch()` schedules the observer with `recursive=True`:\n\n```python\nobserver.schedule(handler, str(watch_root_for_ignore), recursive=True)\n```\n\nwatchdog implements recursive mode by walking every directory and calling `inotify_add_watch` for each one. `ignored_predicate()` is only consulted inside `Handler.on_any_event`, so it can drop events from `node_modules/` but it cannot stop the watch from being installed.\n\nA watch on an ignored directory is pure cost. It consumes a per-user slot and can never produce a useful rebuild, because the handler drops the event anyway.\n\n## Reproduction\n\nA tree with one kept directory and one ignored directory:\n\n```\nroot/\n  keep/a.py\n  ignored/b.py\n  .graphifyignore      # contains: ignored/\n```\n\nWith `recursive=True`, the kernel gets three watches: root, `keep/`, and `ignored/`. On a real tree the third group dominates. In a nested test tree with 2,024 directories, all of them below the root, the watcher installed 2,024 watches. Only 23 of those directories were kept.\n\nThe watch count can be read without root from `/proc/<pid>/fdinfo`:\n\n```python\ntotal = 0\nfor fd in os.listdir(\"/proc/self/fd\"):\n    target = os.readlink(f\"/proc/self/fd/{fd}\")\n    if \"inotify\" not in target:\n        continue\n    with open(f\"/proc/self/fdinfo/{fd}\") as f:\n        total += sum(1 for line in f if line.startswith(\"inotify wd:\"))\n```\n\n## Proposed fix\n\nSchedule non-recursive watches only for directories `ignored_predicate()` keeps, and maintain the watch tree in `watch()`:\n\n- `add_tree(path)` walks kept directories and schedules each one.\n- `schedule_one(path)` skips ignored directories and `graphify-out/`.\n- directory create and move-in events add the new subtree.\n- delete and move-out events remove the watches below the old path.\n- after scheduling a new directory, scan it and synthesize `FileCreatedEvent` for files already inside. A directory event and a file event can arrive in either order, so this closes the `mkdir && write` race.\n- reload the predicate when `.graphifyignore` or `.gitignore` changes, then reschedule the tree.\n- catch `ENOSPC` in `schedule_one` and log the directory instead of killing the watcher.\n\nThis uses the public `schedule()` and `unschedule()` API. It does not need private watchdog internals, and it works on watchdog 4 through 7. On non-Linux, keep the recursive schedule; the limit is inotify-specific.\n\n## Measurements\n\n| Tree | Before | After |\n|---|---:|---:|\n| nested, 2,024 directories | 2,024 | 23 |\n| nested, 10,023 directories | 10,023 | 22 |\n| reporter's tree | 45,885 | not run |\n\nThe after count is root plus kept directories. Ignored trees are not watched.\n\nBehavior checks:\n\n- `mkdir && write` in the same instant: 10/10 delivered with the catch-up scan, 0/10 without it.\n- `copytree` into a kept directory: 5/5 files delivered.\n- A directory moved out of the root: no rebuild after the parent guard. With `pdb`, the batch was `['/tmp/.../src/move/late.ts']` before the guard and `[]` after.\n- `.graphifyignore` changed after startup: the new rule applies without restarting.\n- `ENOSPC` from `schedule_one`: the watcher survives and keeps the watches it managed to add. Before the catch, the exception killed the observer thread.\n\n## Scope\n\n- Does not change the event mask. That is #5046.\n- Does not change `detect()`'s ignore rules. It reuses `ignored_predicate()`.\n- A tree with more than `max_user_watches` kept directories can still hit `ENOSPC`. The watcher now logs and continues instead of dying.\n- Symlinked directories outside the root are not followed, same as watchdog's recursive walk (`followlinks=False`).\n\n## Status\n\nPrototype is committed on `fix/5033-pruned-watch`, five commits on top of #5046. Full suite: 10,207 passed, 23 skipped, 1 xfailed. I will open a draft PR stacked on #5046 once this issue exists.\n\nCredit: the original measurement and the `.graphifyignore` observation are from @claudiofabiani in #5033.\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5074/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5074/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "pinned_comment": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4800",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -4345,16 +4801,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-26T20:21:16Z",
-      "updated_at": "2026-10-26T20:25:08Z",
-      "closed_at": null,
+      "updated_at": "2026-11-03T22:52:50Z",
+      "closed_at": "2026-11-03T22:52:50Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -4388,7 +4844,7 @@
       },
       "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4800/timeline",
       "performed_via_github_app": null,
-      "state_reason": null,
+      "state_reason": "completed",
       "pinned_comment": null,
       "score": 1.0
     },
@@ -4621,7 +5077,7 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
@@ -4629,8 +5085,8 @@
       "milestone": null,
       "comments": 1,
       "created_at": "2026-10-20T20:11:19Z",
-      "updated_at": "2026-10-20T20:11:28Z",
-      "closed_at": null,
+      "updated_at": "2026-11-05T16:35:20Z",
+      "closed_at": "2026-11-05T16:35:20Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -4664,7 +5120,7 @@
       },
       "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4603/timeline",
       "performed_via_github_app": null,
-      "state_reason": null,
+      "state_reason": "completed",
       "pinned_comment": null,
       "score": 1.0
     },
@@ -4713,7 +5169,7 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
@@ -4721,8 +5177,8 @@
       "milestone": null,
       "comments": 2,
       "created_at": "2026-10-20T20:01:18Z",
-      "updated_at": "2026-10-21T05:11:07Z",
-      "closed_at": null,
+      "updated_at": "2026-11-05T16:35:19Z",
+      "closed_at": "2026-11-05T16:35:19Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -4756,7 +5212,7 @@
       },
       "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/4602/timeline",
       "performed_via_github_app": null,
-      "state_reason": null,
+      "state_reason": "completed",
       "pinned_comment": null,
       "score": 1.0
     },

@@ -374,6 +374,23 @@
         4957
       ],
       "reported_by": "cabgab-dev"
+    },
+    {
+      "id": "5033",
+      "title": "graphify watch on Linux: self-sustaining inotify overflow loop on trees with more than ~4,000 directories (most real changes are lost)",
+      "issue": 5033,
+      "prs": [
+        5046
+      ],
+      "reported_by": "claudiofabiani"
+    },
+    {
+      "id": "5074",
+      "title": "graphify watch on Linux: .graphifyignore'd directories still get inotify watches (max_user_watches exhaustion)",
+      "issue": 5074,
+      "prs": [
+        5075
+      ]
     }
   ],
   "prs": {
@@ -2287,6 +2304,56 @@
         "test_merge_then_write_round_trips_each_fold",
         "test_ghost_fold_map_is_not_written_to_graph_json"
       ]
+    },
+    "5046": {
+      "summary": "The watcher stops asking the kernel for read events, so a large tree no longer overflows the inotify queue and real changes get through.",
+      "why": "On Linux, `watch()` called `observer.schedule()` without an `event_filter`, so watchdog asked for `IN_OPEN` and `IN_CLOSE_NOWRITE` too. The setup walk opened every directory, filled the 16,384-event queue, and watchdog 7 rebuilt all watches in a loop. Real writes were dropped.",
+      "what": "Pass a change-only `event_filter` to `observer.schedule()`. The handler already dropped read events; now the kernel never queues them. A signature check falls back to the old call and logs a warning when watchdog does not declare `event_filter`.",
+      "helps": "Anyone running `graphify watch` on a Linux tree with thousands of directories. The CPU loop stops, and saving a file triggers a rebuild again.",
+      "diagram": "flowchart LR\n  subgraph Before\n    S1[schedule with no event_filter] --> M1[mask includes IN_OPEN and IN_CLOSE_NOWRITE]\n    M1 --> W1[setup walk opens every directory]\n    W1 --> Q1[16,384-event queue fills]\n    Q1 --> O1[overflow]\n    O1 --> R1[watchdog 7 rebuilds every watch]\n    R1 --> W1\n  end\n  subgraph After\n    S2[schedule with change-only filter] --> M2[mask has create, modify, delete, move, close-after-write]\n    M2 --> W2[setup walk emits no watched events]\n    W2 --> Q2[queue stays empty]\n    Q2 --> D2[real write reaches the handler]\n  end",
+      "before": "5,000 directories, no event_filter:\n52 overflows in 6 s\nreal .ts write delivered: no\n\nboundary on one directory and one file:\n8,192 open+close pairs -> 16,384 events -> 0 overflows\n8,193 open+close pairs -> 16,385 events -> 1 overflow",
+      "after": "5,000 directories, change-only filter:\n0 overflows\nreal .ts write delivered: yes\n\nwatchdog 7.1.0 watch tests: 225 passed\nwatchdog 6.0.0: 222 passed, 3 skipped\nfull suite: 10,205 passed, 23 skipped, 1 xfailed",
+      "limits": [
+        "A burst of more than 16,384 real changes can still overflow the queue. The queue is finite.",
+        "On watchdog 4.0.0, `FileClosedEvent` maps to `IN_CLOSE`, so `IN_CLOSE_NOWRITE` stays in the mask. The threshold roughly doubles, but it is not gone.",
+        "watchdog versions before 4 do not declare `event_filter`. The old call runs and logs a warning.",
+        "This does not fix the watch table. Ignored directories still get watches; that is #5074 and #5075."
+      ],
+      "tests": [
+        "test_default_mask_requests_read_events_but_change_filter_does_not",
+        "test_reading_one_directory_emits_open_and_close_nowrite",
+        "test_read_only_traffic_alone_overflows_the_queue",
+        "test_overflow_makes_watchdog_rebuild_the_recursive_watch_tree",
+        "test_watch_schedules_change_only_event_filter",
+        "test_watch_falls_back_when_watchdog_lacks_event_filter",
+        "test_watch_warns_when_observer_cannot_filter",
+        "test_watch_warns_when_observer_hides_event_filter_in_kwargs",
+        "test_installed_watchdog_observer_declares_event_filter"
+      ]
+    },
+    "5075": {
+      "summary": "On Linux, the watcher now puts inotify watches only on directories the graph would keep, so ignored trees stop using up the per-user watch table.",
+      "why": "`recursive=True` makes watchdog walk every directory and add a watch to each one. `ignored_predicate()` only ran in the handler, after the watch already existed. A 2,024-directory tree used 2,024 watches when only 23 directories were kept; the reporter's tree used 45,885 against a 65,536 per-user limit.",
+      "what": "On Linux, `watch()` builds its own non-recursive watch tree. It schedules kept directories, skips ignored ones and `graphify-out/`, and updates the tree on create, delete and move. A new directory is scanned and its existing files are replayed, so `mkdir && write` is not missed. Ignore-file changes reload the predicate, and `ENOSPC` is logged and skipped.",
+      "helps": "Anyone watching a repo with `node_modules`, `.venv`, `dist` or sibling projects. The watcher uses a few dozen watches instead of thousands, leaving room for editors.",
+      "diagram": "flowchart TD\n  subgraph Before\n    B1[recursive=True] --> B2[watchdog walks every directory]\n    B2 --> B3[node_modules and .venv included]\n    B3 --> B4[2,024 watches]\n  end\n  subgraph After\n    A1[add_tree root] --> A2[ignored_predicate skips ignored dirs]\n    A2 --> A3[schedule root and kept dirs]\n    A3 --> A4[23 watches]\n    A4 --> A5[scan a new dir and replay its files]\n  end",
+      "sequence": "sequenceDiagram\n  participant F as file system\n  participant H as Handler\n  participant T as watch tree\n  participant O as observer\n  F->>H: DirCreated(src/new)\n  H->>T: is the parent watched?\n  T-->>H: yes\n  H->>T: add_tree(src/new, emit_existing=True)\n  T->>O: schedule(src/new)\n  T->>H: FileCreatedEvent(src/new/file.ts)\n  H-->>T: pending rebuild\n  Note over F,H: The file event may arrive before or after DirCreated.<br/>The replay closes that gap.",
+      "before": "nested tree, 2,024 directories: 2,024 watches\nnested tree, 10,023 directories: 10,023 watches\nroot + keep + ignored: 3 watches",
+      "after": "nested tree, 2,024 directories: 23 watches\nnested tree, 10,023 directories: 22 watches\nroot + keep + ignored: 2 watches\nmkdir && write: 10/10 delivered\ncopytree: 5/5 files delivered",
+      "limits": [
+        "Linux only. macOS and Windows keep the recursive schedule.",
+        "A tree with more than `max_user_watches` kept directories can still hit `ENOSPC`. The watcher logs and continues, but it does not retry later.",
+        "Symlinked directories outside the root are not followed.",
+        "The event queue is still finite. A burst of more than 16,384 changes can still overflow it; that is #5046's limit.",
+        "The first version missed `mkdir && write` (0/10). The catch-up scan is what fixes it."
+      ],
+      "tests": [
+        "test_watch_schedules_only_kept_directories",
+        "test_watch_does_not_watch_ignored_directories",
+        "test_watch_schedules_change_only_event_filter",
+        "test_watch_falls_back_when_watchdog_lacks_event_filter",
+        "test_watch_warns_when_observer_hides_event_filter_in_kwargs"
+      ]
     }
   },
   "issues": [
@@ -2356,6 +2423,14 @@
       "fixed_by": [
         4801,
         4802
+      ]
+    },
+    {
+      "number": 5074,
+      "title": "graphify watch on Linux: .graphifyignore'd directories still get inotify watches (max_user_watches exhaustion)",
+      "summary": "On Linux, `.graphifyignore` and `.gitignore` directories still get inotify watches, so a large tree can exhaust `max_user_watches` and stop editors from seeing changes.",
+      "fixed_by": [
+        5075
       ]
     }
   ],
