@@ -1,7 +1,95 @@
-{"fetched_at":"2026-11-07T06:13:42Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 52,
+{"fetched_at":"2026-11-08T14:53:17Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 53,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5091",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5091/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5091/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5091/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/5091",
+      "id": 6269978124,
+      "node_id": "PR_kwDOR4-pD88AAAABNpK5kg",
+      "number": 5091,
+      "title": "fix(watch): prune ignored directories from the watch tree (#5074)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-11-08T10:26:43Z",
+      "updated_at": "2026-11-08T10:26:53Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/5091",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/5091",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/5091.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/5091.patch",
+        "merged_at": null
+      },
+      "body": "## Follow-up to #5046\n\n#5046 landed the event-filter fix in `v8` and shipped in 0.9.104. This PR is the focused pruning follow-up from #5075, rebased onto `v8` at `6c8002ec`. It contains only the six commits below.\n\nCloses #5074.\n\n## What does this PR do?\n\nOn Linux, `graphify watch` installs one inotify watch per directory under the root, including directories that `.graphifyignore` and `.gitignore` exclude. The handler drops their events, but the watches still consume `max_user_watches`. A 2,024-directory test tree used 2,024 watches when only 23 directories were kept. The reporter's tree used 45,885.\n\nThis PR replaces the recursive schedule on Linux with a pruned, non-recursive watch tree:\n\n```text\nbefore:\n  observer.schedule(root, recursive=True)\n  root -> keep -> src\n       -> node_modules -> vendor -> ...     every directory gets a watch\n\nafter:\n  add_tree(root)\n  root -> keep -> src                       only kept directories\n       (node_modules skipped before schedule)\n```\n\nThe watch tree is maintained from directory events:\n\n- create and move-in: `add_tree()`\n- delete and move-out: `remove_tree()`\n- file events whose parent is not watched: dropped (Linux only)\n\n`add_tree()` schedules kept directories and then scans each one. Files that already exist are synthesized as `FileCreatedEvent`, so a file written in the same instant as its directory is not missed.\n\n## Review fix from #5075\n\nThe first version ran the parent guard on every platform. On macOS and Windows the watch tree is still recursive, so `watched` stayed empty and the handler dropped every file event. The watcher went dead.\n\nThe guard, the directory maintenance and the ignore-file reschedule now run only when the manual tree is active (`sys.platform.startswith(\"linux\")`). The non-Linux recursive path is unchanged. A darwin-simulated regression test sends a file event through the recursive handler and asserts that a rebuild fires. The schedule contract tests now expect `recursive=True` off Linux, and the pruned-tree tests skip there.\n\n## The rule\n\nA watch on an ignored directory is pure cost. It takes a slot from the per-user watch table and can never produce a useful rebuild, because `Handler.on_any_event` drops the event anyway.\n\nwatchdog's recursive mode cannot prune because it walks the tree before the handler sees anything. The fix has to move the walk into `watch()`, where `ignored_predicate()` is available. That is the same predicate `detect()` uses, so the watcher and the scanner agree on what is kept.\n\n## What changes\n\n- `add_tree(path, emit_existing=...)` walks kept directories and schedules each one.\n- `schedule_one(path)` skips ignored directories and `graphify-out/`.\n- `remove_tree(path)` unschedules a path and everything below it.\n- Directory create, delete and move events maintain the tree on Linux.\n- A new directory is scanned and its existing files are replayed, closing the `mkdir && write` race.\n- `.graphifyignore` and `.gitignore` changes rebuild the predicate on every platform; only Linux reschedules the tree.\n- A file event whose parent is not in the watched map, or no longer exists, is dropped on Linux. This covers a directory moved out of the root while watchdog delays `DirMovedEvent`.\n- `ENOSPC` from `schedule_one` logs the directory and continues. Before this, the exception killed the observer thread.\n- Non-Linux keeps the recursive schedule. The limit is inotify-specific.\n\n## Commits\n\n```text\n2ee00533  fix(watch): keep the recursive handler alive off Linux (#5074)\n3215888c  test(watch): pin the pruned watch tree (#5033)\n3c4c84a0  fix(watch): survive ENOSPC while adding a watch (#5033)\n509df2b3  fix(watch): reload ignore rules when an ignore file changes (#5033)\ncf36ca04  fix(watch): drop events from directories no longer watched (#5033)\n0c60a6ce  fix(watch): prune ignored directories from the watch tree (#5033)\n```\n\nThe scheduling change, the stale-event guards, the ignore reload, the ENOSPC catch, the tests and the non-Linux guard are separate, so each can be reverted without touching the others.\n\n## Evidence\n\n| Check | Before | After |\n|---|---:|---:|\n| nested tree, 2,024 directories | 2,024 watches | 23 |\n| nested tree, 10,023 directories | 10,023 watches | 22 |\n| `mkdir && write`, 10 runs | 0/10 delivered | 10/10 delivered |\n| `copytree`, 5 files | not delivered | 5/5 delivered |\n| directory moved out of root | rebuild fired | no rebuild |\n| `ENOSPC` from `schedule_one` | observer thread died | logged, watcher survived |\n| non-Linux file event, `watched` empty | dropped | rebuild |\n\nThe 2,024 and 10,023 counts are root plus kept directories. Ignored trees are not watched.\n\nThe move-out check used `pdb`: the batch was `['/tmp/.../src/move/late.ts']` before the parent guard and `[]` after. The stale-predicate check showed the rule missing from `loaded_dirs` before the reload and present after. The `ENOSPC` check raised errno 28 before the catch and survived with `schedule_calls=3` after.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [ ] Documentation\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\n- [x] Read the CONTRIBUTING.md guide.\n- [x] Reproduced the issue and identified the invariant.\n- [x] Made the smallest fix necessary.\n- [x] Added a regression test and mechanism tests.\n- [x] Kept the PR description synchronized with the final implementation.\n- [x] Documented limitations and unsupported cases.\n\n## Merge Danger\n\n**Door:** two-way. No schema, cache-key or file-format change. Reverting the six commits restores the recursive schedule.\n\n**Blast Radius:** moderate, because the watcher now decides which directories exist in its own tree:\n\n- Linux only. macOS and Windows keep the recursive schedule, and their handler does not require a `watched` entry.\n- `ignored_predicate()` is the same predicate `detect()` uses. If it keeps a directory, the directory gets a watch.\n- `graphify-out/` is skipped explicitly.\n- A directory moved out of the root can still deliver an event after its watch is removed. The parent guard drops it on Linux.\n- Symlinked directories outside the root are not followed, same as watchdog's recursive walk.\n- `ENOSPC` now logs and continues. It does not retry later, and a tree with more than `max_user_watches` kept directories still loses watches.\n- A burst of more than 16,384 change events can still overflow the event queue. That is #5046's limit, not this one.\n\n## How was this tested?\n\nWatch tests, watchdog 7.1.0:\n\n```text\n228 passed\n```\n\nWatch tests, watchdog 6.0.0:\n\n```text\n225 passed, 3 skipped\n```\n\nFull suite, watchdog 6.0.0:\n\n```text\n10287 passed, 25 skipped, 1 xfailed in 945.35s\n```\n\n`graphify update .` ran clean on the branch.\n\n`tests/test_watch_pruned.py` pins the mechanism:\n\n- a fake observer is scheduled for root and `keep/`, never for `ignored/`, and every call has `recursive=False`\n- on Linux, the inotify watch count before/after `watch()` is exactly 2 for root plus one kept directory\n- the pruned-tree tests skip on non-Linux\n\n`tests/test_watch.py` adds a darwin-simulated test: the recursive schedule captures the handler, a `FileCreatedEvent` is delivered while `watched` is empty, and the rebuild must fire. The three schedule contract assertions now expect `recursive=True` on non-Linux.\n\nNot tested on real Windows or macOS machines. The non-Linux path is covered by the simulated test and platform-aware expectations.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic. (Extraction is untouched.)\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages. (No trailer in the commit messages.)\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5091/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5091/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5075",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -47,16 +135,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 3,
       "created_at": "2026-11-07T04:49:32Z",
-      "updated_at": "2026-11-07T04:49:41Z",
-      "closed_at": null,
+      "updated_at": "2026-11-08T10:27:08Z",
+      "closed_at": "2026-11-08T00:48:53Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -135,16 +223,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 3,
+      "comments": 4,
       "created_at": "2026-11-06T10:56:32Z",
-      "updated_at": "2026-11-07T04:56:50Z",
-      "closed_at": null,
+      "updated_at": "2026-11-08T00:46:53Z",
+      "closed_at": "2026-11-08T00:46:53Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -4715,9 +4803,9 @@
 
       ],
       "milestone": null,
-      "comments": 2,
+      "comments": 3,
       "created_at": "2026-11-07T04:46:51Z",
-      "updated_at": "2026-11-07T04:53:19Z",
+      "updated_at": "2026-11-08T10:27:09Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
