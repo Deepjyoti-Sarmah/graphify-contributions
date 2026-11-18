@@ -1,7 +1,95 @@
-{"fetched_at":"2026-11-08T14:53:17Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
-  "total_count": 53,
+{"fetched_at":"2026-11-18T19:03:35Z","repo":"Graphify-Labs/graphify","author":"Deepjyoti-Sarmah","search":{
+  "total_count": 54,
   "incomplete_results": false,
   "items": [
+    {
+      "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5324",
+      "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
+      "labels_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5324/labels{/name}",
+      "comments_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5324/comments",
+      "events_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5324/events",
+      "html_url": "https://github.com/Graphify-Labs/graphify/pull/5324",
+      "id": 6474550805,
+      "node_id": "PR_kwDOR4-pD88AAAABQM6Kzg",
+      "number": 5324,
+      "title": "fix(sql): one routine node for partially parsed T-SQL procedure headers (#5236)",
+      "user": {
+        "login": "Deepjyoti-Sarmah",
+        "id": 74607221,
+        "node_id": "MDQ6VXNlcjc0NjA3MjIx",
+        "avatar_url": "https://avatars.githubusercontent.com/u/74607221?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/Deepjyoti-Sarmah",
+        "html_url": "https://github.com/Deepjyoti-Sarmah",
+        "followers_url": "https://api.github.com/users/Deepjyoti-Sarmah/followers",
+        "following_url": "https://api.github.com/users/Deepjyoti-Sarmah/following{/other_user}",
+        "gists_url": "https://api.github.com/users/Deepjyoti-Sarmah/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/Deepjyoti-Sarmah/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/Deepjyoti-Sarmah/subscriptions",
+        "organizations_url": "https://api.github.com/users/Deepjyoti-Sarmah/orgs",
+        "repos_url": "https://api.github.com/users/Deepjyoti-Sarmah/repos",
+        "events_url": "https://api.github.com/users/Deepjyoti-Sarmah/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/Deepjyoti-Sarmah/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "labels": [
+        {
+          "id": 12626523786,
+          "node_id": "LA_kwDOR4-pD88AAAAC8Jl2ig",
+          "url": "https://api.github.com/repos/Graphify-Labs/graphify/labels/contributor",
+          "name": "contributor",
+          "color": "ededed",
+          "default": false,
+          "description": "Pull request from a returning community contributor",
+          "archived_at": null,
+          "archived_by": null
+        }
+      ],
+      "state": "open",
+      "locked": false,
+      "assignees": [
+
+      ],
+      "milestone": null,
+      "comments": 1,
+      "created_at": "2026-11-18T19:00:39Z",
+      "updated_at": "2026-11-18T19:00:50Z",
+      "closed_at": null,
+      "assignee": null,
+      "author_association": "CONTRIBUTOR",
+      "issue_field_values": [
+
+      ],
+      "type": null,
+      "active_lock_reason": null,
+      "draft": false,
+      "pull_request": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/pulls/5324",
+        "html_url": "https://github.com/Graphify-Labs/graphify/pull/5324",
+        "diff_url": "https://github.com/Graphify-Labs/graphify/pull/5324.diff",
+        "patch_url": "https://github.com/Graphify-Labs/graphify/pull/5324.patch",
+        "merged_at": null
+      },
+      "body": "## What does this PR do?\n\nFixes #5236. On tree-sitter-sql 0.3.12 and later, one T-SQL `CREATE PROCEDURE` can produce two routine nodes. The second one has a broken name, and every read and write edge is attached to both.\n\nThe SQL extractor names a routine in two places:\n\n```text\nextract_sql\n  walk(tree)                      name = the grammar's object_reference text\n  if root.has_error\n    recovery scan (regex on text)  name = the regex capture\n  _add_node merges the two by id\n```\n\nThe merge only works if both places read the same name. Up to 0.3.11 the grammar had no parse for T-SQL's `AS BEGIN ... END` body, so the whole header was one `ERROR` node and only the recovery scan named the routine. From 0.3.12 the grammar parses the header as `create_procedure`, but it reads the name wrong:\n\n| header | grammar's `object_reference` | node minted by the walk |\n|---|---|---|\n| `[dbo].[usp_Load]` + `@BatchId INT` | `dbo].[usp_Load]\\n @BatchId INT` | `dbo.usp_Load@BatchId INT()` |\n| `p @x INT` | `INT` | `INT()` |\n| `\"dbo\".\"a\"\"b\"` | `\"dbo\".\"a\"`, then `\"b\"` as a separate ERROR node | `\"dbo\".\"a\"()` |\n| `[a]]b]` | `b` | `b()` |\n\nThe recovery scan reads each of these correctly, so the file ends up with two ids for one declaration. A profiler trace (`sys.setprofile` on `_add_node`/`_add_edge`) on the issue's bracketed input shows the walk adding the bad node with `reads_from` and `writes_to` at `sql.py:733`, and recovery adding the good node with the same two edges at `sql.py:1239`.\n\nThe fix is in the recovery loop:\n\n```diff\n for each CREATE FUNCTION/PROCEDURE match in the masked text\n   fn_nid = id of the regex name\n+  for each routine the walk added on this line under another id\n+    remove it, its edges, and its routine_nids entries\n   from_tree = fn_nid already exists\n   add fn_nid\n   if from_tree: skip the body scan\n   scan the body for reads and writes\n```\n\nBecause the walk's node is removed, recovery owns the routine and derives its edges from the body text, the same way it did on 0.3.11.\n\n### Why the walk's edges are dropped too\n\nThe walk's edges for a misread routine can't be trusted either. `test_procedure_write_makes_a_non_read_edge[MERGE]` passes on v8 only *because of* the duplicate. For `CREATE PROCEDURE dbo.W @id INT AS BEGIN MERGE INTO dbo.Payments ...`, the walk's node has no edges at all, and the `writes_to dbo.Payments` edge comes from the recovery node. A fix that only corrected the walk's name (so recovery saw the id as already found and skipped its body scan) broke that test. I tried it.\n\n### Three commits\n\n```text\n304c8321  test(5236): pin one routine node for partially parsed SQL headers\n0fb14ba7  fix(5236): drop the walk's misread routine when recovery names it\ne2aa55f6  docs(5236): stop claiming AS BEGIN bodies never parse\n```\n\nThe tests go in first and fail on their own. Reverting `0fb14ba7` removes the fix and leaves the tests, which then fail. The last commit only corrects a code comment and two test docstrings that said `AS BEGIN` never parses.\n\n## Type of change\n\n- [x] Bug fix\n- [ ] New feature\n- [x] Documentation (comment and docstrings only)\n- [x] Tests or CI\n- [ ] Refactor\n- [ ] Security fix\n\n## Verification & Invariants\n\nInvariant: one declaration gives one routine node, named the way the source text spells it, with each edge once.\n\n- [x] **Read** the [CONTRIBUTING.md](../CONTRIBUTING.md) guide.\n- [x] **Reproduced** the issue and identified the invariant.\n- [x] Made the **smallest fix** necessary.\n- [x] Added a **regression test** (if bug fix) or isolated boundary test.\n- [x] Kept the PR description **synchronized** with the final implementation.\n- [x] Documented any **limitations / unsupported cases** explicitly.\n\n**Merge Danger**\n\n**Door:** two-way. No schema, id format or cache change. Reverting `0fb14ba7` restores v8 behaviour.\n\n**Blast Radius:** small.\n\n- The new code only runs when the file has a parse error, and then only removes a walk routine that is on the same line as a recovered `CREATE` and has a different id.\n- On 0.3.11 the walk never mints a misread T-SQL routine, so nothing is removed.\n- Output for every `.sql` fixture under `tests/` is identical to v8 on both 0.3.11 and 0.3.13. I compared every node and edge.\n- Ids of correctly named routines don't change. Graphs built on 0.3.12+ lose the bad duplicate node; that's the fix.\n\n**Limitations**\n\n- **The link between the two paths is the line number.** It held for two procedures on one line, a comment inside the header, a multi-line header and `CREATE OR ALTER`. A routine whose `CREATE` keyword and grammar node start on different lines would not be matched. I haven't found such a shape.\n- **Not fixed here: partially parsed PL/pgSQL functions miss body reads.** For `get_user` in `tests/fixtures/sample.sql`, `RETURN QUERY SELECT * FROM users` gives no `reads_from users` edge on v8, on either grammar. Letting recovery also scan the bodies of error-bearing routines would add that edge, but it changes output outside this issue, so it belongs in its own issue.\n- **Separate body-boundary bug.** With two procedures on one line, the first one also picks up the second one's reads and writes. That happens on v8 with 0.3.11 too.\n\n## How was this tested?\n\nBefore and after, the issue's own script on tree-sitter-sql 0.3.13:\n\n```text\nbefore  bracketed.sql ['dbo.usp_LoadDebtors()', 'dbo.usp_LoadDebtors@BatchId INT()']\n        quoted.sql    ['\"dbo\".\"a\"\"b\"()', '\"dbo\".\"a\"()']\nafter   bracketed.sql ['dbo.usp_LoadDebtors()']\n        quoted.sql    ['\"dbo\".\"a\"\"b\"()']\n```\n\nNew tests in `tests/test_multilang.py`. Each asserts exactly one routine node with the full name, and that its `reads_from`/`writes_to` edges appear once:\n\n```text\ntest_sql_partially_parsed_routine_header_yields_one_node\n  CREATE PROCEDURE p @x INT          -> p()\n  CREATE PROCEDURE s.p @x INT        -> s.p()\n  CREATE PROCEDURE [s].[p] @x INT    -> s.p()\n  CREATE PROCEDURE \"a\"\"b\"            -> \"a\"\"b\"()\n  CREATE PROCEDURE \"s\".\"a\"\"b\"        -> \"s\".\"a\"\"b\"()\n  CREATE PROCEDURE [a]]b]            -> a]b()\ntest_sql_escaped_quote_function_name_yields_one_node\n  CREATE FUNCTION \"a\"\"b\"() ...       -> \"a\"\"b\"()   (already broken on 0.3.11)\n```\n\nSQL tests (`-k sql`) at each commit, under both grammar versions:\n\n| commit | tree-sitter-sql 0.3.11 | tree-sitter-sql 0.3.13 |\n|---|---|---|\n| v8 `340268a7` (no new tests) | 149 passed | 145 passed, 2 failed (the two from the issue) |\n| `304c8321` tests | 155 passed, 1 failed | 145 passed, 9 failed |\n| `0fb14ba7` fix | 156 passed | 154 passed |\n| `e2aa55f6` docs | 156 passed | 154 passed |\n\nI measured three other fixes against the same tests before settling on this one:\n\n| candidate | result |\n|---|---|\n| skip the walk's name when the tree shows an error near it | fails `p @x INT`: the grammar reads `INT` with no error near the name |\n| take the walk's name from the recovery regex | breaks the `MERGE` write test (see above) |\n| regex name, plus a body scan for error-bearing routines | passes, but adds the `get_user` edge above, outside this issue |\n\nFull suite on 0.3.13: 11034 passed, 71 failed. All 71 also fail on v8 `340268a7` in the same environment. They're Terraform, Pascal, C# and install tests, and this venv lacks the optional `tree_sitter_hcl`, `tree_sitter_pascal` and `tree_sitter_language_pack` grammars. No SQL test fails.\n\n```text\nruff check graphify/extractors/sql.py tests/test_multilang.py  -> All checks passed\n```\n\nNot tested: tree-sitter-sql releases before 0.3.11, and Windows. The change adds no path handling.\n\n## Graphify-specific checklist\n\n- [ ] I updated generated skill artifacts (`uv run python -m tools.skillgen --bless`) when changing their source fragments. (N/A: no skill fragments touched.)\n- [x] I confirmed that AST/structural extraction remains deterministic (no ambient state dependencies like ENV variables). (The removal depends only on the parse tree and the source text.)\n- [x] I reviewed changes for security implications (no unsafe interpolation into shell/Python).\n- [x] I confirmed no API keys or local-only graph data are included.\n- [ ] (If applicable) I disclosed AI authorship in my commit messages. (No trailer in the commit messages.)\n",
+      "reactions": {
+        "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5324/reactions",
+        "total_count": 0,
+        "+1": 0,
+        "-1": 0,
+        "laugh": 0,
+        "hooray": 0,
+        "confused": 0,
+        "heart": 0,
+        "rocket": 0,
+        "eyes": 0
+      },
+      "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5324/timeline",
+      "performed_via_github_app": null,
+      "state_reason": null,
+      "score": 1.0
+    },
     {
       "url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5091",
       "repository_url": "https://api.github.com/repos/Graphify-Labs/graphify",
@@ -47,16 +135,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-11-08T10:26:43Z",
-      "updated_at": "2026-11-08T10:26:53Z",
-      "closed_at": null,
+      "updated_at": "2026-11-09T17:07:03Z",
+      "closed_at": "2026-11-09T17:07:03Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -1400,16 +1488,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 1,
+      "comments": 2,
       "created_at": "2026-10-28T21:35:56Z",
-      "updated_at": "2026-11-01T18:21:17Z",
-      "closed_at": null,
+      "updated_at": "2026-11-09T17:08:36Z",
+      "closed_at": "2026-11-09T17:08:36Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -2225,16 +2313,16 @@
           "archived_by": null
         }
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 2,
+      "comments": 3,
       "created_at": "2026-10-23T23:23:49Z",
-      "updated_at": "2026-10-23T23:59:54Z",
-      "closed_at": null,
+      "updated_at": "2026-11-17T15:55:45Z",
+      "closed_at": "2026-11-17T15:55:45Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -4632,7 +4720,7 @@
       "milestone": null,
       "comments": 2,
       "created_at": "2026-10-11T18:31:11Z",
-      "updated_at": "2026-11-01T18:21:30Z",
+      "updated_at": "2026-11-10T21:13:04Z",
       "closed_at": null,
       "assignee": null,
       "author_association": "CONTRIBUTOR",
@@ -4797,16 +4885,16 @@
       "labels": [
 
       ],
-      "state": "open",
+      "state": "closed",
       "locked": false,
       "assignees": [
 
       ],
       "milestone": null,
-      "comments": 3,
+      "comments": 4,
       "created_at": "2026-11-07T04:46:51Z",
-      "updated_at": "2026-11-08T10:27:09Z",
-      "closed_at": null,
+      "updated_at": "2026-11-09T17:09:13Z",
+      "closed_at": "2026-11-09T17:09:13Z",
       "assignee": null,
       "author_association": "CONTRIBUTOR",
       "issue_field_values": [
@@ -4840,7 +4928,7 @@
       },
       "timeline_url": "https://api.github.com/repos/Graphify-Labs/graphify/issues/5074/timeline",
       "performed_via_github_app": null,
-      "state_reason": null,
+      "state_reason": "completed",
       "pinned_comment": null,
       "score": 1.0
     },

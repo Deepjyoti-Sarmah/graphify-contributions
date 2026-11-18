@@ -391,6 +391,15 @@
       "prs": [
         5091
       ]
+    },
+    {
+      "id": "5236",
+      "title": "SQL: partially parsed procedure headers produce duplicate and malformed routine nodes with tree-sitter-sql 0.3.13",
+      "issue": 5236,
+      "prs": [
+        5324
+      ],
+      "reported_by": "sub4biz"
     }
   ],
   "prs": {
@@ -2364,6 +2373,78 @@
         "test_watch_falls_back_when_watchdog_lacks_event_filter",
         "test_watch_warns_when_observer_hides_event_filter_in_kwargs",
         "test_watch_non_linux_handler_accepts_events_without_watched_entry"
+      ]
+    },
+    "5324": {
+      "summary": "One T-SQL `CREATE PROCEDURE` now gives one routine node with its full name, instead of a correct node plus a broken duplicate on tree-sitter-sql 0.3.12 and later.",
+      "why": "The SQL extractor names a routine twice: the tree walk reads the grammar's `object_reference`, and the recovery scan reads the source text with a regex. From tree-sitter-sql 0.3.12 the grammar parses T-SQL `AS BEGIN` headers but misreads the name, so the two ids differ. `[dbo].[usp_Load] @BatchId INT` became `dbo.usp_Load@BatchId INT()`, `p @x INT` became `INT()`, and `\"dbo\".\"a\"\"b\"` was cut to `\"dbo\".\"a\"()`. Every read and write edge was attached to both nodes.",
+      "what": "When the recovery scan finds a `CREATE`, it drops any routine the walk added on that line under a different id, with that node's edges and name lookups. Recovery then owns the node and derives its reads and writes from the body text, as it did on 0.3.11.",
+      "helps": "Anyone indexing T-SQL stored procedures with tree-sitter-sql 0.3.12 or 0.3.13. Each procedure shows up once, under its real name, and its table edges are no longer doubled.",
+      "diagram": "flowchart TD\n  subgraph Before\n    B1[CREATE PROCEDURE p @x INT] --> B2[walk: name INT]\n    B1 --> B3[recovery: name p]\n    B2 --> B4[\"INT() + edges\"]\n    B3 --> B5[\"p() + same edges\"]\n  end\n  subgraph After\n    A1[CREATE PROCEDURE p @x INT] --> A2[walk: name INT]\n    A1 --> A3[recovery: name p]\n    A3 --> A4[walk routine on this line, other id?]\n    A4 -->|yes| A5[\"drop INT() and its edges\"]\n    A5 --> A6[\"p() + edges once\"]\n  end",
+      "before": "bracketed.sql ['dbo.usp_LoadDebtors()', 'dbo.usp_LoadDebtors@BatchId INT()']\nquoted.sql    ['\"dbo\".\"a\"\"b\"()', '\"dbo\".\"a\"()']",
+      "after": "bracketed.sql ['dbo.usp_LoadDebtors()']\nquoted.sql    ['\"dbo\".\"a\"\"b\"()']",
+      "limits": [
+        "The walk's node and the recovery match are linked by line number. A routine whose `CREATE` and grammar node start on different lines would not be matched; no such shape was found.",
+        "Partially parsed PL/pgSQL functions still miss body reads, for example `get_user` reading `users` in `tests/fixtures/sample.sql`. Not filed yet.",
+        "Two procedures on one line still share body edges. That already happens on v8 with 0.3.11."
+      ],
+      "tests": [
+        "test_sql_partially_parsed_routine_header_yields_one_node",
+        "test_sql_escaped_quote_function_name_yields_one_node",
+        "test_sql_tsql_bracketed_procedure_is_recovered",
+        "test_sql_escaped_double_quote_in_routine_name_is_consumed",
+        "test_procedure_write_makes_a_non_read_edge"
+      ],
+      "cases": [
+        {
+          "case": "CREATE PROCEDURE p @x INT",
+          "correct": "p()",
+          "before": "p(), INT()",
+          "after": "p()",
+          "covered_by": "test_sql_partially_parsed_routine_header_yields_one_node"
+        },
+        {
+          "case": "CREATE PROCEDURE s.p @x INT",
+          "correct": "s.p()",
+          "before": "s.p(), s.p @x INT()",
+          "after": "s.p()",
+          "covered_by": "test_sql_partially_parsed_routine_header_yields_one_node"
+        },
+        {
+          "case": "CREATE PROCEDURE [s].[p] @x INT",
+          "correct": "s.p()",
+          "before": "s.p(), s.p@x INT()",
+          "after": "s.p()",
+          "covered_by": "test_sql_partially_parsed_routine_header_yields_one_node"
+        },
+        {
+          "case": "CREATE PROCEDURE \"a\"\"b\"",
+          "correct": "\"a\"\"b\"()",
+          "before": "\"a\"\"b\"(), \"a\"()",
+          "after": "\"a\"\"b\"()",
+          "covered_by": "test_sql_partially_parsed_routine_header_yields_one_node"
+        },
+        {
+          "case": "CREATE PROCEDURE \"s\".\"a\"\"b\"",
+          "correct": "\"s\".\"a\"\"b\"()",
+          "before": "\"s\".\"a\"\"b\"(), \"s\".\"a\"()",
+          "after": "\"s\".\"a\"\"b\"()",
+          "covered_by": "test_sql_partially_parsed_routine_header_yields_one_node"
+        },
+        {
+          "case": "CREATE PROCEDURE [a]]b]",
+          "correct": "a]b()",
+          "before": "a]b(), b()",
+          "after": "a]b()",
+          "covered_by": "test_sql_partially_parsed_routine_header_yields_one_node"
+        },
+        {
+          "case": "CREATE FUNCTION \"a\"\"b\"() (also broken on 0.3.11)",
+          "correct": "\"a\"\"b\"()",
+          "before": "\"a\"\"b\"(), \"a\"()",
+          "after": "\"a\"\"b\"()",
+          "covered_by": "test_sql_escaped_quote_function_name_yields_one_node"
+        }
       ]
     }
   },
