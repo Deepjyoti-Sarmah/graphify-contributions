@@ -400,6 +400,15 @@
         5324
       ],
       "reported_by": "sub4biz"
+    },
+    {
+      "id": "5320",
+      "title": "VB.NET: qualified calls to modules/types in other files are dropped; multi-line string literals and `ByVal Optional` break parsing of the whole file",
+      "issue": 5320,
+      "prs": [
+        5327
+      ],
+      "reported_by": "jjvegamelis"
     }
   ],
   "prs": {
@@ -2444,6 +2453,62 @@
           "before": "\"a\"\"b\"(), \"a\"()",
           "after": "\"a\"\"b\"()",
           "covered_by": "test_sql_escaped_quote_function_name_yields_one_node"
+        }
+      ]
+    },
+    "5327": {
+      "summary": "A VB.NET parameter written `ByVal Optional x = 0` now counts as optional, so a call that leaves the argument out gets its `calls` edge.",
+      "why": "The VB extractor treated a parameter as optional only when its text started with `Optional`. VB also allows `ByVal Optional` and `ByRef Optional`, so those were counted as required. `Sub B(ByVal Optional x As Integer = 0)` accepted only one argument, and `B()` matched nothing.",
+      "what": "A parameter counts as optional when it has a default value. The VB compiler requires a default exactly when the parameter is `Optional` (BC32024, BC30812), and the grammar keeps the `default_value` field in both modifier orders. The AST cache schema goes from 48 to 49.",
+      "helps": "Anyone indexing VB.NET that writes `ByVal Optional`. Calls that leave the optional argument out now show up as callers.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"Sub B(ByVal Optional x = 0)\"] --> B2[\"text starts with Optional? no\"]\n    B2 --> B3[\"accepts 1 arg\"]\n    B3 --> B4[\"B() : no edge\"]\n  end\n  subgraph After\n    A1[\"Sub B(ByVal Optional x = 0)\"] --> A2[\"has a default value? yes\"]\n    A2 --> A3[\"accepts 0 or 1 args\"]\n    A3 --> A4[\"B() : Other -> B\"]\n  end",
+      "before": "Sub B(ByVal Optional x As Integer = 0)\naccepted_arities [1]\ncalls: B -> Other",
+      "after": "Sub B(ByVal Optional x As Integer = 0)\naccepted_arities [0, 1]\ncalls: B -> Other, Other -> B",
+      "limits": [
+        "Only part of #5320. Calls into other files are #4573 and #4623, rebased onto 0.9.112 the same day.",
+        "The issue says `ByVal Optional` and multi-line strings lose every method in the file. Neither reproduced: the parse error stays inside one statement. The reporter was asked for a file that shows it.",
+        "`ParamArray` parameters still count as one required argument.",
+        "#4573 also bumps the cache schema to 49, so whichever lands second needs a one-line rebase."
+      ],
+      "tests": [
+        "test_vbnet_optional_parameter_accepts_the_omitted_argument_in_any_modifier_order",
+        "test_vbnet_required_parameters_after_byval_stay_required"
+      ],
+      "cases": [
+        {
+          "case": "`ByVal Optional x = 0`, call `B()`",
+          "correct": "binds (compiler runs it)",
+          "before": "no edge",
+          "after": "edge",
+          "covered_by": "test_vbnet_optional_parameter_accepts_the_omitted_argument_in_any_modifier_order[ByVal Optional]"
+        },
+        {
+          "case": "`ByRef Optional x = 0`, call `B()`",
+          "correct": "binds",
+          "before": "no edge",
+          "after": "edge",
+          "covered_by": "test_vbnet_optional_parameter_accepts_the_omitted_argument_in_any_modifier_order[ByRef Optional]"
+        },
+        {
+          "case": "`Optional ByVal x = 0`, call `B()`",
+          "correct": "binds",
+          "before": "edge",
+          "after": "edge",
+          "covered_by": "test_vbnet_optional_parameter_accepts_the_omitted_argument_in_any_modifier_order[Optional ByVal]"
+        },
+        {
+          "case": "`ByVal x` (no default), call `B()`",
+          "correct": "does not compile",
+          "before": "no edge",
+          "after": "no edge",
+          "covered_by": "test_vbnet_required_parameters_after_byval_stay_required"
+        },
+        {
+          "case": "`F(a, ByVal Optional b = 1)`",
+          "correct": "accepts 1 or 2 args",
+          "before": "[2]",
+          "after": "[1, 2]",
+          "covered_by": "test_vbnet_required_parameters_after_byval_stay_required"
         }
       ]
     }
