@@ -409,6 +409,24 @@
         5327
       ],
       "reported_by": "jjvegamelis"
+    },
+    {
+      "id": "5223",
+      "title": "Resolve local tsconfig extends and paths declarations to scanned file nodes",
+      "issue": 5223,
+      "prs": [
+        5341
+      ],
+      "reported_by": "MicheleGiuliettiDev"
+    },
+    {
+      "id": "5225",
+      "title": "Resolve literal workflow script and local config path references in YAML",
+      "issue": 5225,
+      "prs": [
+        5342
+      ],
+      "reported_by": "MicheleGiuliettiDev"
     }
   ],
   "prs": {
@@ -2509,6 +2527,112 @@
           "before": "[2]",
           "after": "[1, 2]",
           "covered_by": "test_vbnet_required_parameters_after_byval_stay_required"
+        }
+      ]
+    },
+    "5341": {
+      "summary": "A tsconfig `extends` that names a local config now points at that config's node, and an exact `paths` alias points at the file it maps to.",
+      "why": "The JSON extractor turned every `extends` value into a `concept` stub labelled with its raw text, owned by the citing file. So `a/` and `b/` each got their own `./tsconfig.json` stub and no link to the real config. `compilerOptions.paths` had no branch at all, so an alias produced no edge.",
+      "what": "A relative `extends` (or one that exists after appending `.json`, as tsc does) emits an edge stamped with `target_file`, and extract's existing repoint pass moves it onto the real file node. An exact `paths` alias references the first target that exists, resolved against `baseUrl` (the config's own, else one inherited through local `extends`) or the declaring config's folder. The AST cache schema goes from 48 to 49.",
+      "helps": "Anyone indexing a TypeScript monorepo. Configs that extend each other are linked in the graph, and an alias declaration leads to the file it names.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"a/tsconfig.build.json\"] -->|extends| B2[\"stub: ./tsconfig.json\"]\n    B3[\"paths @demo\"] --> B4[\"no edge\"]\n  end\n  subgraph After\n    A1[\"a/tsconfig.build.json\"] -->|extends| A2[\"a/tsconfig.json\"]\n    A3[\"tsconfig.json\"] -->|references| A4[\"src/index.ts\"]\n  end",
+      "before": "a/tsconfig.build.json --extends--> ./tsconfig.json  [concept, a/tsconfig.build.json]\nb/tsconfig.build.json --extends--> ./tsconfig.json  [concept, b/tsconfig.build.json]\n(no paths edge)",
+      "after": "a/tsconfig.build.json --extends--> a/tsconfig.json\nb/tsconfig.build.json --extends--> b/tsconfig.json\ntsconfig.json --references--> src/index.ts",
+      "limits": [
+        "Wildcard aliases (`@/*`) get no edge; expanding them needs its own policy.",
+        "If a config has no own `baseUrl` and its `extends` chain reaches a package, the base can't be known, so `paths` gets no edge.",
+        "An `extends` pointing at a JSON file graphify doesn't scan has no node to link to.",
+        "A cached stub stays until the citing config changes if the target file appears later, as with relative JS imports.",
+        "#5327 also bumps the cache schema to 49, so whichever lands second needs a one-line rebase."
+      ],
+      "tests": [
+        "test_local_extends_points_at_the_real_config",
+        "test_external_or_missing_extends_keeps_its_stub",
+        "test_exact_paths_alias_references_its_file",
+        "test_wildcard_or_missing_paths_target_gets_no_edge",
+        "test_paths_use_baseurl_inherited_through_extends"
+      ],
+      "cases": [
+        {
+          "case": "`paths` base when `baseUrl` is inherited through `extends`",
+          "correct": "`lib/x.ts` (tsc 5.9.3)",
+          "before": "no edge",
+          "after": "`lib/x.ts`",
+          "covered_by": "test_paths_use_baseurl_inherited_through_extends"
+        },
+        {
+          "case": "`extends: \"./tsconfig.base\"`",
+          "correct": "`tsconfig.base.json` (tsc 5.9.3)",
+          "before": "stub",
+          "after": "`tsconfig.base.json`",
+          "covered_by": "test_local_extends_points_at_the_real_config[no-suffix]"
+        },
+        {
+          "case": "`extends: \"@tsconfig/node18/tsconfig.json\"`",
+          "correct": "package, stays a stub",
+          "before": "stub",
+          "after": "stub",
+          "covered_by": "test_external_or_missing_extends_keeps_its_stub"
+        },
+        {
+          "case": "`paths: {\"@/*\": [\"src/*\"]}`",
+          "correct": "no edge (no expansion policy)",
+          "before": "no edge",
+          "after": "no edge",
+          "covered_by": "test_wildcard_or_missing_paths_target_gets_no_edge[wildcard]"
+        }
+      ]
+    },
+    "5342": {
+      "summary": "A workflow's `pnpm run check` now links to the `check` script in `package.json`, and a compose bind mount `./settings.yaml:/etc/...` links to `settings.yaml`.",
+      "why": "The YAML extractor turned keys into nodes and dropped every scalar value, so `run: pnpm run check` and `- ./settings.yaml:/etc/demo/settings.yaml` were never read. The issue's repro scanned five files and got no edge other than `contains`.",
+      "what": "`extract_yaml` now reads values in GitHub workflows and compose files and records each literal script or path as a `language: \"yaml\"` raw call, with the target relative to the YAML file. After every file is extracted, the `yaml_value_refs` resolver links the holding key to the target with a `references` edge, but only if the target was scanned. Expressions, variables, pipes, named volumes, absolute paths and compose `command:` arguments get no edge.",
+      "helps": "Anyone asking the graph what runs a script or what uses a config file. CI workflows and compose files now show up as callers of the package scripts and local files they name.",
+      "diagram": "flowchart TD\n  subgraph Before\n    B1[\"run: pnpm run check\"] --> B2[\"walk: keep key run, drop value\"]\n    B3[\"- ./settings.yaml:/etc/s.yaml\"] --> B4[\"walk: scalar list item dropped\"]\n  end\n  subgraph After\n    A1[\"run: pnpm run check\"] --> A2[\"value_refs: script check in ./package.json\"]\n    A3[\"- ./settings.yaml:/etc/s.yaml\"] --> A4[\"value_refs: file ./settings.yaml\"]\n    A2 --> A5[\"raw_calls language yaml\"]\n    A4 --> A5\n    A5 --> A6{\"target scanned?\"}\n    A6 -->|yes| A7[\"key references target\"]\n    A6 -->|no| A8[\"no edge\"]\n  end",
+      "before": "non-containment: []",
+      "after": "non-containment: [('.github/workflows/check.yml', 'references', 'package.json'),\n                  ('compose.yaml', 'references', 'settings.yaml')]",
+      "limits": [
+        "Every step's `run` key shares one node (`<file>_steps_run`), so twenty steps calling the same script give one edge.",
+        "`package.json` must be in the working directory itself; npm's upward search is not followed.",
+        "Each `run:` line is read as one plain command. A line with shell syntax, such as `pnpm run check && pnpm run build`, is skipped whole.",
+        "Compose `command:` arguments are container-side and are not linked.",
+        "Not covered: `uses: ./.github/actions/x`, compose `env_file` and `build.context`, GitLab CI and other CI formats.",
+        "The cache schema goes to 49, the same number #5319's branch uses, so one of them must renumber."
+      ],
+      "tests": [
+        "test_workflow_run_links_package_script",
+        "test_step_working_directory_picks_that_package",
+        "test_defaults_working_directory_is_inherited",
+        "test_workflow_run_links_script_file",
+        "test_workflow_run_does_not_guess",
+        "test_compose_bind_mount_links_host_file",
+        "test_compose_path_is_relative_to_the_compose_file",
+        "test_compose_does_not_guess",
+        "test_compose_command_argument_is_container_side",
+        "test_unscanned_target_is_not_linked",
+        "test_link_appears_once_target_is_added_with_yaml_cached"
+      ],
+      "cases": [
+        {
+          "case": "S1: check the disk inside extract_yaml",
+          "correct": "23 / 23 tests",
+          "before": "no edges",
+          "after": "22 / 23: fails the cache test; leaves edges to unscanned and outside-root files with host paths in their ids",
+          "covered_by": "test_link_appears_once_target_is_added_with_yaml_cached"
+        },
+        {
+          "case": "S2: raw_calls + resolver (this PR)",
+          "correct": "23 / 23 tests, no slowdown",
+          "before": "no edges",
+          "after": "23 / 23, warm 11.98s vs v8 11.95s on 2,000 files",
+          "covered_by": "all 23"
+        },
+        {
+          "case": "S3: resolver re-parses each YAML file",
+          "correct": "23 / 23 tests, no slowdown",
+          "before": "no edges",
+          "after": "23 / 23, warm 28.36s; 68s in the resolver under cProfile",
+          "covered_by": "all 23"
         }
       ]
     }
