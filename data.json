@@ -2696,6 +2696,27 @@
           "covered_by": "test_vbnet_quote_inside_a_comment_does_not_open_a_string"
         }
       ]
+    },
+    "5347": {
+      "summary": "A Java call through a Lombok `@Getter` getter, such as `Model.getInstance().work()`, now links to `work()` and to `getInstance()`.",
+      "why": "Lombok writes `getInstance()` at compile time, so the source has no declaration for it. Java chain typing reads each step's declared return type, found no `getInstance` node, and stopped, so the call had no edge. A hand-written `getInstance()` resolved fine.",
+      "what": "A field (or class) with Lombok's `@Getter` gets a `.getX()`/`.isX()` node like a hand-written getter: arity 0, a `method` edge from its class, and the field's type as its return type. A bare `@Getter` counts only with a `lombok.Getter`/`lombok.*` import; `AccessLevel.NONE` or an existing zero-argument method of that name adds nothing. The AST cache schema goes from 48 to 49.",
+      "helps": "Teams using Lombok singletons. `affected` and `explain` now see the callers that go through `X.getInstance().m()`.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"Caller.run\"] -.-> B2[\"getInstance: no node\"]\n  end\n  subgraph After\n    A1[\"Caller.run\"] -->|calls| A2[\"Model.getInstance\"]\n    A1 -->|calls| A3[\"Model.work\"]\n  end",
+      "before": "Model nodes: Model.java, Model, .work()\n(no calls edges)",
+      "after": ".run() calls .work()\n.run() calls .getInstance()",
+      "limits": [
+        "`@Data` and `@Value` also generate getters and are not handled.",
+        "`lombok.config` accessor settings (prefix, fluent) are ignored.",
+        "Naming follows Lombok's docs; not checked against a real Lombok compile."
+      ],
+      "tests": [
+        "test_static_getter_chain_reaches_the_member",
+        "test_generated_getter_looks_like_a_hand_written_one",
+        "test_getter_name_follows_lombok",
+        "test_class_level_getter_skips_static_fields",
+        "test_no_extra_getter_node"
+      ]
     }
   },
   "issues": [
