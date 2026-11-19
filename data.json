@@ -406,7 +406,8 @@
       "title": "VB.NET: qualified calls to modules/types in other files are dropped; multi-line string literals and `ByVal Optional` break parsing of the whole file",
       "issue": 5320,
       "prs": [
-        5327
+        5327,
+        5345
       ],
       "reported_by": "jjvegamelis"
     },
@@ -2633,6 +2634,66 @@
           "before": "no edges",
           "after": "23 / 23, warm 28.36s; 68s in the resolver under cProfile",
           "covered_by": "all 23"
+        }
+      ]
+    },
+    "5345": {
+      "summary": "A VB.NET file with a string literal that spans lines no longer loses every method after that string.",
+      "why": "tree-sitter-vb-dotnet 0.3.0 only accepts single-line strings, but VB 14 allows them to cross line breaks. The text after the break is read as code, a `'` there starts a comment that swallows a `)`, and the unclosed `(` turns the rest of the file into one ERROR node. In the reporter's file `Despues()` and its calls were gone.",
+      "what": "Before parsing, a VB-aware scan rewrites each string that spans lines into `\"\"` plus one ` _` line continuation per break, so later lines keep their numbers and code after the closing quote is kept. A C regex runs first, so files with no line that opens an unclosed string skip the scan. The AST cache schema goes from 48 to 49. The grammar bug is filed upstream as CodeAnt-AI/tree-sitter-vb-dotnet#9.",
+      "helps": "Anyone indexing VB.NET that builds JavaScript or SQL in multi-line strings (WebView2, Selenium). Methods after such a string keep their nodes, calls and line numbers, and a large file that took 14.5 s to parse on v8 takes under 0.4 s.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"Dim s = &quot; + line break\"] --> B2[\"body read as code\"]\n    B2 --> B3[\"' comment eats )\"]\n    B3 --> B4[\"unclosed ( : rest of file is ERROR\"]\n  end\n  subgraph After\n    A1[\"line opens an unclosed string?\"] --> A2[\"flatten to &quot;&quot; _ per line\"]\n    A2 --> A3[\"parse\"]\n    A3 --> A4[\"Despues() kept at L12\"]\n  end",
+      "before": "['repro.vb', 'Demo', 'Antes()', 'Medio()']",
+      "after": "['repro.vb', 'Demo', 'Antes()', 'Medio()', 'Despues()']",
+      "limits": [
+        "Curly quotes (“ ”), which VB also accepts as string delimiters, are not recognised.",
+        "A `}` inside a string inside an interpolation hole (`$\"{f(\"}\")}\"`) can end the hole early, because holes are tracked by brace depth.",
+        "Columns after a flattened string shift on its last line. Graphify records only lines.",
+        "#5327 also bumps the cache schema to 49, so whichever lands second needs a one-line rebase.",
+        "Not tested on Windows or on a real-world VB codebase beyond the reporter's sample."
+      ],
+      "tests": [
+        "test_vbnet_methods_after_a_multiline_string_with_a_quote_survive",
+        "test_vbnet_multiline_string_keeps_later_line_numbers",
+        "test_vbnet_statement_continuing_after_a_multiline_string_survives",
+        "test_vbnet_multiline_interpolated_string_with_a_quote_survives",
+        "test_vbnet_quote_inside_a_comment_does_not_open_a_string"
+      ],
+      "cases": [
+        {
+          "case": "reporter's file: `'` on a continuation line",
+          "correct": "3 methods, Despues -> Antes",
+          "before": "Despues lost",
+          "after": "3 methods, both calls",
+          "covered_by": "test_vbnet_methods_after_a_multiline_string_with_a_quote_survive"
+        },
+        {
+          "case": "`Despues()` line number",
+          "correct": "L12",
+          "before": "missing",
+          "after": "L12",
+          "covered_by": "test_vbnet_multiline_string_keeps_later_line_numbers"
+        },
+        {
+          "case": "statement continues after the closing quote (`& id`, `\"\"`)",
+          "correct": "calls kept",
+          "before": "lost",
+          "after": "kept",
+          "covered_by": "test_vbnet_statement_continuing_after_a_multiline_string_survives"
+        },
+        {
+          "case": "multi-line `$\"...\"` with `'` and `{id}`",
+          "correct": "calls kept",
+          "before": "lost",
+          "after": "kept",
+          "covered_by": "test_vbnet_multiline_interpolated_string_with_a_quote_survives"
+        },
+        {
+          "case": "`' say \"hi` in a comment",
+          "correct": "no string opened",
+          "before": "A -> B",
+          "after": "A -> B",
+          "covered_by": "test_vbnet_quote_inside_a_comment_does_not_open_a_string"
         }
       ]
     }
