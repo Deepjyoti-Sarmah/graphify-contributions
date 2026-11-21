@@ -2721,14 +2721,15 @@
     "5365": {
       "summary": "C/C++ calls inside `#elif`/`#else` are kept when the `#if` branch above them ends in `return`.",
       "why": "#5338 stops collecting calls after an unconditional `return`. In the parsed tree, the `#elif`/`#else` sections come after the `#if` section's statements, so they were dropped as dead code. They are other build configurations.",
-      "what": "Each `#elif`/`#else` section of a `#if`/`#ifdef`/`#elif` is now its own starting point for reachability, the same way `switch` cases already were. Code after a `return` inside any one section is still dropped. Stacked on #5338.",
+      "what": "Each `#elif`/`#else` section of a `#if`/`#ifdef`/`#elif` is now its own starting point for reachability, the same way `switch` cases already were. Code after a `return` inside any one section is still dropped. Stacked on #5338 and rebased onto current v8. The AST cache schema goes to 51.",
       "helps": "Firmware and embedded code with config-dependent early returns (CubeMX USER CODE blocks). Calls in the other configurations stay in the graph.",
       "diagram": "flowchart LR\n  subgraph Before\n    B1[\"#if: a(); return;\"] --> B2[\"#else: b() dropped\"]\n  end\n  subgraph After\n    A1[\"#if: a(); return;\"]\n    A2[\"#else: b() kept\"]\n  end",
       "before": "f() calls a(), after()",
       "after": "f() calls a(), after(), b(), c()   (dead() still dropped)",
       "limits": [
         "If every branch returns, code after `#endif` is still treated as reachable.",
-        "Must land with or after #5338."
+        "Must land with or after #5338.",
+        "Branches are not evaluated: `#if 0` and its `#else` both count as reachable, as on v8."
       ],
       "tests": [
         "test_return_in_preproc_branch_keeps_alternate_branches"
