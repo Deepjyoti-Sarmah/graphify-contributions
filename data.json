@@ -2762,26 +2762,6 @@
         "test_resource_read_not_blocked_by_a_tool_call_reload",
         "test_project_call_during_default_reload_answers_its_own_graph"
       ]
-    },
-    "5379": {
-      "summary": "C# calls through a static member of a type, like `Audio.Instance.Click()`, now get a `calls` edge.",
-      "why": "Unity code reaches its managers through static singletons (`AudioManager.Instance.Play()`). graphify typed `x.F.M()` only when `x` was a variable, so with a type at the front the call got no edge and no `unresolved_calls` entry. The reporter counted about 1,170 such calls in one project.",
-      "what": "A name at the front of `T.P.M()` that is no value in scope is read as a type, and `P`'s declared type picks the method. `?.` and `var a = T.P; a.M()` take the same path. A value in scope is never read as a type.",
-      "helps": "C# and Unity users tracing calls through manager singletons: the trace no longer stops at the first manager.",
-      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"Audio.Instance.Click()\"] --> B2[\"Audio is not a variable\"] --> B3[\"no chain, no edge\"]\n  end\n  subgraph After\n    A1[\"Audio.Instance.Click()\"] --> A2[\"Audio is no value in scope: a type\"] --> A3[\"Instance declared as Audio\"] --> A4[\"Audio.Click()\"]\n  end",
-      "before": "calls: Menu.ViaField() -> Audio.Click()   (1 of 4)",
-      "after": "calls: ViaInstance, ViaConditional, ViaLocal, ViaField -> Audio.Click()   (4 of 4)",
-      "limits": [
-        "Edges are INFERRED, like the existing `x.F.M()` chain.",
-        "A static member of a type outside the corpus (`Camera.main.X()`) still gets no `unresolved_calls` entry.",
-        "One member deep only: `T.P.Q.M()` is unchanged."
-      ],
-      "tests": [
-        "test_static_member_receiver_resolves_to_audio_click",
-        "test_static_member_of_another_type_uses_its_declared_type",
-        "test_unknown_static_member_gives_no_edge",
-        "test_value_named_like_the_type_is_not_read_as_the_type"
-      ]
     }
   },
   "issues": [
