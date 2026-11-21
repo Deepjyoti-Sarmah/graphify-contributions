@@ -428,6 +428,15 @@
         5342
       ],
       "reported_by": "MicheleGiuliettiDev"
+    },
+    {
+      "id": "5371-serve-reload",
+      "title": "serve: graph reload still blocks every request (0.9.114)",
+      "issue": 5371,
+      "reported_by": "vduybq",
+      "prs": [
+        5374
+      ]
     }
   ],
   "prs": {
@@ -2733,6 +2742,25 @@
       ],
       "tests": [
         "test_return_in_preproc_branch_keeps_alternate_branches"
+      ]
+    },
+    "5374": {
+      "summary": "The MCP server answers requests from the graph it already has while `graph.json` reloads.",
+      "why": "After `graph.json` was rewritten, every MCP request waited for the whole reload (about 70 s on the reporter's 582 MB graph). `call_tool` and `read_resource` loaded the graph on the event loop, so #5181's stale-entry path could never be reached.",
+      "what": "The new `_warm_graph()` runs the load in a worker thread. `G` is then bound by the synchronous `_select_graph`, with no `await` before the handler, so another call cannot swap the graph mid-handler.",
+      "helps": "Anyone serving a graph that gets rebuilt (nightly jobs, health checks). Only the request that triggered the reload waits.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"call_tool\"] --> B2[\"load graph on the event loop\"] --> B3[\"every other request waits\"]\n  end\n  subgraph After\n    A1[\"call_tool\"] --> A2[\"load graph in a worker thread\"]\n    A3[\"other requests\"] --> A4[\"served from the current graph\"]\n  end",
+      "before": "3 graph_stats after a rewrite (80k nodes): 6.75 / 6.93 / 6.73 s",
+      "after": "3 graph_stats after a rewrite (80k nodes): 7.31 / 1.35 / 2.22 s",
+      "limits": [
+        "The worker thread holds the GIL while parsing, so requests during a reload are slower than warm ones.",
+        "The first ever load of a path still waits: there is nothing stale to serve.",
+        "Not tested on Windows."
+      ],
+      "tests": [
+        "test_concurrent_tool_calls_served_from_current_graph_during_reload",
+        "test_resource_read_not_blocked_by_a_tool_call_reload",
+        "test_project_call_during_default_reload_answers_its_own_graph"
       ]
     }
   },
