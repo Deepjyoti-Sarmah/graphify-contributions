@@ -437,6 +437,15 @@
       "prs": [
         5374
       ]
+    },
+    {
+      "id": "5398",
+      "title": "Rust: `use krate::module::{self, Item}` leaves a dangling bare-name `imports_from` edge (0.9.115)",
+      "issue": 5398,
+      "reported_by": "grosjeanbaptiste",
+      "prs": [
+        5400
+      ]
     }
   ],
   "prs": {
@@ -2776,6 +2785,86 @@
         "test_non_section_query_does_not_raise[True]",
         "test_retry_does_not_replace_full_graph_index",
         "test_heading_still_resolves_with_warm_index"
+      ]
+    },
+    "5400": {
+      "summary": "A Rust `use krate::module::{self, Item}` now points at the module's file node instead of leaving a dangling edge.",
+      "why": "The group parser turned `{self}` into the module's path, then kept only its last segment, `dev`. The stub rewire matches declaration labels, and a module's file node is labelled `dev.rs`, so nothing resolved `dev`. The edge dangled, and the graph build turned it into a source-less `concept` stub. Plain `use crate::util;` and `use crate::util::*;` had the same gap.",
+      "what": "Every `use` binding that names a module records its path. The rewire resolves that path to the module's file (`a/dev.rs` or `a/dev/mod.rs`) inside the right crate: `crate::`/`self::`/`super::`, the crate's own Cargo package, or a workspace crate. Without a Cargo.toml it links only a module declared with `mod dev;` in the `lib.rs` that contains the importer. Anything external or ambiguous keeps its v8 target.",
+      "helps": "Rust users who import a module with `{self}`: the module keeps one node with its real degree, instead of being split into the file plus a stub.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"use baba_actions::dev::{self, SystemRunner}\"] --> B2[\"edge to bare dev\"] --> B3[\"dangling, becomes concept stub\"]\n  end\n  subgraph After\n    A1[\"use baba_actions::dev::{self, SystemRunner}\"] --> A2[\"path baba_actions / dev\"] --> A3[\"actions_src_dev, the dev.rs node\"]\n  end",
+      "before": "DANGLING actions_src_bin_b -> dev imports_from",
+      "after": "(no dangling edges)",
+      "limits": [
+        "Without a Cargo.toml, `use serde::de::{self}` in a crate whose `lib.rs` declares `mod de;` links to the local `de.rs`.",
+        "The reporter's second local stub, `console`, was not reproduced; the PR asks the reporter for a file that shows it.",
+        "Inline modules (`mod dev { ... }`) have no file node, so their imports stay as they are.",
+        "`_AST_CACHE_SCHEMA` goes from 51 to 52, so cached Rust files re-extract once after upgrade."
+      ],
+      "tests": [
+        "test_regression_issue_four_file_reproduction_and_sibling_imports",
+        "test_regression_no_manifest_declared_module_resolves_structurally",
+        "test_regression_cargo_package_name_with_hyphen_resolves_self_module",
+        "test_regression_self_as_alias_targets_original_module_file",
+        "test_regression_crate_and_super_self_groups_target_module_file",
+        "test_regression_cargo_self_group_resolves_dev_mod_rs",
+        "test_regression_nested_cargo_path_resolves_declared_module_file",
+        "test_coverage_no_manifest_undeclared_module_file_is_not_linked",
+        "test_coverage_external_serde_self_does_not_bind_local_declared_de",
+        "test_coverage_unrelated_crates_are_not_guessed",
+        "test_regression_nested_cargo_path_does_not_match_other_dev_file",
+        "test_each_binding_gets_the_plain_use_target"
+      ],
+      "cases": [
+        {
+          "case": "`baba_actions::dev::{self}`, no Cargo.toml, `lib.rs` declares `mod dev;`",
+          "correct": "actions_src_dev",
+          "before": "dev (dangling)",
+          "after": "actions_src_dev",
+          "covered_by": "test_regression_no_manifest_declared_module_resolves_structurally"
+        },
+        {
+          "case": "`baba_actions::dev::{self}`, package `baba-actions`",
+          "correct": "src_dev",
+          "before": "dev (dangling)",
+          "after": "src_dev",
+          "covered_by": "test_regression_cargo_package_name_with_hyphen_resolves_self_module"
+        },
+        {
+          "case": "`crate::dev::{self as runtime}`",
+          "correct": "src_dev",
+          "before": "dev_as_runtime (dangling)",
+          "after": "src_dev",
+          "covered_by": "test_regression_self_as_alias_targets_original_module_file"
+        },
+        {
+          "case": "module stored as `src/dev/mod.rs`",
+          "correct": "the `dev/mod.rs` file node",
+          "before": "dev (dangling)",
+          "after": "the `dev/mod.rs` file node",
+          "covered_by": "test_regression_cargo_self_group_resolves_dev_mod_rs"
+        },
+        {
+          "case": "`serde::de::{self}`, crate `myapp` has its own `src/de.rs`",
+          "correct": "external de, not linked",
+          "before": "de",
+          "after": "de",
+          "covered_by": "test_coverage_external_serde_self_does_not_bind_local_declared_de"
+        },
+        {
+          "case": "`crate::a::dev::{self}`, only `src/other/dev.rs` exists",
+          "correct": "not linked",
+          "before": "dev",
+          "after": "dev",
+          "covered_by": "test_regression_nested_cargo_path_does_not_match_other_dev_file"
+        },
+        {
+          "case": "`dev.rs` exists, `lib.rs` doesn't declare `mod dev;`",
+          "correct": "not linked",
+          "before": "dev",
+          "after": "dev",
+          "covered_by": "test_coverage_no_manifest_undeclared_module_file_is_not_linked"
+        }
       ]
     }
   },
