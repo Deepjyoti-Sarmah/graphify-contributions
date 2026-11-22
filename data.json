@@ -2775,7 +2775,7 @@
     "5386": {
       "summary": "`get_section` no longer crashes with `KeyError` when a query is ambiguous or names a non-section node.",
       "why": "The section retry ran on a networkx subgraph view, which shares the full graph's `graph` dict. It reused the full graph's cached search index, whose ids include nodes outside the view, and the lookup raised `KeyError`.",
-      "what": "The retry view now gets its own `graph` dict, copied without the derived search caches, so it builds an index of section nodes only and never touches the full graph's caches.",
+      "what": "The retry view now gets its own `graph` dict that keeps public metadata and `_logical_directed` and drops every other private key. It builds an index of section nodes only, never touches the full graph's caches, and a cache added to `G.graph` later is left out by default.",
       "helps": "Anyone calling `get_section` over MCP with a query like `deploy` that matches code nodes: they get the normal 'Ambiguous' message instead of an error.",
       "diagram": "flowchart LR\n  subgraph Before\n    B1[\"retry on section view\"] --> B2[\"shared G.graph: full-graph index\"] --> B3[\"KeyError on non-section id\"]\n  end\n  subgraph After\n    A1[\"retry on section view\"] --> A2[\"own graph dict, no caches\"] --> A3[\"index of sections only\"]\n  end",
       "before": "KeyError: 'Key deploy_sh not found'",
@@ -2784,7 +2784,13 @@
         "test_non_section_query_does_not_raise[False]",
         "test_non_section_query_does_not_raise[True]",
         "test_retry_does_not_replace_full_graph_index",
-        "test_heading_still_resolves_with_warm_index"
+        "test_heading_still_resolves_with_warm_index",
+        "test_retry_uses_isolated_section_view",
+        "test_retry_drops_unknown_future_cache"
+      ],
+      "limits": [
+        "A private key that a lookup starts reading later has to be added to `_SECTION_VIEW_GRAPH_KEYS`; missing it can only drop metadata, never share a full-graph cache.",
+        "Each fallback rebuilds a sections-only index: about 10 ms against 120 ms for the full graph on a synthetic 2,186-node graph, so there is no cache."
       ]
     },
     "5400": {
