@@ -446,6 +446,15 @@
       "prs": [
         5400
       ]
+    },
+    {
+      "id": "5418",
+      "title": "[Bug]: Python lambda defaults call unrelated same-file functions when enclosing parameters shadow them",
+      "issue": 5418,
+      "reported_by": "melhusl-hs",
+      "prs": [
+        5419
+      ]
     }
   ],
   "prs": {
@@ -2870,6 +2879,93 @@
           "before": "dev",
           "after": "dev",
           "covered_by": "test_coverage_no_manifest_undeclared_module_file_is_not_linked"
+        }
+      ]
+    },
+    "5419": {
+      "summary": "A Python call made through a function parameter no longer links to an unrelated function with the same name.",
+      "why": "The same-file lookup matched a bare call by name and never asked whether an enclosing function's parameter owns that name. `def factory(handler): return lambda cb=handler(): cb` got an `EXTRACTED` edge to a module-level `handler`. Plain `return handler()` on a parameter and captured parameters had the same false edge.",
+      "what": "The lookup now walks outward from the call the way Python resolves a name. A parameter means no edge. A nearer `def`, `class`, import or `global` stops the walk, and the existing lookup decides. The import-guided pass in `resolution.py` links calls on its own, so it uses the same check.",
+      "helps": "Anyone who reads Python call edges: passing a callback under a common name no longer looks like a call to a function that shares the name.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"handler() in factory(handler)\"] --> B2[\"look up by name\"] --> B3[\"edge to module handler\"]\n  end\n  subgraph After\n    A1[\"handler() in factory(handler)\"] --> A2[\"parameter of an enclosing function?\"] -->|yes| A3[\"no edge\"]\n    A2 -->|no| A4[\"lookup as before\"]\n  end",
+      "before": "factory() handler() EXTRACTED\ninner() handler() EXTRACTED",
+      "after": "(neither edge)",
+      "limits": [
+        "Parameters only: after `handler = make()`, a call to `handler()` can still link to a same-file function.",
+        "A lambda's own parameters are left to #5417, which edits the same condition in `engine.py`.",
+        "The import pass still credits an outer function with calls made in its nested functions, as v8 does.",
+        "`_AST_CACHE_SCHEMA` goes from 53 to 54, so cached extractions re-run after upgrade."
+      ],
+      "tests": [
+        "test_call_through_parameter_is_not_linked",
+        "test_call_that_does_not_read_the_parameter_keeps_its_edge",
+        "test_arguments_of_a_parameter_call_are_still_visited",
+        "test_captured_parameter_does_not_link_across_files",
+        "test_local_import_over_parameter_keeps_its_edge"
+      ],
+      "cases": [
+        {
+          "case": "lambda default, own parameter",
+          "correct": "no edge to the module `handler`",
+          "before": "linked to the module `handler`",
+          "after": "no edge to the module `handler`",
+          "covered_by": "test_call_through_parameter_is_not_linked"
+        },
+        {
+          "case": "lambda default, captured parameter",
+          "correct": "no edge to the module `handler`",
+          "before": "linked to the module `handler`",
+          "after": "no edge to the module `handler`",
+          "covered_by": "test_call_through_parameter_is_not_linked"
+        },
+        {
+          "case": "plain `return handler()` on a parameter",
+          "correct": "no edge to the module `handler`",
+          "before": "linked to the module `handler`",
+          "after": "no edge to the module `handler`",
+          "covered_by": "test_call_through_parameter_is_not_linked"
+        },
+        {
+          "case": "method calls a captured parameter",
+          "correct": "no edge to the module `handler`",
+          "before": "linked to the module `handler`",
+          "after": "no edge to the module `handler`",
+          "covered_by": "test_call_through_parameter_is_not_linked"
+        },
+        {
+          "case": "imported `handler` hidden by a captured parameter",
+          "correct": "no edge to `lib.handler`",
+          "before": "linked to `lib.handler`",
+          "after": "no edge to `lib.handler`",
+          "covered_by": "test_captured_parameter_does_not_link_across_files"
+        },
+        {
+          "case": "`handler(real())` through a parameter",
+          "correct": "only `real` linked",
+          "before": "`handler` and `real` linked",
+          "after": "only `real` linked",
+          "covered_by": "test_arguments_of_a_parameter_call_are_still_visited"
+        },
+        {
+          "case": "nested `def handler` rebinds the name",
+          "correct": "the nested `handler`",
+          "before": "the nested `handler`",
+          "after": "the nested `handler`",
+          "covered_by": "test_call_that_does_not_read_the_parameter_keeps_its_edge"
+        },
+        {
+          "case": "`global handler` in the nested function",
+          "correct": "module `handler`",
+          "before": "module `handler`",
+          "after": "module `handler`",
+          "covered_by": "test_call_that_does_not_read_the_parameter_keeps_its_edge"
+        },
+        {
+          "case": "nearer `from lib import handler`",
+          "correct": "`lib.handler`",
+          "before": "`lib.handler`",
+          "after": "`lib.handler`",
+          "covered_by": "test_local_import_over_parameter_keeps_its_edge"
         }
       ]
     }
