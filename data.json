@@ -2800,7 +2800,17 @@
       "limits": [
         "A private key that a lookup starts reading later has to be added to `_SECTION_VIEW_GRAPH_KEYS`; missing it can only drop metadata, never share a full-graph cache.",
         "Each fallback rebuilds a sections-only index: about 10 ms against 120 ms for the full graph on a synthetic 2,186-node graph, so there is no cache."
-      ]
+      ],
+      "landed": {
+        "commits": [
+          "e075d63f",
+          "65556110",
+          "2d60edfd",
+          "9699005f",
+          "eecafe17"
+        ],
+        "note": "Applied to v8 by the maintainer, authorship kept; shipped in 0.9.118."
+      }
     },
     "5400": {
       "summary": "A Rust `use krate::module::{self, Item}` now points at the module's file node instead of leaving a dangling edge.",
