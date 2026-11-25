@@ -455,6 +455,15 @@
       "prs": [
         5419
       ]
+    },
+    {
+      "id": "5472",
+      "title": "JS/TS: extensionless import of a .d.ts file (relative or tsconfig paths) never resolves to the file node",
+      "issue": 5472,
+      "reported_by": "dada-amater",
+      "prs": [
+        5475
+      ]
     }
   ],
   "prs": {
@@ -2976,6 +2985,81 @@
           "before": "`lib.handler`",
           "after": "`lib.handler`",
           "covered_by": "test_local_import_over_parameter_keeps_its_edge"
+        }
+      ]
+    },
+    "5475": {
+      "summary": "An extensionless TypeScript import now reaches a declaration file (`.d.ts`).",
+      "why": "`import type { Api } from './types/api'` leaves off the extension. Graphify tried `.ts`, `.js` and others, but never `.d.ts`, so the edge went to a `ref_` node and `affected` on the types file found nobody.",
+      "what": "After every existing guess, the resolver tries `name.d.ts`, then `name/index.d.ts`. In a workspace package, a declaration the entry did not name is a last resort, after source and build output.",
+      "helps": "Anyone asking what a change to a shared types file affects: its importers now show up.",
+      "diagram": "flowchart LR\n  subgraph Before\n    B1[\"./types/api\"] --> B2[\"try .ts, .js, index.*\"] --> B3[\"ref_types_api\"]\n  end\n  subgraph After\n    A1[\"./types/api\"] --> A2[\"try .ts, .js, index.*\"] --> A3[\"try api.d.ts, api/index.d.ts\"] --> A4[\"types/api.d.ts\"]\n  end",
+      "before": "affected src/types/api.d.ts\nNo affected nodes found.",
+      "after": "affected src/types/api.d.ts\n- rel.ts [imports_from] src/rel.ts:L1\n- view.ts [imports_from] src/view.ts:L1",
+      "limits": [
+        "With several `paths` targets, an earlier `.d.ts` now wins over a later `.ts`. `tsc` does the same.",
+        "`tsc` prefers `api.d.ts` over `api.js`; Graphify keeps `api.js` so existing links don't move.",
+        "If `data.json` or `styles.css` is missing, the import links to its `.d.ts` sidecar.",
+        "`./api.js` still does not map to `api.d.ts` (#2849).",
+        "`_AST_CACHE_SCHEMA` goes from 55 to 56, so cached extractions re-run after upgrade."
+      ],
+      "tests": [
+        "test_issue_alias_and_relative_imports_reach_affected_cli",
+        "test_named_type_import_reaches_declaration_symbol",
+        "test_declaration_directory_index_resolves",
+        "test_dynamic_import_links_to_declaration",
+        "test_workspace_source_wins_over_declaration_fallback",
+        "test_declaration_reexport_ids_are_portable_across_checkout_paths"
+      ],
+      "cases": [
+        {
+          "case": "`#app/types/api` through tsconfig `paths`",
+          "correct": "`types/api.d.ts`",
+          "before": "`ref_` node",
+          "after": "`types/api.d.ts`",
+          "covered_by": "test_issue_alias_and_relative_imports_reach_affected_cli"
+        },
+        {
+          "case": "`./types/api`",
+          "correct": "`types/api.d.ts`",
+          "before": "`ref_` node",
+          "after": "`types/api.d.ts`",
+          "covered_by": "test_issue_alias_and_relative_imports_reach_affected_cli"
+        },
+        {
+          "case": "directory with `index.d.ts`",
+          "correct": "`index.d.ts`",
+          "before": "not resolved",
+          "after": "`index.d.ts`",
+          "covered_by": "test_declaration_directory_index_resolves"
+        },
+        {
+          "case": "`import('./api')`",
+          "correct": "`api.d.ts`",
+          "before": "not resolved",
+          "after": "`api.d.ts`",
+          "covered_by": "test_dynamic_import_links_to_declaration"
+        },
+        {
+          "case": "`api.ts` next to `api.d.ts`",
+          "correct": "`api.ts`",
+          "before": "`api.ts`",
+          "after": "`api.ts`",
+          "covered_by": "test_existing_implementation_keeps_precedence"
+        },
+        {
+          "case": "workspace `main: ./lib` with source in `src`",
+          "correct": "`src/index.ts`",
+          "before": "`src/index.ts`",
+          "after": "`src/index.ts`",
+          "covered_by": "test_workspace_source_wins_over_declaration_fallback"
+        },
+        {
+          "case": "missing file",
+          "correct": "external `ref_` node",
+          "before": "external `ref_` node",
+          "after": "external `ref_` node",
+          "covered_by": "test_missing_import_stays_external"
         }
       ]
     }
